@@ -1,0 +1,555 @@
+{
+  "metadataVersion": 2,
+  "lastUpdated": "2026-08-04",
+  "project": {
+    "name": "Gully Legends Prague",
+    "purpose": "Gaming/comic styled cricket website and local mock match-entry workflow for the Gully Legends Prague cricket group.",
+    "framework": "Next.js App Router",
+    "language": "TypeScript",
+    "styling": "Tailwind CSS plus custom CSS in app/globals.css",
+    "runtimeDataSource": "Typed local TypeScript data and mock client state",
+    "databaseStatus": "No Supabase integration yet",
+    "phaseStatus": "Phase 1 dashboard, player profiles, progression utilities, mock scorecard, and server-only team balancing are implemented."
+  },
+  "commands": {
+    "windowsNote": "Use npm.cmd in PowerShell because npm.ps1 may be blocked by execution policy.",
+    "dev": "npm.cmd run dev -- --port 3001",
+    "localUrl": "http://localhost:3001",
+    "lint": "npm.cmd run lint",
+    "typecheck": "npm.cmd run typecheck",
+    "test": "npm.cmd run test",
+    "build": "npm.cmd run build",
+    "approvedPowerShellPattern": "$env:Path = \"C:\\\\Program Files\\\\nodejs;$env:Path\"; & \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" run build"
+  },
+  "coreFiles": {
+    "dashboardPage": "app/page.tsx",
+    "globalStyles": "app/globals.css",
+    "rootLayout": "app/layout.tsx",
+    "navigation": "components/navigation/SiteHeader.tsx",
+    "dashboardHero": "components/dashboard/HeroSection.tsx",
+    "monthlyBeasts": "components/dashboard/MonthlyBeastsPanel.tsx",
+    "gullyRules": "components/dashboard/GullyRulesCard.tsx",
+    "recentMatches": "components/dashboard/RecentMatchesPanel.tsx",
+    "topPerformers": "components/dashboard/TopPerformersPanel.tsx",
+    "playersPage": "app/players/page.tsx",
+    "playerGrid": "components/players/PlayerGrid.tsx",
+    "playerCard": "components/players/PlayerCard.tsx",
+    "playerDetailPage": "app/players/[playerId]/page.tsx",
+    "playerProfile": "components/players/PlayerProfile.tsx",
+    "playerData": "lib/data/players.ts",
+    "playerTypes": "lib/types/player.ts",
+    "matchTypes": "lib/types/match.ts",
+    "createMatchPage": "app/matches/new/page.tsx",
+    "mockMatchEntry": "components/matches/MockMatchEntryForm.tsx",
+    "progressionLogic": "lib/progression.ts",
+    "matchRecordHelpers": "lib/match-records.ts",
+    "teamBalancingCore": "lib/team-balancing-core.ts",
+    "serverOnlyTeamBalancing": "server/team-balancing.ts",
+    "serverMatchValidation": "server/match-validation.ts",
+    "teamBalanceApi": "app/api/team-balance/route.ts",
+    "matchValidationApi": "app/api/matches/validate/route.ts",
+    "tests": [
+      "tests/progression.test.ts",
+      "tests/team-balancing.test.ts",
+      "tests/match-records.test.ts"
+    ],
+    "testConfig": "tsconfig.test.json",
+    "serverOnlyTypeStub": "types/server-only.d.ts"
+  },
+  "designRules": {
+    "mustDo": [
+      "Use real responsive React/Next.js components.",
+      "Keep navigation and buttons as genuine clickable elements.",
+      "Use next/image for approved raster assets when rendered in React.",
+      "Keep text readable on desktop, tablet, and mobile.",
+      "Keep visual style funky, comic, cricket/gaming themed."
+    ],
+    "mustNotDo": [
+      "Do not use a full-page screenshot with invisible clickable hotspots.",
+      "Do not redesign approved assets or regenerate backgrounds unless explicitly asked.",
+      "Do not silently edit README.md or instruction files unless explicitly asked.",
+      "Do not connect Supabase yet.",
+      "Do not expose private team-balancing weights in UI, public player data, API responses, labels, tooltips, logs, or accessibility text."
+    ],
+    "doNotChangeWithoutExplicitRequest": [
+      "Navbar layout and height",
+      "Gully Legends emblem",
+      "Prague hero background treatment",
+      "Dashboard layout",
+      "Monthly Beasts panel",
+      "Gully Rules panel",
+      "Recent Matches panel",
+      "Top Performers panel",
+      "Approved player-card PNG artwork",
+      "Progression and XP formulas"
+    ]
+  },
+  "approvedAssets": {
+    "heroBackground": {
+      "path": "public/backgrounds/prague-gully-arena.png",
+      "rules": [
+        "Use this exact image.",
+        "Do not regenerate, repaint, blur heavily, recolor, replace, or modify it.",
+        "Important baked-in signs and wall text must remain visible.",
+        "Current hero uses full-width image rendering inside an overflow-hidden wrapper with limited top-sky crop only."
+      ]
+    },
+    "branding": {
+      "navbarEmblem": "public/branding/gully-legends-emblem-tight.png",
+      "rules": [
+        "The emblem includes the Gully Legends title and No Rules. Only Fun! tagline.",
+        "Do not render a duplicate HTML tagline.",
+        "Do not increase navbar height to enlarge the logo."
+      ]
+    },
+    "playerCards": {
+      "runtimeDirectory": "public/images/player-cards",
+      "sourceDirectory": "public/player-cards",
+      "aspectRatio": "2:3",
+      "rules": [
+        "Use the approved PNG files exactly.",
+        "Do not crop, resize source files, recolor, regenerate, or replace them.",
+        "Render complete cards with object-fit: contain.",
+        "The title is embedded in the PNG; do not render player.cardTitle as visible HTML on cards or detail pages."
+      ],
+      "pathsByPlayerId": {
+        "aninda": "/images/player-cards/rulebook-rambo.png",
+        "arunabha": "/images/player-cards/turbo-technician.png",
+        "atripan": "/images/player-cards/smiling-sniper.png",
+        "biplab": "/images/player-cards/nerve-ninja.png",
+        "dipanjan": "/images/player-cards/cutter-commander.png",
+        "gaurav": "/images/player-cards/loopy-lightning.png",
+        "madhab": "/images/player-cards/sweep-samurai.png",
+        "rohit": "/images/player-cards/skidball-sheriff.png",
+        "soman": "/images/player-cards/silent-sixer.png",
+        "utpal": "/images/player-cards/tempo-tactician.png",
+        "jogindar": "/images/player-cards/loopy-loyalist.png",
+        "badhan": "/images/player-cards/quiet-quake.png",
+        "debraj": "/images/player-cards/steady-sentinel.png",
+        "dipayan": "/images/player-cards/chessboard-charger.png",
+        "dheeraj": "/images/player-cards/leg-break-jester.png",
+        "saurav": "/images/player-cards/zen-sixsmith.png"
+      }
+    },
+    "dashboardDecorations": {
+      "playHardLaughHarder": "public/ui/play-hard-laugh-harder.png",
+      "nextBallBestFriends": "public/ui/decorations/next-ball-best-friends.png",
+      "recentMatchesWicketBall": "public/ui/recent-matches-wicket-ball.png",
+      "mostRunsBat": "public/ui/most-runs-bat.png",
+      "mostWicketsWicketSmash": "public/ui/most-wickets-wicket-smash.png",
+      "mostCatchesGlovesBall": "public/ui/most-catches-gloves-ball.png",
+      "createMatchButton": "public/ui/create-match-button.png"
+    },
+    "monthlyBeasts": {
+      "batting": "public/ui/monthly-beasts/monthly-batting-beast-trimmed.png",
+      "bowling": "public/ui/monthly-beasts/monthly-bowling-beast-trimmed.png",
+      "catching": "public/ui/monthly-beasts/monthly-catching-beast-trimmed.png",
+      "displayValue": "Not decided yet"
+    },
+    "gullyRules": {
+      "noBall": "public/ui/gully-rules/rule-no-ball-we-dont-care-trimmed.png",
+      "outOrNotOut": "public/ui/gully-rules/rule-out-or-not-out-umpires-mood-trimmed.png",
+      "overWhenLightGone": "public/ui/gully-rules/rule-over-when-light-gone-trimmed.png",
+      "fightNextBallBestFriends": "public/ui/gully-rules/rule-fight-next-ball-best-friends-trimmed.png"
+    }
+  },
+  "dashboardState": {
+    "venue": "CZU Gully Arena - Open Field, Prague",
+    "navbar": {
+      "component": "components/navigation/SiteHeader.tsx",
+      "desktopHeight": "104px",
+      "tabletMobileHeight": "92px",
+      "desktopNavigationHiddenBelow": "1279px",
+      "brandAsset": "public/branding/gully-legends-emblem-tight.png"
+    },
+    "hero": {
+      "component": "components/dashboard/HeroSection.tsx",
+      "backgroundAsset": "public/backgrounds/prague-gully-arena.png",
+      "rendering": "full-width image with height auto, inside overflow-hidden wrapper",
+      "cropRule": "only controlled top-sky crop; do not crop castle, signs, wall text, lower field, or side signboards",
+      "overlayContent": [
+        "top navigation sits above page",
+        "next match card",
+        "create match button",
+        "total matches / players / venue stats"
+      ]
+    },
+    "mainDashboardLayout": {
+      "structure": "two-column outer layout with independent left sidebar and separate main-content grid",
+      "leftSidebarOrder": [
+        "Monthly Beasts",
+        "Play Hard but Laugh Harder",
+        "Next Ball, Best Friends"
+      ],
+      "mainContent": [
+        "Our Players",
+        "Gully Rules",
+        "Recent Matches",
+        "Top Performers",
+        "zero-progress note"
+      ]
+    }
+  },
+  "players": {
+    "canonicalIds": [
+      "aninda",
+      "arunabha",
+      "atripan",
+      "biplab",
+      "dipanjan",
+      "gaurav",
+      "madhab",
+      "rohit",
+      "soman",
+      "utpal",
+      "jogindar",
+      "badhan",
+      "debraj",
+      "dipayan",
+      "dheeraj",
+      "saurav"
+    ],
+    "identityNote": "Use existing canonical IDs only. Do not create duplicate records because of display-name spelling. Jogindar is the canonical ID/name currently in data.",
+    "type": "PlayerProfile in lib/types/player.ts",
+    "dataFile": "lib/data/players.ts",
+    "contentFields": [
+      "heroSummary: concise cricket identity",
+      "specialMoveName: short harmless joke title",
+      "specialMoveDescription: unique harmless joke/habit",
+      "battingProfile: playing style",
+      "bowlingProfile: playing style",
+      "fieldingProfile: playing style",
+      "funTrait: legacy data; do not reuse as both hero and special move"
+    ],
+    "zeroProgress": {
+      "level": 0,
+      "xp": 0,
+      "ratings": {
+        "batting": 0,
+        "bowling": 0,
+        "fielding": 0
+      },
+      "stats": {
+        "matches": 0,
+        "runs": 0,
+        "wickets": 0,
+        "catches": 0
+      }
+    },
+    "rosterSummary": [
+      {
+        "id": "aninda",
+        "name": "Aninda",
+        "cardTitle": "Rulebook Rambo",
+        "role": "Balanced All-Rounder"
+      },
+      {
+        "id": "arunabha",
+        "name": "Arunabha",
+        "cardTitle": "Turbo Technician",
+        "role": "Pace All-Rounder"
+      },
+      {
+        "id": "atripan",
+        "name": "Atripan",
+        "cardTitle": "Smiling Sniper",
+        "role": "Spin All-Rounder"
+      },
+      {
+        "id": "biplab",
+        "name": "Biplab",
+        "cardTitle": "Nerve Ninja",
+        "role": "Mystery-Spin All-Rounder"
+      },
+      {
+        "id": "dipanjan",
+        "name": "Dipanjan",
+        "cardTitle": "Cutter Commander",
+        "role": "Seam All-Rounder"
+      },
+      {
+        "id": "gaurav",
+        "name": "Gaurav",
+        "cardTitle": "Loopy Lightning",
+        "role": "Spin All-Rounder"
+      },
+      {
+        "id": "madhab",
+        "name": "Madhab",
+        "cardTitle": "Sweep Samurai",
+        "role": "Pace All-Rounder"
+      },
+      {
+        "id": "rohit",
+        "name": "Rohit",
+        "cardTitle": "Skidball Sheriff",
+        "role": "Fast-Bowling All-Rounder"
+      },
+      {
+        "id": "soman",
+        "name": "Soman",
+        "cardTitle": "Silent Sixer",
+        "role": "Power All-Rounder"
+      },
+      {
+        "id": "utpal",
+        "name": "Utpal",
+        "cardTitle": "Tempo Tactician",
+        "role": "Adaptive All-Rounder"
+      },
+      {
+        "id": "jogindar",
+        "name": "Jogindar",
+        "cardTitle": "Loopy Loyalist",
+        "role": "Spin All-Rounder"
+      },
+      {
+        "id": "badhan",
+        "name": "Badhan",
+        "cardTitle": "Quiet Quake",
+        "role": "Spin All-Rounder"
+      },
+      {
+        "id": "debraj",
+        "name": "Debraj",
+        "cardTitle": "Steady Sentinel",
+        "role": "Spin All-Rounder"
+      },
+      {
+        "id": "dipayan",
+        "name": "Dipayan",
+        "cardTitle": "Chessboard Charger",
+        "role": "Tactical All-Rounder"
+      },
+      {
+        "id": "dheeraj",
+        "name": "Dheeraj",
+        "cardTitle": "Leg-Break Jester",
+        "role": "Leg-Spin All-Rounder"
+      },
+      {
+        "id": "saurav",
+        "name": "Saurav",
+        "cardTitle": "Zen Sixsmith",
+        "role": "Batting All-Rounder"
+      }
+    ]
+  },
+  "playerDetailPage": {
+    "component": "components/players/PlayerProfile.tsx",
+    "purpose": "Comic-style hero dossier for one player.",
+    "layoutRules": [
+      "Render complete player.cardImage on the left with object-fit: contain.",
+      "Display player name only once.",
+      "Do not render cardTitle as visible HTML because it is printed in the PNG.",
+      "Hero summary uses player.heroSummary.",
+      "Player Power is numeric only and uses labels Blade Power, Delivery Threat, Field Reflex.",
+      "Player File uses descriptive labels Batting DNA, Bowling Arsenal, Fielding Instinct.",
+      "On-Field Special Move uses specialMoveName and specialMoveDescription only.",
+      "Do not repeat the same text in multiple sections."
+    ],
+    "ratingIconAssets": {
+      "bladePower": "/ui/most-runs-bat.png",
+      "deliveryThreat": "/ui/most-wickets-wicket-smash.png",
+      "fieldReflex": "/ui/most-catches-gloves-ball.png"
+    }
+  },
+  "matchWorkflow": {
+    "status": "Local mock workflow with server routes for balancing/validation. No database persistence yet.",
+    "createMatchComponent": "components/matches/MockMatchEntryForm.tsx",
+    "availability": {
+      "state": "availablePlayerIds",
+      "rules": [
+        "Available Today checkboxes appear above Team A / Team B selectors.",
+        "Unavailable players cannot be assigned to teams.",
+        "Removing availability removes that player from Team A and Team B.",
+        "Availability affects only the current match."
+      ],
+      "buttons": [
+        "Select All",
+        "Clear All",
+        "Auto-Balance Teams",
+        "Shuffle Again",
+        "Clear Teams"
+      ]
+    },
+    "manualTeamSelection": {
+      "state": [
+        "teamA",
+        "teamB"
+      ],
+      "rules": [
+        "Manual Team A and Team B checkboxes remain usable.",
+        "A player selected in Team A is disabled in Team B.",
+        "A player selected in Team B is disabled in Team A.",
+        "Toggling a player into one team removes them from the other team.",
+        "Server validation rejects duplicate cross-team membership."
+      ]
+    },
+    "autoBalancing": {
+      "serverOnlyFile": "server/team-balancing.ts",
+      "apiRoute": "app/api/team-balance/route.ts",
+      "clientSends": "availablePlayerIds only",
+      "clientReceives": "teamAPlayerIds and teamBPlayerIds only",
+      "algorithm": [
+        "Resolve private neutral balance weights on the server.",
+        "Deduplicate and validate canonical player IDs.",
+        "Group by balanceWeight.",
+        "Fisher-Yates shuffle groups.",
+        "Process weight 3, then 2, then 1.",
+        "Keep team-size difference no more than one.",
+        "Prefer lower roster size first, then lower accumulated private weight, then random."
+      ],
+      "privacy": [
+        "Do not add balanceWeight to public player objects.",
+        "Do not import server/team-balancing.ts into client components.",
+        "Do not return weights from /api/team-balance.",
+        "Do not display strength, tier, ranking band, balance weight, or team power score in UI."
+      ]
+    },
+    "scorecardDataEntry": {
+      "principle": "Easy live-entry scorecard using innings totals, completed-over totals, and manually selected special events.",
+      "doesNotRequire": [
+        "balls faced",
+        "batting strike rate",
+        "dot balls",
+        "ball-by-ball bowling data",
+        "individual fielding chances"
+      ],
+      "battingInputs": [
+        "Did bat",
+        "Runs",
+        "Out"
+      ],
+      "bowlingOverInputs": [
+        "Bowler selector",
+        "Runs conceded",
+        "Wickets",
+        "Maiden checkbox"
+      ],
+      "playerEventInputs": [
+        "Hat-tricks",
+        "Catches",
+        "Run-outs",
+        "Player of the Match"
+      ],
+      "performanceRecord": "PlayerMatchPerformance in lib/types/match.ts includes playerId, teamId, played, teamWon, playerOfMatch, didBat, runs, wasOut, wickets, overs, hatTricks, catches, runOuts, stumpings."
+    },
+    "teamTotals": {
+      "rule": "Team total equals sum of selected players' runs only.",
+      "ui": "Team A Total and Team B Total are read-only output values.",
+      "updatesWhen": [
+        "runs change",
+        "player added to team",
+        "player removed from team",
+        "auto-balanced team regenerated",
+        "player moved between teams"
+      ],
+      "serverValidation": "app/api/matches/validate/route.ts recalculates totals via server/match-validation.ts before save/submit mock actions."
+    }
+  },
+  "progressionSystem": {
+    "file": "lib/progression.ts",
+    "matchXPFormula": {
+      "participationXP": "played ? 20 : 0",
+      "winXP": "played && teamWon ? 5 : 0",
+      "playerOfMatchXP": "playerOfMatch ? 15 : 0",
+      "regularBattingXP": "didBat ? Math.min(Math.floor(runs / 2), 30) : 0",
+      "fiftyXP": "didBat && runs >= 50 ? 15 : 0",
+      "centuryXP": "didBat && runs >= 100 ? 25 : 0",
+      "duckPenalty": "didBat && wasOut && runs === 0 ? -8 : 0",
+      "wicketXP": "wickets * 10",
+      "hatTrickXP": "hatTricks * 25",
+      "maidenXP": "overs where maiden or runsConceded === 0, times 5",
+      "expensiveOverPenalty": "sum per-over penalties, capped at -20",
+      "fieldingXP": "Math.min(catches * 6 + runOuts * 8 + stumpings * 8, 24)",
+      "matchXPFloor": "-15"
+    },
+    "expensiveOverPenalty": {
+      "runsConceded >= 30": -12,
+      "runsConceded >= 25": -8,
+      "runsConceded >= 21": -5,
+      "otherwise": 0,
+      "totalPenaltyFloor": -20
+    },
+    "levelProgression": {
+      "xpNeededToAdvance": "100 + 50 * currentLevel + 20 * currentLevel * currentLevel",
+      "usesCumulativeThresholds": true,
+      "achievedLevelCannotDecrease": true,
+      "penaltiesCannotDropXPBelowCurrentLevelThreshold": true
+    },
+    "ratings": {
+      "sampleSizeStatuses": {
+        "0": "UNRATED",
+        "1-2": "SCOUTING",
+        "3-7": "PROVISIONAL",
+        "8+": "ESTABLISHED"
+      },
+      "numericDisplayRule": "Only show numeric rating after at least 3 finalised matches.",
+      "reliability": "Math.min(finalisedMatches / 8, 1)",
+      "displayedRating": "Math.round(50 + reliability * (rawRating - 50))",
+      "bladePower": [
+        "60% percentile rank of runs per batting innings",
+        "25% percentile rank of milestone index",
+        "15% percentile rank of duck-avoidance rate"
+      ],
+      "deliveryThreat": [
+        "55% percentile rank of wickets per bowling match",
+        "30% reversed percentile rank of bowling economy",
+        "15% percentile rank of bowling impact"
+      ],
+      "fieldReflex": [
+        "65% percentile rank of catches per match",
+        "35% percentile rank of run-outs per match"
+      ]
+    }
+  },
+  "tests": {
+    "script": "npm.cmd run test",
+    "runner": "node:test after compiling with tsconfig.test.json",
+    "files": [
+      "tests/progression.test.ts",
+      "tests/team-balancing.test.ts",
+      "tests/match-records.test.ts"
+    ],
+    "coverageThemes": [
+      "XP edge cases",
+      "expensive-over penalties",
+      "level protection",
+      "rating sample-size safety",
+      "team balancing availability and roster validity",
+      "manual mutual exclusion helpers",
+      "team total calculation",
+      "invalid run sanitization",
+      "private weights not returned in client result shape"
+    ],
+    "generatedArtifact": ".test-build is generated by npm run test and should not be committed."
+  },
+  "lastVerified": {
+    "commandsRun": [
+      "npm.cmd run lint",
+      "npm.cmd run typecheck",
+      "npm.cmd run test",
+      "npm.cmd run build"
+    ],
+    "result": "All passed after the latest Create Match / team balancing update."
+  },
+  "agentGuidance": {
+    "beforeVisualChanges": [
+      "Read CODEX_EXACT_STYLE_INSTRUCTIONS.md completely.",
+      "Inspect design-reference/gully-legends-dashboard.png and exact approved assets relevant to the request.",
+      "Do not make generic redesigns when the user asks for targeted changes."
+    ],
+    "beforeMatchWorkflowChanges": [
+      "Inspect lib/types/match.ts, lib/match-records.ts, lib/progression.ts, server/team-balancing.ts, server/match-validation.ts, and components/matches/MockMatchEntryForm.tsx.",
+      "Keep scorecard entry simple and live-match friendly.",
+      "Preserve server-only privacy of team-balancing data."
+    ],
+    "filesystemSafety": [
+      "Do not reset or revert user changes.",
+      "Use apply_patch for manual edits.",
+      "Do not delete or modify approved image assets unless explicitly requested.",
+      "Clean generated .test-build after running tests if it appears."
+    ]
+  }
+}
