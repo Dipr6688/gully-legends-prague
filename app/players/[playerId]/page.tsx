@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
-import { PlayerProfile } from "@/components/players/PlayerProfile";
-import { getPlayerById, players } from "@/lib/data/players";
+import { CareerPlayerProfile } from "@/components/players/CareerPlayerProfile";
+import { activePlayers, getPlayerBySlug } from "@/lib/data/players";
 
 export function generateStaticParams() {
-  return players.map((player) => ({
-    playerId: player.id
+  return activePlayers.map((player) => ({
+    playerId: player.slug
   }));
 }
 
@@ -13,12 +13,12 @@ export default async function PlayerProfilePage({
 }: {
   params: Promise<{ playerId: string }>;
 }) {
-  const { playerId } = await params;
-  const player = getPlayerById(playerId);
+  const { playerId: playerSlug } = await params;
+  const player = getPlayerBySlug(playerSlug);
 
   if (!player) {
     notFound();
   }
 
-  return <PlayerProfile player={player} />;
+  return <CareerPlayerProfile player={player} players={activePlayers} />;
 }

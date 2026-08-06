@@ -20,7 +20,7 @@ export function PlayerCard({
 }) {
   return (
     <Link
-      href={`/players/${player.id}`}
+      href={`/players/${player.slug}`}
       className={cn(
         "player-card group focus:outline-none focus:ring-2 focus:ring-neon-cyan focus:ring-offset-2 focus:ring-offset-pitch-950",
         accentGlow[player.accent]

@@ -12,17 +12,24 @@ const zeroProgress = {
     matches: 0,
     runs: 0,
     wickets: 0,
-    catches: 0
+    catches: 0,
+    runOuts: 0,
+    hatTricks: 0
   }
 } satisfies Pick<Player, "level" | "xp" | "ratings" | "stats">;
 
-type PlayerSeed = Omit<Player, "level" | "xp" | "ratings" | "stats" | "avatar"> & {
+type PlayerSeed = Omit<
+  Player,
+  "level" | "xp" | "ratings" | "stats" | "avatar" | "slug"
+> & {
   avatar?: string;
+  slug?: string;
 };
 
 function makePlayer(player: PlayerSeed): Player {
   return {
     ...player,
+    slug: player.slug ?? player.id,
     avatar: player.avatar ?? "",
     level: zeroProgress.level,
     xp: zeroProgress.xp,
@@ -40,6 +47,7 @@ export const players: Player[] = [
     cardTitle: "Rulebook Rambo",
     cardImage: "/images/player-cards/rulebook-rambo.png",
     role: "Balanced All-Rounder",
+    playStyles: ["batting", "pace", "utility"],
     battingProfile: "An attacking batter whose shots can range from calculated to adventurous.",
     bowlingProfile: "Bowls medium pace.",
     fieldingProfile: "Moves quickly in the field and usually has dependable hands.",
@@ -58,6 +66,7 @@ export const players: Player[] = [
     cardTitle: "Turbo Technician",
     cardImage: "/images/player-cards/turbo-technician.png",
     role: "Pace All-Rounder",
+    playStyles: ["pace", "utility"],
     battingProfile: "A technical batter who controls the middle phase and can suddenly accelerate.",
     bowlingProfile: "A genuinely quick bowler.",
     fieldingProfile: "An energetic, reliable fielder.",
@@ -76,6 +85,7 @@ export const players: Player[] = [
     cardTitle: "Smiling Sniper",
     cardImage: "/images/player-cards/smiling-sniper.png",
     role: "Spin All-Rounder",
+    playStyles: ["batting", "spin"],
     battingProfile: "A patient batter with a surprise big-shot button.",
     bowlingProfile: "Bowls slow spin.",
     fieldingProfile: "Offers safe hands in the field.",
@@ -94,6 +104,7 @@ export const players: Player[] = [
     cardTitle: "Nerve Ninja",
     cardImage: "/images/player-cards/nerve-ninja.png",
     role: "Mystery-Spin All-Rounder",
+    playStyles: ["spin", "utility"],
     battingProfile: "A technical, defensive batter who occasionally launches an unexpected big shot.",
     bowlingProfile: "Bowls slow spin with mystery-spinner confidence.",
     fieldingProfile: "Fields with reliable hands.",
@@ -112,6 +123,7 @@ export const players: Player[] = [
     cardTitle: "Cutter Commander",
     cardImage: "/images/player-cards/cutter-commander.png",
     role: "Seam All-Rounder",
+    playStyles: ["batting", "pace", "utility"],
     battingProfile: "A steady attacking batter.",
     bowlingProfile: "A quick bowler who mixes in useful cutters.",
     fieldingProfile: "Fast across the field with dependable hands.",
@@ -129,6 +141,7 @@ export const players: Player[] = [
     cardTitle: "Loopy Lightning",
     cardImage: "/images/player-cards/loopy-lightning.png",
     role: "Spin All-Rounder",
+    playStyles: ["batting", "spin"],
     battingProfile: "An unconventional attacking batter with an unpredictable style.",
     bowlingProfile: "His slow, looping spin can become surprisingly dangerous.",
     fieldingProfile: "Contributes reliably in the field.",
@@ -146,6 +159,7 @@ export const players: Player[] = [
     cardTitle: "Sweep Samurai",
     cardImage: "/images/player-cards/sweep-samurai.png",
     role: "Pace All-Rounder",
+    playStyles: ["batting", "pace", "utility"],
     battingProfile: "An attacking batter who enjoys sweeping and can become dangerous once settled.",
     bowlingProfile: "Bowls fast-medium.",
     fieldingProfile: "Brings energy and excellent hands to the field.",
@@ -163,6 +177,7 @@ export const players: Player[] = [
     cardTitle: "Skidball Sheriff",
     cardImage: "/images/player-cards/skidball-sheriff.png",
     role: "Fast-Bowling All-Rounder",
+    playStyles: ["batting", "pace"],
     battingProfile: "An aggressive batter who becomes increasingly dangerous the longer he stays.",
     bowlingProfile: "Bowls quick, skiddy deliveries.",
     fieldingProfile: "One of the strongest fielders in the group.",
@@ -180,6 +195,7 @@ export const players: Player[] = [
     cardTitle: "Silent Sixer",
     cardImage: "/images/player-cards/silent-sixer.png",
     role: "Power All-Rounder",
+    playStyles: ["batting", "pace"],
     battingProfile: "Usually the calmest presence, but capable of extremely powerful hitting.",
     bowlingProfile: "A smart medium-pace bowler.",
     fieldingProfile: "Offers safe hands.",
@@ -197,6 +213,7 @@ export const players: Player[] = [
     cardTitle: "Tempo Tactician",
     cardImage: "/images/player-cards/tempo-tactician.png",
     role: "Adaptive All-Rounder",
+    playStyles: ["pace", "utility"],
     battingProfile: "A situation-aware batter who can defend, rotate the strike or attack.",
     bowlingProfile: "Bowls skiddy medium pace.",
     fieldingProfile: "Dependable in the field.",
@@ -214,6 +231,7 @@ export const players: Player[] = [
     cardTitle: "Loopy Loyalist",
     cardImage: "/images/player-cards/loopy-loyalist.png",
     role: "Spin All-Rounder",
+    playStyles: ["spin", "utility"],
     battingProfile: "An attacking batter whose full power mode is still loading.",
     bowlingProfile: "Bowls effective, looping deliveries.",
     fieldingProfile: "Contributes reliably in the field.",
@@ -231,6 +249,7 @@ export const players: Player[] = [
     cardTitle: "Quiet Quake",
     cardImage: "/images/player-cards/quiet-quake.png",
     role: "Spin All-Rounder",
+    playStyles: ["batting", "spin"],
     battingProfile: "An attacking batter who adapts to the match situation.",
     bowlingProfile: "Bowls useful slow spin.",
     fieldingProfile: "Contributes with good movement and hands.",
@@ -248,6 +267,7 @@ export const players: Player[] = [
     cardTitle: "Steady Sentinel",
     cardImage: "/images/player-cards/steady-sentinel.png",
     role: "Spin All-Rounder",
+    playStyles: ["spin", "utility"],
     battingProfile: "A composed batter who helps hold an innings together.",
     bowlingProfile: "Offers handy slow spin.",
     fieldingProfile: "Reliable hands in the field.",
@@ -265,6 +285,7 @@ export const players: Player[] = [
     cardTitle: "Chessboard Charger",
     cardImage: "/images/player-cards/chessboard-charger.png",
     role: "Tactical All-Rounder",
+    playStyles: ["batting", "pace", "utility"],
     battingProfile: "A steady attacking batter.",
     bowlingProfile: "A thoughtful medium-pacer who plans carefully between deliveries.",
     fieldingProfile: "A strong all-round fielder and committed team player.",
@@ -282,6 +303,7 @@ export const players: Player[] = [
     cardTitle: "Leg-Break Jester",
     cardImage: "/images/player-cards/leg-break-jester.png",
     role: "Leg-Spin All-Rounder",
+    playStyles: ["spin", "utility"],
     battingProfile: "An aggressive batter.",
     bowlingProfile: "A distinctive leg-break bowler capable of producing dangerous deliveries.",
     fieldingProfile: "Quick in the field with exceptional hands.",
@@ -299,6 +321,7 @@ export const players: Player[] = [
     cardTitle: "Zen Sixsmith",
     cardImage: "/images/player-cards/zen-sixsmith.png",
     role: "Batting All-Rounder",
+    playStyles: ["batting", "spin"],
     battingProfile: "A technical batter who can hit long and become destructive once settled.",
     bowlingProfile: "Bowls deceptive looping off-spin.",
     fieldingProfile: "Offers reliable hands.",
@@ -309,9 +332,110 @@ export const players: Player[] = [
     tags: [...allRounderTags, "spin", "batting", "fielding"],
     accent: "violet",
     accentColor: "#b24cff"
+  }),
+  makePlayer({
+    id: "naim",
+    slug: "naim",
+    name: "Naim",
+    cardTitle: "Calm Cannon",
+    cardImage: "/player-cards/calm-cannon.png",
+    role: "Power All-Rounder",
+    playStyles: ["batting", "pace", "utility"],
+    battingProfile: "Attacks with confidence and has the power to send the ball a long way while remaining composed at the crease.",
+    bowlingProfile: "Uses smart medium pace, sensible changes of length and a focused approach to keep batters guessing.",
+    fieldingProfile: "Moves quickly across the field and usually completes chances with reliable hands.",
+    heroSummary: "A calm power-hitter who can launch long shots, bowl clever medium pace and cover the field with dependable hands.",
+    specialMoveName: "Silent Launch",
+    specialMoveDescription: "Looks completely calm until one clean swing sends the ball on a long-distance journey.",
+    funTrait: "Composed power, useful medium pace and steady hands.",
+    tags: [...allRounderTags, "pace", "batting", "fielding"],
+    accent: "green",
+    accentColor: "#9cff24"
+  }),
+  makePlayer({
+    id: "chaitanya",
+    slug: "chaitanya",
+    name: "Chaitanya",
+    cardTitle: "Steady Storm",
+    cardImage: "/player-cards/steady-storm.png",
+    role: "Utility All-Rounder",
+    playStyles: ["batting", "utility"],
+    battingProfile: "Builds innings patiently, values stability and gives the team a dependable presence at the crease.",
+    bowlingProfile: "Delivers an unpredictable mixture that may look calm at first but can become surprisingly troublesome.",
+    fieldingProfile: "Relies on positioning, concentration and safe hands to complete important fielding chances.",
+    heroSummary: "A dependable batter with safe hands and an unpredictable bowling style that can suddenly disrupt an innings.",
+    specialMoveName: "Quiet Disruption",
+    specialMoveDescription: "Keeps everything peaceful until one unexpected delivery completely changes the situation.",
+    funTrait: "Dependable presence with a surprise-change bowling rhythm.",
+    tags: [...allRounderTags, "batting", "fielding"],
+    accent: "orange",
+    accentColor: "#ff7a18"
+  }),
+  makePlayer({
+    id: "amrit",
+    slug: "amrit",
+    name: "Amrit",
+    cardTitle: "Looper Legend",
+    cardImage: "/player-cards/looper-legend.png",
+    role: "Support-Spin All-Rounder",
+    playStyles: ["spin", "utility"],
+    battingProfile: "Values time at the crease, supports the other batter and helps partnerships survive difficult periods.",
+    bowlingProfile: "Sends down unusually slow, looping deliveries with a style that is entirely his own.",
+    fieldingProfile: "Uses calm positioning and generally dependable hands to support the team in the field.",
+    heroSummary: "A patient partnership-builder whose distinctive looping deliveries can create problems from unexpected angles.",
+    specialMoveName: "Orbit Delivery",
+    specialMoveDescription: "The ball appears to take the scenic route before finally arriving with a surprise.",
+    funTrait: "Patient partnerships and looping deliveries from unexpected angles.",
+    tags: [...allRounderTags, "spin", "fielding"],
+    accent: "yellow",
+    accentColor: "#ffd21c"
+  }),
+  makePlayer({
+    id: "pritvi",
+    slug: "pritvi",
+    name: "PritVi",
+    cardTitle: "Precision Pacer",
+    cardImage: "/player-cards/precision-pacer.png",
+    role: "Seam All-Rounder",
+    playStyles: ["batting", "pace", "utility"],
+    battingProfile: "Plays with balance, looks for clean scoring opportunities and brings a calm presence to the batting side.",
+    bowlingProfile: "Concentrates on consistent line and length, making every delivery part of a patient plan.",
+    fieldingProfile: "Moves well, stays alert and provides a dependable option wherever the team places him.",
+    heroSummary: "A composed all-rounder built around balanced batting, disciplined medium pace and reliable movement in the field.",
+    specialMoveName: "Corridor Lock",
+    specialMoveDescription: "Repeatedly lands the ball in the right area until the batter begins running out of safe options.",
+    funTrait: "Calm batting balance and disciplined seam bowling.",
+    tags: [...allRounderTags, "pace", "batting", "fielding"],
+    accent: "violet",
+    accentColor: "#b24cff"
+  }),
+  makePlayer({
+    id: "suprateem",
+    slug: "suprateem",
+    name: "Suprateem",
+    cardTitle: "Style Striker",
+    cardImage: "/player-cards/style-striker.png",
+    role: "Batting All-Rounder",
+    playStyles: ["batting", "utility"],
+    battingProfile: "Looks comfortable at the crease and can turn a controlled setup into a confidently struck shot.",
+    bowlingProfile: "Uses slower deliveries and changes of pace to interrupt the batter's preferred rhythm.",
+    fieldingProfile: "Brings steady hands, relaxed positioning and plenty of positive energy to the field.",
+    heroSummary: "A stylish stroke-maker with a stable batting approach, a useful slow-ball option and a cheerful presence on the field.",
+    specialMoveName: "Smooth Operator",
+    specialMoveDescription: "Makes an attacking shot look effortless, then smiles as though nothing unusual happened.",
+    funTrait: "Stylish stroke-making, slow-ball variation and positive field energy.",
+    tags: [...allRounderTags, "spin", "batting", "fielding"],
+    accent: "green",
+    accentColor: "#9cff24"
   })
 ];
 
 export function getPlayerById(playerId: string) {
   return players.find((player) => player.id === playerId);
+}
+
+export const activePlayers = players.filter((player) => player.isActive !== false);
+
+export function getPlayerBySlug(slug: string) {
+  return activePlayers.find((player) => player.slug === slug);
 }

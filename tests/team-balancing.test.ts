@@ -5,6 +5,10 @@ import {
   type BalanceCandidate,
   type BalancedTeams
 } from "../lib/team-balancing-core";
+import {
+  applySharedPlayerToRosters,
+  getDistributablePlayerIds
+} from "../lib/match-records";
 
 const candidates: BalanceCandidate[] = [
   { playerId: "aninda", balanceWeight: 3 },
@@ -82,6 +86,54 @@ test("no private balance weights are returned to the client shape", () => {
     allDistributedIds(result).some((playerId) => typeof playerId !== "string"),
     false
   );
+});
+
+test("auto-balance removes Shared Player before balancing and adds them to both teams", () => {
+  const availablePlayerIds = [
+    "aninda",
+    "arunabha",
+    "biplab",
+    "utpal",
+    "atripan",
+    "gaurav",
+    "madhab"
+  ];
+  const sevenCandidates: BalanceCandidate[] = [
+    ...candidates,
+    { playerId: "madhab", balanceWeight: 2 }
+  ];
+  const sharedPlayerId = "aninda";
+  const distributablePlayerIds = getDistributablePlayerIds(
+    availablePlayerIds,
+    sharedPlayerId
+  );
+  const result = applySharedPlayerToRosters({
+    ...balanceWeightedCandidates(
+      sevenCandidates.filter((candidate) =>
+        distributablePlayerIds.includes(candidate.playerId)
+      ),
+      fixedRandom(0.4)
+    ),
+    sharedPlayerId
+  });
+
+  assert.equal(distributablePlayerIds.includes(sharedPlayerId), false);
+  assert.equal(result.teamAPlayerIds.length, 4);
+  assert.equal(result.teamBPlayerIds.length, 4);
+  assert.equal(result.teamAPlayerIds.includes(sharedPlayerId), true);
+  assert.equal(result.teamBPlayerIds.includes(sharedPlayerId), true);
+  assert.equal("balanceWeight" in result, false);
+});
+
+test("even-player auto-balance remains normal with no Shared Player", () => {
+  const result = applySharedPlayerToRosters({
+    ...balanceWeightedCandidates(candidates.slice(0, 4), fixedRandom(0.4)),
+    sharedPlayerId: null
+  });
+
+  assert.equal(result.sharedPlayerId, null);
+  assert.equal(result.teamAPlayerIds.length, result.teamBPlayerIds.length);
+  assert.equal(new Set(allDistributedIds(result)).size, 4);
 });
 
 function allDistributedIds(result: BalancedTeams): string[] {

@@ -1,7 +1,10 @@
 import { Crown, Menu, ShieldCheck } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { mainNavigation } from "@/lib/data/navigation";
+import {
+  DesktopNavigation,
+  MobileNavigationPanel
+} from "@/components/navigation/NavigationLinks";
 
 function Brand() {
   return (
@@ -15,22 +18,6 @@ function Brand() {
         className="header-brand-logo"
       />
     </Link>
-  );
-}
-
-function DesktopNavigation() {
-  return (
-    <nav className="desktop-navigation" aria-label="Main navigation">
-      {mainNavigation.map((item, index) => (
-        <Link
-          key={item.href}
-          className={index === 0 ? "desktop-navigation-link is-active" : "desktop-navigation-link"}
-          href={item.href}
-        >
-          {item.label}
-        </Link>
-      ))}
-    </nav>
   );
 }
 
@@ -55,19 +42,7 @@ function MobileMenu() {
         <Menu className="h-5 w-5" aria-hidden="true" />
         <span className="sr-only">Open navigation</span>
       </summary>
-      <nav className="mobile-navigation-panel" aria-label="Mobile navigation">
-        {mainNavigation.map((item) => (
-          <Link key={item.href} className="mobile-navigation-link" href={item.href}>
-            {item.label}
-          </Link>
-        ))}
-        <Link className="mobile-navigation-link" href="/admin">
-          Admin
-        </Link>
-        <Link className="mobile-navigation-link" href="/login">
-          Login
-        </Link>
-      </nav>
+      <MobileNavigationPanel />
     </details>
   );
 }

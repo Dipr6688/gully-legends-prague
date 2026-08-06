@@ -1,10 +1,10 @@
 import { GullyRulesCard } from "@/components/dashboard/GullyRulesCard";
 import { HeroSection } from "@/components/dashboard/HeroSection";
 import { MonthlyBeastsPanel } from "@/components/dashboard/MonthlyBeastsPanel";
+import { PlayerBrowserSection } from "@/components/dashboard/PlayerBrowserSection";
 import { RecentMatchesPanel } from "@/components/dashboard/RecentMatchesPanel";
 import { TopPerformersPanel } from "@/components/dashboard/TopPerformersPanel";
-import { PlayerGrid } from "@/components/players/PlayerGrid";
-import { players } from "@/lib/data/players";
+import { activePlayers } from "@/lib/data/players";
 import Image from "next/image";
 
 export default function DashboardPage() {
@@ -40,27 +40,7 @@ export default function DashboardPage() {
 
             <main className="dashboard-main-content">
               <div className="dashboard-upper-row">
-                <section className="dashboard-players space-y-5">
-                  <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-                    <div>
-                      <h2 className="arcade-heading text-[2.25rem] uppercase">
-                        Our Players
-                      </h2>
-                      <p className="stat-label mt-2 text-base font-bold uppercase text-neon-cyan">
-                        {players.length} Warriors
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2 text-sm font-black uppercase">
-                      <span className="rounded-md bg-neon-yellow px-3 py-2 text-pitch-950">
-                        All
-                      </span>
-                      <span className="rounded-md border border-white/12 bg-white/5 px-3 py-2 text-stone-300">
-                        All-Rounders
-                      </span>
-                    </div>
-                  </div>
-                  <PlayerGrid players={players} />
-                </section>
+                <PlayerBrowserSection players={activePlayers} />
 
                 <aside className="dashboard-rules">
                   <GullyRulesCard />
@@ -77,8 +57,8 @@ export default function DashboardPage() {
               </div>
 
               <p className="dashboard-note rounded-md border border-white/12 bg-black/45 px-4 py-3 text-base text-stone-300">
-                Note: All players start from Level 0. Levels and ratings will update
-                only after finalised matches are introduced in a later phase.
+                Note: All players start from Level 0. Levels and ratings update
+                only after a match is finalised.
               </p>
             </main>
           </div>

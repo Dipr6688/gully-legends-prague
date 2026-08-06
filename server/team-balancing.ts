@@ -1,6 +1,7 @@
 import "server-only";
 
-import { players } from "@/lib/data/players";
+import { activePlayers } from "@/lib/data/players";
+import { applySharedPlayerToRosters, getDistributablePlayerIds } from "@/lib/match-records";
 import {
   balanceWeightedCandidates,
   type BalancedTeams,
@@ -26,15 +27,29 @@ const privateBalanceWeights: Record<string, BalanceCandidate["balanceWeight"]> =
   gaurav: 1
 };
 
-const canonicalPlayerIds = new Set(players.map((player) => player.id));
+const canonicalPlayerIds = new Set(activePlayers.map((player) => player.id));
 
-export function balanceTeams(availablePlayerIds: string[]): BalancedTeams {
-  const candidates = Array.from(new Set(availablePlayerIds))
+export function balanceTeams(
+  availablePlayerIds: string[],
+  sharedPlayerId: string | null = null
+): BalancedTeams & { sharedPlayerId: string | null } {
+  const uniqueAvailablePlayerIds = Array.from(new Set(availablePlayerIds));
+  const distributablePlayerIds = getDistributablePlayerIds(
+    uniqueAvailablePlayerIds,
+    sharedPlayerId
+  );
+  const candidates = distributablePlayerIds
     .filter((playerId) => canonicalPlayerIds.has(playerId))
     .map((playerId) => ({
       playerId,
-      balanceWeight: privateBalanceWeights[playerId] ?? 1
+      balanceWeight: privateBalanceWeights[playerId] ?? 2
     }));
 
-  return balanceWeightedCandidates(candidates);
+  const balancedTeams = balanceWeightedCandidates(candidates);
+
+  return applySharedPlayerToRosters({
+    ...balancedTeams,
+    sharedPlayerId:
+      sharedPlayerId && canonicalPlayerIds.has(sharedPlayerId) ? sharedPlayerId : null
+  });
 }

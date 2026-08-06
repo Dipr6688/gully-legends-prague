@@ -2,12 +2,16 @@ import Image from "next/image";
 import type { CSSProperties, ReactNode } from "react";
 import { Flame, ShieldCheck, Swords, Trophy, Zap } from "lucide-react";
 import type { Player } from "@/lib/types/player";
+import { formatPercentage, getLevelProgress } from "@/lib/progression";
+import { PLAYER_POWER_ICONS } from "@/lib/data/player-power-icons";
 
-const ratingIcons = {
-  batting: "/ui/most-runs-bat.png",
-  bowling: "/ui/most-wickets-wicket-smash.png",
-  fielding: "/ui/most-catches-gloves-ball.png"
+const PLAYER_PROFILE_ICON_SCALE = {
+  batting: 1.9,
+  bowling: 1.85,
+  fielding: 1.85
 } as const;
+
+type PlayerProfileIconType = keyof typeof PLAYER_PROFILE_ICON_SCALE;
 
 function StatTile({
   icon,
@@ -29,22 +33,52 @@ function StatTile({
   );
 }
 
+function PlayerProfileIcon({
+  className,
+  icon,
+  type
+}: {
+  className: string;
+  icon: string;
+  type: PlayerProfileIconType;
+}) {
+  return (
+    <div
+      className={`${className} player-profile-icon-circle`}
+      style={
+        {
+          "--artwork-scale": PLAYER_PROFILE_ICON_SCALE[type]
+        } as CSSProperties
+      }
+    >
+      <Image
+        src={icon}
+        alt=""
+        width={96}
+        height={96}
+        sizes="96px"
+        className="player-profile-icon-artwork"
+      />
+    </div>
+  );
+}
+
 function HeroRatingRow({
   icon,
   label,
+  type,
   value
 }: {
   icon: string;
   label: string;
+  type: PlayerProfileIconType;
   value: number;
 }) {
   const width = `${Math.max(0, Math.min(100, value))}%`;
 
   return (
     <div className="hero-rating-row">
-      <div className="hero-rating-icon">
-        <Image src={icon} alt="" width={80} height={80} />
-      </div>
+      <PlayerProfileIcon className="hero-rating-icon" icon={icon} type={type} />
       <div className="hero-rating-content">
         <div className="hero-rating-heading">
           <span>{label}</span>
@@ -61,17 +95,17 @@ function HeroRatingRow({
 function ProfileTrait({
   icon,
   label,
+  type,
   text
 }: {
   icon: string;
   label: string;
+  type: PlayerProfileIconType;
   text: string;
 }) {
   return (
     <article className="profile-trait">
-      <div className="profile-trait-icon">
-        <Image src={icon} alt="" width={58} height={58} />
-      </div>
+      <PlayerProfileIcon className="profile-trait-icon" icon={icon} type={type} />
       <h3>{label}</h3>
       <p>{text}</p>
     </article>
@@ -103,6 +137,7 @@ function getInitials(name: string) {
 }
 
 export function PlayerProfile({ player }: { player: Player }) {
+  const levelProgress = getLevelProgress(player.xp);
   const heroSummary =
     player.heroSummary ??
     `${player.role} with a distinctive style in every department.`;
@@ -116,19 +151,19 @@ export function PlayerProfile({ player }: { player: Player }) {
     {
       key: "batting",
       label: "Blade Power",
-      icon: ratingIcons.batting,
+      icon: PLAYER_POWER_ICONS.batting,
       value: player.ratings.batting
     },
     {
       key: "bowling",
       label: "Delivery Threat",
-      icon: ratingIcons.bowling,
+      icon: PLAYER_POWER_ICONS.bowling,
       value: player.ratings.bowling
     },
     {
       key: "fielding",
       label: "Field Reflex",
-      icon: ratingIcons.fielding,
+      icon: PLAYER_POWER_ICONS.fielding,
       value: player.ratings.fielding
     }
   ] as const;
@@ -137,19 +172,19 @@ export function PlayerProfile({ player }: { player: Player }) {
     {
       key: "batting",
       label: "Batting DNA",
-      icon: ratingIcons.batting,
+      icon: PLAYER_POWER_ICONS.batting,
       text: player.battingProfile
     },
     {
       key: "bowling",
       label: "Bowling Arsenal",
-      icon: ratingIcons.bowling,
+      icon: PLAYER_POWER_ICONS.bowling,
       text: player.bowlingProfile
     },
     {
       key: "fielding",
       label: "Fielding Instinct",
-      icon: ratingIcons.fielding,
+      icon: PLAYER_POWER_ICONS.fielding,
       text: player.fieldingProfile
     }
   ] as const;
@@ -219,6 +254,22 @@ export function PlayerProfile({ player }: { player: Player }) {
                 value={player.stats.catches}
               />
             </div>
+            <div className="mt-4 rounded-md border border-white/12 bg-black/30 p-3">
+              <div className="flex items-center justify-between gap-3 text-xs font-black uppercase text-stone-300">
+                <span>Next Level Progress</span>
+                <strong className="text-neon-yellow">
+                  {levelProgress.xpWithinLevel}/{levelProgress.xpRequiredWithinLevel} XP
+                  {" "}
+                  ({formatPercentage(levelProgress.progressPercentage)})
+                </strong>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-neon-yellow"
+                  style={{ width: `${levelProgress.progressPercentage}%` }}
+                />
+              </div>
+            </div>
           </section>
 
           <section className="player-power-section" aria-labelledby="player-power-title">
@@ -229,6 +280,7 @@ export function PlayerProfile({ player }: { player: Player }) {
                   key={item.key}
                   icon={item.icon}
                   label={item.label}
+                  type={item.key}
                   value={item.value}
                 />
               ))}
@@ -246,6 +298,7 @@ export function PlayerProfile({ player }: { player: Player }) {
                 key={item.key}
                 icon={item.icon}
                 label={item.label}
+                type={item.key}
                 text={item.text}
               />
             ))}

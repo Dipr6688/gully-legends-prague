@@ -1,32 +1,97 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus, RotateCcw, Save, Send, Shuffle, Trash2, Users } from "lucide-react";
-import { players } from "@/lib/data/players";
+import Link from "next/link";
 import {
-  calculateTeamTotals,
-  getCrossTeamPlayerIds,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode
+} from "react";
+import {
+  Ban,
+  CheckCircle2,
+  Plus,
+  RotateCcw,
+  Save,
+  Shuffle,
+  Swords,
+  Trash2,
+  Trophy,
+  Users
+} from "lucide-react";
+import { activePlayers } from "@/lib/data/players";
+import {
+  buildTeamInnings,
+  buildTeamMatchData,
+  calculateBattingAllocation,
+  calculateBowlerWickets,
+  calculateScoreFromBowlingFeed,
+  calculateWicketsLost,
+  calculatePlayerCatches,
+  calculatePlayerHatTricks,
+  calculatePlayerRunOuts,
+  calculatePlayerStumpings,
+  applySharedPlayerToRosters,
+  getFinalResultHeadline,
+  calculateMatchResult,
+  formatInningsScore,
+  getDismissedBatterIds,
+  getInningsCompleteMessage,
+  getInningsState,
+  getLiveResultPreview,
+  getChasingTeamId,
+  getLiveInningsScore,
+  getMaximumRunsForPlayer,
+  isDismissalComplete,
+  isBowlingOverComplete,
+  normalizeNonNegativeIntegerInput,
+  normalizeStoredRuns,
   sanitizeRuns,
   setPlayerAvailability,
+  getOrdinaryCrossTeamPlayerIds,
+  getPerformanceKey,
+  getPerformanceRecordKey,
+  hasOddAvailablePlayers,
+  syncDismissalRows,
   toggleTeamSelection
 } from "@/lib/match-records";
-import { calculateMatchXP } from "@/lib/progression";
+import type { LiveInningsScore, MatchValidationStage } from "@/lib/match-records";
+import { applyFinalisedMatchToLocalCareerStats } from "@/lib/career-store";
+import { localMatchRepository } from "@/lib/match-repository";
+import { useMatchRepository } from "@/components/matches/useMatchRepository";
+import {
+  getLiveMatchConflict,
+  getNextAvailableMatchNumber,
+  hasDuplicateMatchNumber
+} from "@/lib/next-match";
+import {
+  calculateMatchXP,
+  calculatePlayerMatchXP,
+  calculateSharedPlayerMatchXP
+} from "@/lib/progression";
 import type {
   BowlingOver,
+  DismissalEvent,
+  DismissalType,
+  FinalisedPlayerMatchRecord,
+  InningsState,
+  MatchRecord,
+  MatchResult,
   MatchStatus,
   MockMatchFormValues,
   PlayerMatchPerformance,
+  PlayerMatchXPBreakdown,
+  TeamInnings,
   TeamId
 } from "@/lib/types/match";
+import type { Player } from "@/lib/types/player";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 
 type TeamKey = "A" | "B";
-
-type BowlingEntry = BowlingOver & {
-  id: string;
-  bowlerId: string;
-};
+type TeamBowlingState = Record<TeamId, BowlingOver[]>;
 
 type ValidationResponse = {
   ok: boolean;
@@ -35,20 +100,28 @@ type ValidationResponse = {
     teamATotal: number;
     teamBTotal: number;
   };
+  completedOvers: Record<TeamId, number>;
+  result: MatchResult;
 };
 
 const initialValues: MockMatchFormValues = {
   matchDate: "",
+  matchNumber: "",
+  startTime: "",
   matchName: "Gully Premier League",
   teamAName: "Team A",
   teamBName: "Team B",
   teamATotal: 0,
   teamBTotal: 0,
-  winner: "",
+  scheduledOversPerInnings: "",
   notes: ""
 };
 
-const allPlayerIds = players.map((player) => player.id);
+const allPlayerIds = activePlayers.map((player) => player.id);
+
+function createLocalMatchId() {
+  return `local-match-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 function createPerformance(
   playerId: string,
@@ -57,14 +130,13 @@ function createPerformance(
   return {
     playerId,
     teamId,
+    representingTeamId: teamId,
     played: true,
-    teamWon: false,
     playerOfMatch: false,
     didBat: false,
-    runs: 0,
+    runs: "",
     wasOut: false,
     wickets: 0,
-    overs: [],
     hatTricks: 0,
     catches: 0,
     runOuts: 0,
@@ -72,138 +144,530 @@ function createPerformance(
   };
 }
 
-function createBowlingEntry(activePlayerIds: string[]): BowlingEntry {
+function createBowlingEntry(
+  teamId: TeamId,
+  overNumber: number
+): BowlingOver {
+  const battingTeamId = getChasingTeamId(teamId);
+
   return {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    bowlerId: activePlayerIds[0] ?? "",
-    runsConceded: 0,
-    wickets: 0,
+    bowlingTeamId: teamId,
+    battingTeamId,
+    bowlerId: "",
+    overNumber,
+    runsConceded: "",
+    wicketsTaken: "",
+    dismissals: [],
     maiden: false
   };
 }
 
-export function MockMatchEntryForm() {
-  const [values, setValues] = useState(initialValues);
-  const [availablePlayerIds, setAvailablePlayerIds] = useState<string[]>([]);
-  const [teamA, setTeamA] = useState<string[]>([]);
-  const [teamB, setTeamB] = useState<string[]>([]);
-  const [performances, setPerformances] = useState<Record<string, PlayerMatchPerformance>>({});
-  const [bowlingOvers, setBowlingOvers] = useState<BowlingEntry[]>([]);
-  const [status, setStatus] = useState<MatchStatus>("draft");
+function getFormValuesFromMatch(match: MatchRecord): MockMatchFormValues {
+  return {
+    matchDate: match.matchDate,
+    matchNumber: match.matchNumber ?? "",
+    startTime: match.startTime ?? "",
+    matchName: match.matchName,
+    teamAName: match.teams.teamA.teamName,
+    teamBName: match.teams.teamB.teamName,
+    teamATotal: match.teams.teamA.totalRuns,
+    teamBTotal: match.teams.teamB.totalRuns,
+    scheduledOversPerInnings: match.scheduledOversPerInnings ?? "",
+    notes: ""
+  };
+}
+
+function getAvailablePlayerIdsFromMatch(match: MatchRecord): string[] {
+  return Array.from(
+    new Set([
+      ...match.teams.teamA.playerIds,
+      ...match.teams.teamB.playerIds
+    ])
+  );
+}
+
+function getPerformanceStateFromMatch(
+  match: MatchRecord
+): Record<string, PlayerMatchPerformance> {
+  return Object.fromEntries(
+    [
+      ...match.teams.teamA.playerPerformances,
+      ...match.teams.teamB.playerPerformances
+    ].map((performance) => [
+      getPerformanceRecordKey(performance),
+      {
+        ...performance,
+        runs: normalizeStoredRuns(performance.runs)
+      }
+    ])
+  );
+}
+
+function getScheduledOversValue(value: number | ""): number | null {
+  return value === "" ? null : sanitizeRuns(value);
+}
+
+function getMatchNumberValue(value: number | ""): number | null {
+  return value === "" ? null : sanitizeRuns(value);
+}
+
+export function MockMatchEntryForm({
+  initialMatch = null
+}: {
+  initialMatch?: MatchRecord | null;
+} = {}) {
+  const { matches: savedMatches } = useMatchRepository();
+  const loadedMatchIdRef = useRef<string | null>(null);
+  const [matchId, setMatchId] = useState(() => initialMatch?.id ?? createLocalMatchId());
+  const [values, setValues] = useState<MockMatchFormValues>(() =>
+    initialMatch ? getFormValuesFromMatch(initialMatch) : initialValues
+  );
+  const [availablePlayerIds, setAvailablePlayerIds] = useState<string[]>(() =>
+    initialMatch ? getAvailablePlayerIdsFromMatch(initialMatch) : []
+  );
+  const [teamA, setTeamA] = useState<string[]>(
+    () => initialMatch?.teams.teamA.playerIds ?? []
+  );
+  const [teamB, setTeamB] = useState<string[]>(
+    () => initialMatch?.teams.teamB.playerIds ?? []
+  );
+  const [sharedPlayerId, setSharedPlayerId] = useState<string | null>(
+    () => initialMatch?.sharedPlayerId ?? null
+  );
+  const [battingFirstTeamId, setBattingFirstTeamId] = useState<TeamId | "">(
+    () => initialMatch?.battingFirstTeamId ?? ""
+  );
+  const [performances, setPerformances] = useState<
+    Record<string, PlayerMatchPerformance>
+  >(() => (initialMatch ? getPerformanceStateFromMatch(initialMatch) : {}));
+  const [inningsExtras, setInningsExtras] = useState<Record<TeamId, number>>({
+    teamA: 0,
+    teamB: 0
+  });
+  const [bowlingOvers, setBowlingOvers] = useState<TeamBowlingState>(() => ({
+    teamA: initialMatch?.teams.teamA.bowlingOvers ?? [],
+    teamB: initialMatch?.teams.teamB.bowlingOvers ?? []
+  }));
+  const [status, setStatus] = useState<MatchStatus>(
+    () => initialMatch?.status ?? "draft"
+  );
   const [isBalancing, setIsBalancing] = useState(false);
+  const [finalisedXPBreakdowns, setFinalisedXPBreakdowns] = useState<
+    Record<string, PlayerMatchXPBreakdown>
+  >({});
   const [message, setMessage] = useState(
-    "This mock form is local only. No Supabase connection yet."
+    "Match workflow ready. Enter team, innings and player records."
   );
+  const [liveConflictMatchId, setLiveConflictMatchId] = useState<string | null>(null);
 
-  const activePlayerIds = useMemo(() => [...teamA, ...teamB], [teamA, teamB]);
-  const activePlayerIdSet = useMemo(() => new Set(activePlayerIds), [activePlayerIds]);
-  const activePlayers = useMemo(
-    () => players.filter((player) => activePlayerIdSet.has(player.id)),
-    [activePlayerIdSet]
-  );
-  const duplicatePlayers = useMemo(
-    () => getCrossTeamPlayerIds({ teamAPlayerIds: teamA, teamBPlayerIds: teamB }),
-    [teamA, teamB]
-  );
+  const isLocked = status === "finalised";
+  const isFinalised = status === "finalised";
+  const canSafelyReopenFinalisedMatch = false;
+  const isNewMatch =
+    status === "draft" &&
+    values.matchDate === "" &&
+    battingFirstTeamId === "" &&
+    availablePlayerIds.length === 0 &&
+    teamA.length === 0 &&
+    teamB.length === 0 &&
+    sharedPlayerId === null &&
+    bowlingOvers.teamA.length === 0 &&
+    bowlingOvers.teamB.length === 0 &&
+    Object.keys(performances).length === 0;
+  const matchPageTitle = isNewMatch
+    ? "CREATE MATCH"
+    : status === "draft"
+      ? "EDIT MATCH"
+      : status === "in_progress"
+        ? "LIVE MATCH ENTRY"
+        : "MATCH SCORECARD";
+  const isRosterLocked = status !== "draft";
 
-  const performanceList = useMemo(
+  useEffect(() => {
+    if (!initialMatch || loadedMatchIdRef.current === initialMatch.id) return;
+
+    loadedMatchIdRef.current = initialMatch.id;
+    setMatchId(initialMatch.id);
+    setValues(getFormValuesFromMatch(initialMatch));
+    setAvailablePlayerIds(getAvailablePlayerIdsFromMatch(initialMatch));
+    setTeamA(initialMatch.teams.teamA.playerIds);
+    setTeamB(initialMatch.teams.teamB.playerIds);
+    setSharedPlayerId(initialMatch.sharedPlayerId ?? null);
+    setBattingFirstTeamId(initialMatch.battingFirstTeamId ?? "");
+    setPerformances(getPerformanceStateFromMatch(initialMatch));
+    setBowlingOvers({
+      teamA: initialMatch.teams.teamA.bowlingOvers,
+      teamB: initialMatch.teams.teamB.bowlingOvers
+    });
+    setStatus(initialMatch.status);
+    setMessage("Saved match loaded.");
+  }, [initialMatch]);
+
+  useEffect(() => {
+    document.title = `${matchPageTitle} | Gully Legends Prague`;
+  }, [matchPageTitle]);
+
+  const availablePlayers = useMemo(
+    () => activePlayers.filter((player) => availablePlayerIds.includes(player.id)),
+    [availablePlayerIds]
+  );
+  const teamAPlayers = useMemo(
+    () => activePlayers.filter((player) => teamA.includes(player.id)),
+    [teamA]
+  );
+  const teamBPlayers = useMemo(
+    () => activePlayers.filter((player) => teamB.includes(player.id)),
+    [teamB]
+  );
+  const hasOddAttendance = hasOddAvailablePlayers(availablePlayerIds);
+  const ordinaryDuplicatePlayers = useMemo(
     () =>
-      activePlayers.map((player) => {
-        const teamId: TeamId = teamA.includes(player.id) ? "teamA" : "teamB";
-        const base = performances[player.id] ?? createPerformance(player.id, teamId);
-        const playerOvers = bowlingOvers
-          .filter((over) => over.bowlerId === player.id)
-          .map(({ runsConceded, wickets, maiden }) => ({
-            runsConceded,
-            wickets,
-            maiden
-          }));
-
-        return {
-          ...base,
-          teamId,
-          teamWon: didTeamWin(player.id, values.winner, teamA, teamB),
-          runs: sanitizeRuns(base.runs),
-          wickets: playerOvers.reduce((sum, over) => sum + over.wickets, 0),
-          overs: playerOvers
-        };
-      }),
-    [activePlayers, bowlingOvers, performances, teamA, teamB, values.winner]
-  );
-
-  const teamTotals = useMemo(
-    () =>
-      calculateTeamTotals(performanceList, {
+      getOrdinaryCrossTeamPlayerIds({
         teamAPlayerIds: teamA,
-        teamBPlayerIds: teamB
+        teamBPlayerIds: teamB,
+        sharedPlayerId
       }),
-    [performanceList, teamA, teamB]
+    [sharedPlayerId, teamA, teamB]
   );
+  const canUseTeamControls =
+    !hasOddAttendance || Boolean(sharedPlayerId);
+  const availableSummary = {
+    uniquePlayers: availablePlayerIds.length,
+    teamASize: teamA.length,
+    teamBSize: teamB.length,
+    sharedSlots: sharedPlayerId ? 1 : 0
+  };
 
-  function applyRosters(nextAvailable: string[], nextTeamA: string[], nextTeamB: string[]) {
-    const selectedIds = new Set([...nextTeamA, ...nextTeamB]);
+  const teamAPerformances = useMemo(
+    () =>
+      buildPerformanceList(
+        teamAPlayers,
+        "teamA",
+        performances,
+        bowlingOvers.teamA,
+        bowlingOvers.teamB
+      ),
+    [bowlingOvers.teamA, bowlingOvers.teamB, performances, teamAPlayers]
+  );
+  const teamBPerformances = useMemo(
+    () =>
+      buildPerformanceList(
+        teamBPlayers,
+        "teamB",
+        performances,
+        bowlingOvers.teamB,
+        bowlingOvers.teamA
+      ),
+    [bowlingOvers.teamA, bowlingOvers.teamB, performances, teamBPlayers]
+  );
+  const performanceList = useMemo(
+    () => [...teamAPerformances, ...teamBPerformances],
+    [teamAPerformances, teamBPerformances]
+  );
+  const teamAInningsScore = useMemo(
+    () =>
+      getLiveInningsScore({
+        battingTeamId: "teamA",
+        opposingBowlingOvers: bowlingOvers.teamB,
+        playerPerformances: teamAPerformances,
+        extras: inningsExtras.teamA
+      }),
+    [bowlingOvers.teamB, inningsExtras.teamA, teamAPerformances]
+  );
+  const teamBInningsScore = useMemo(
+    () =>
+      getLiveInningsScore({
+        battingTeamId: "teamB",
+        opposingBowlingOvers: bowlingOvers.teamA,
+        playerPerformances: teamBPerformances,
+        extras: inningsExtras.teamB
+      }),
+    [bowlingOvers.teamA, inningsExtras.teamB, teamBPerformances]
+  );
+  const teamTotals = useMemo(
+    () => ({
+      teamATotal: teamAInningsScore.runs,
+      teamBTotal: teamBInningsScore.runs
+    }),
+    [teamAInningsScore.runs, teamBInningsScore.runs]
+  );
+  const effectiveBattingFirstTeamId: TeamId = battingFirstTeamId || "teamA";
+  const chasingTeamId = getChasingTeamId(effectiveBattingFirstTeamId);
+  const scheduledOversForCalculations = sanitizeRuns(
+    values.scheduledOversPerInnings
+  );
+  const firstInnings = useMemo(
+    () =>
+      buildTeamInnings({
+        battingTeamId: effectiveBattingFirstTeamId,
+        battingPlayerIds:
+          effectiveBattingFirstTeamId === "teamA" ? teamA : teamB,
+        performances: performanceList,
+        bowlingOvers:
+          effectiveBattingFirstTeamId === "teamA"
+            ? bowlingOvers.teamB
+            : bowlingOvers.teamA,
+        extras: inningsExtras[effectiveBattingFirstTeamId]
+      }),
+    [bowlingOvers.teamA, bowlingOvers.teamB, effectiveBattingFirstTeamId, inningsExtras, performanceList, teamA, teamB]
+  );
+  const secondInnings = useMemo(
+    () =>
+      buildTeamInnings({
+        battingTeamId: chasingTeamId,
+        battingPlayerIds: chasingTeamId === "teamA" ? teamA : teamB,
+        performances: performanceList,
+        bowlingOvers:
+          chasingTeamId === "teamA" ? bowlingOvers.teamB : bowlingOvers.teamA,
+        extras: inningsExtras[chasingTeamId]
+      }),
+    [bowlingOvers.teamA, bowlingOvers.teamB, chasingTeamId, inningsExtras, performanceList, teamA, teamB]
+  );
+  const liveResult = useMemo(
+    () =>
+      calculateMatchResult(
+        status,
+        effectiveBattingFirstTeamId,
+        firstInnings,
+        secondInnings
+      ),
+    [effectiveBattingFirstTeamId, firstInnings, secondInnings, status]
+  );
+  const target = firstInnings.runs + 1;
+  const teamABowlingInningsState = useMemo(
+    () =>
+      getInningsState({
+        battingTeamId: "teamB",
+        bowlingTeamId: "teamA",
+        battingPlayerCount: teamB.length,
+        bowlingOvers: bowlingOvers.teamA,
+        scheduledOvers: scheduledOversForCalculations,
+        runs: teamTotals.teamBTotal,
+        target: chasingTeamId === "teamB" ? target : undefined
+      }),
+    [
+      bowlingOvers.teamA,
+      chasingTeamId,
+      target,
+      teamB.length,
+      teamTotals.teamBTotal,
+      scheduledOversForCalculations
+    ]
+  );
+  const teamBBowlingInningsState = useMemo(
+    () =>
+      getInningsState({
+        battingTeamId: "teamA",
+        bowlingTeamId: "teamB",
+        battingPlayerCount: teamA.length,
+        bowlingOvers: bowlingOvers.teamB,
+        scheduledOvers: scheduledOversForCalculations,
+        runs: teamTotals.teamATotal,
+        target: chasingTeamId === "teamA" ? target : undefined
+      }),
+    [
+      bowlingOvers.teamB,
+      chasingTeamId,
+      target,
+      teamA.length,
+      teamTotals.teamATotal,
+      scheduledOversForCalculations
+    ]
+  );
+  const secondInningsIsComplete =
+    chasingTeamId === "teamA"
+      ? teamBBowlingInningsState.isComplete
+      : teamABowlingInningsState.isComplete;
+  const firstInningsIsComplete =
+    effectiveBattingFirstTeamId === "teamA"
+      ? teamBBowlingInningsState.isComplete
+      : teamABowlingInningsState.isComplete;
+
+  function applyRosters(
+    nextAvailable: string[],
+    nextTeamA: string[],
+    nextTeamB: string[],
+    nextSharedPlayerId = sharedPlayerId
+  ) {
+    const validSharedPlayerId =
+      nextSharedPlayerId && nextAvailable.includes(nextSharedPlayerId)
+        ? nextSharedPlayerId
+        : null;
+    const nextRosters = applySharedPlayerToRosters({
+      teamAPlayerIds: nextTeamA,
+      teamBPlayerIds: nextTeamB,
+      sharedPlayerId: validSharedPlayerId
+    });
+    const nextTeamAIds = new Set(nextRosters.teamAPlayerIds);
+    const nextTeamBIds = new Set(nextRosters.teamBPlayerIds);
+    const nextSelectedContextKeys = new Set([
+      ...nextRosters.teamAPlayerIds.map((playerId) => getPerformanceKey(playerId, "teamA")),
+      ...nextRosters.teamBPlayerIds.map((playerId) => getPerformanceKey(playerId, "teamB"))
+    ]);
     setAvailablePlayerIds(nextAvailable);
-    setTeamA(nextTeamA);
-    setTeamB(nextTeamB);
-    setBowlingOvers((current) =>
-      current.map((over) =>
-        selectedIds.has(over.bowlerId) ? over : { ...over, bowlerId: "" }
+    setSharedPlayerId(validSharedPlayerId);
+    setTeamA(nextRosters.teamAPlayerIds);
+    setTeamB(nextRosters.teamBPlayerIds);
+    setPerformances((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([key, performance]) =>
+          nextSelectedContextKeys.has(
+            key.includes(":") ? key : getPerformanceRecordKey(performance)
+          )
+        )
       )
     );
+    setBowlingOvers((current) => ({
+      teamA: current.teamA.map((over) =>
+        nextTeamAIds.has(over.bowlerId) ? over : { ...over, bowlerId: "" }
+      ),
+      teamB: current.teamB.map((over) =>
+        nextTeamBIds.has(over.bowlerId) ? over : { ...over, bowlerId: "" }
+      )
+    }));
   }
 
   function selectAllAvailable() {
-    applyRosters(allPlayerIds, teamA, teamB);
+    if (isRosterLocked) return;
+    applyRosters(allPlayerIds, teamA, teamB, null);
     setMessage("All players marked available for this match.");
   }
 
   function clearAvailability() {
-    applyRosters([], [], []);
+    if (isRosterLocked) return;
+    if (
+      Object.keys(performances).length > 0 &&
+      !window.confirm("Removing this player will also remove their draft match data. Continue?")
+    ) {
+      return;
+    }
+
+    applyRosters([], [], [], null);
     setMessage("Availability cleared. Team selections were also cleared.");
   }
 
   function clearTeams() {
-    applyRosters(availablePlayerIds, [], []);
+    if (isRosterLocked) return;
+    applyRosters(availablePlayerIds, [], [], sharedPlayerId);
     setMessage("Teams cleared. Available players are unchanged.");
   }
 
   function toggleAvailability(playerId: string, isAvailable: boolean) {
+    if (isRosterLocked) return;
+    const hasPlayerPerformance = Object.values(performances).some(
+      (performance) => performance.playerId === playerId
+    );
+
+    if (
+      !isAvailable &&
+      hasPlayerPerformance &&
+      !window.confirm("Removing this player will also remove their draft match data. Continue?")
+    ) {
+      return;
+    }
+
     const next = setPlayerAvailability(
       {
         availablePlayerIds,
         teamAPlayerIds: teamA,
-        teamBPlayerIds: teamB
+        teamBPlayerIds: teamB,
+        sharedPlayerId
       },
       playerId,
       isAvailable
     );
-    applyRosters(next.availablePlayerIds, next.teamAPlayerIds, next.teamBPlayerIds);
+    const nextSharedPlayerId =
+      hasOddAvailablePlayers(next.availablePlayerIds) &&
+      playerId !== sharedPlayerId
+        ? sharedPlayerId
+        : null;
+    applyRosters(
+      next.availablePlayerIds,
+      next.teamAPlayerIds,
+      next.teamBPlayerIds,
+      nextSharedPlayerId
+    );
+
+    if (playerId === sharedPlayerId && !isAvailable) {
+      setMessage("Shared Player was removed from availability. Select one Shared Player to create equal teams.");
+    }
+  }
+
+  function changeSharedPlayer(playerId: string) {
+    if (isRosterLocked) return;
+
+    const nextSharedPlayerId = playerId || null;
+    const hasDraftData =
+      Object.keys(performances).length > 0 ||
+      bowlingOvers.teamA.length > 0 ||
+      bowlingOvers.teamB.length > 0 ||
+      teamA.length > 0 ||
+      teamB.length > 0;
+
+    if (
+      hasDraftData &&
+      sharedPlayerId !== nextSharedPlayerId &&
+      !window.confirm(
+        "Changing the Shared Player will rebuild both team rosters and may remove draft batting, bowling and dismissal records associated with the current shared player. Continue?"
+      )
+    ) {
+      return;
+    }
+
+    const ordinaryTeamA = teamA.filter((id) => id !== sharedPlayerId && id !== nextSharedPlayerId);
+    const ordinaryTeamB = teamB.filter((id) => id !== sharedPlayerId && id !== nextSharedPlayerId);
+
+    applyRosters(availablePlayerIds, ordinaryTeamA, ordinaryTeamB, nextSharedPlayerId);
+    setMessage(
+      nextSharedPlayerId
+        ? "Shared Player selected. They will play for both teams."
+        : "Select one Shared Player to create equal teams."
+    );
   }
 
   function togglePlayer(team: TeamKey, playerId: string) {
-    const teamId = team === "A" ? "teamA" : "teamB";
+    if (isRosterLocked) return;
+    if (playerId === sharedPlayerId) {
+      setMessage("Shared Player is locked in both teams. Change them from the Shared Player selector.");
+      return;
+    }
+    const teamId: TeamId = team === "A" ? "teamA" : "teamB";
     const next = toggleTeamSelection(
       {
         availablePlayerIds,
         teamAPlayerIds: teamA,
-        teamBPlayerIds: teamB
+        teamBPlayerIds: teamB,
+        sharedPlayerId
       },
       teamId,
       playerId
     );
-    applyRosters(next.availablePlayerIds, next.teamAPlayerIds, next.teamBPlayerIds);
+    applyRosters(
+      next.availablePlayerIds,
+      next.teamAPlayerIds,
+      next.teamBPlayerIds,
+      sharedPlayerId
+    );
 
     if (
       next.teamAPlayerIds.includes(playerId) ||
       next.teamBPlayerIds.includes(playerId)
     ) {
-      updatePerformance(playerId, { teamId });
+      updatePerformance(playerId, teamId, { teamId, representingTeamId: teamId });
     }
   }
 
   async function autoBalanceTeams() {
+    if (isRosterLocked) return;
+
     if (availablePlayerIds.length < 2) {
       setMessage("Select at least two available players before balancing teams.");
+      return;
+    }
+
+    if (hasOddAttendance && !sharedPlayerId) {
+      setMessage("Select one Shared Player to create equal teams.");
       return;
     }
 
@@ -213,7 +677,7 @@ export function MockMatchEntryForm() {
       const response = await fetch("/api/team-balance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ availablePlayerIds })
+        body: JSON.stringify({ availablePlayerIds, sharedPlayerId })
       });
       const result = (await response.json()) as {
         teamAPlayerIds?: string[];
@@ -226,20 +690,27 @@ export function MockMatchEntryForm() {
         return;
       }
 
-      applyRosters(availablePlayerIds, result.teamAPlayerIds, result.teamBPlayerIds);
+      applyRosters(
+        availablePlayerIds,
+        result.teamAPlayerIds,
+        result.teamBPlayerIds,
+        sharedPlayerId
+      );
       setPerformances((current) => {
         const next = { ...current };
 
         for (const playerId of result.teamAPlayerIds ?? []) {
-          next[playerId] = {
-            ...(next[playerId] ?? createPerformance(playerId, "teamA")),
+          const key = getPerformanceKey(playerId, "teamA");
+          next[key] = {
+            ...(next[key] ?? createPerformance(playerId, "teamA")),
             teamId: "teamA"
           };
         }
 
         for (const playerId of result.teamBPlayerIds ?? []) {
-          next[playerId] = {
-            ...(next[playerId] ?? createPerformance(playerId, "teamB")),
+          const key = getPerformanceKey(playerId, "teamB");
+          next[key] = {
+            ...(next[key] ?? createPerformance(playerId, "teamB")),
             teamId: "teamB"
           };
         }
@@ -254,43 +725,370 @@ export function MockMatchEntryForm() {
 
   function updatePerformance(
     playerId: string,
+    representingTeamId: TeamId,
     updates: Partial<PlayerMatchPerformance>
   ) {
-    const teamId: TeamId = teamA.includes(playerId) ? "teamA" : "teamB";
+    if (isLocked) return;
+    const key = getPerformanceKey(playerId, representingTeamId);
     setPerformances((current) => ({
-      ...current,
-      [playerId]: {
-        ...(current[playerId] ?? createPerformance(playerId, teamId)),
-        ...updates
+      ...Object.fromEntries(
+        Object.entries(current).map(([currentKey, performance]) => [
+          currentKey,
+          updates.playerOfMatch === true
+            ? { ...performance, playerOfMatch: performance.playerId === playerId }
+            : updates.playerOfMatch === false && performance.playerId === playerId
+              ? { ...performance, playerOfMatch: false }
+              : performance
+        ])
+      ),
+      [key]: {
+        ...(current[key] ?? createPerformance(playerId, representingTeamId)),
+        teamId: representingTeamId,
+        representingTeamId,
+        ...updates,
+        playerOfMatch:
+          updates.playerOfMatch === undefined
+            ? (current[key]?.playerOfMatch ?? false)
+            : updates.playerOfMatch
       }
     }));
   }
 
-  function updateBowlingOver(id: string, updates: Partial<BowlingEntry>) {
-    setBowlingOvers((current) =>
-      current.map((over) => (over.id === id ? { ...over, ...updates } : over))
+  function handleDidBatChange(
+    playerId: string,
+    representingTeamId: TeamId,
+    didBat: boolean
+  ) {
+    if (isLocked) return;
+    const key = getPerformanceKey(playerId, representingTeamId);
+    const current =
+      performances[key] ??
+      createPerformance(playerId, representingTeamId);
+
+    if (
+      !didBat &&
+      (sanitizeRuns(current.runs) > 0 || current.wasOut) &&
+      !window.confirm("Turning off Did Bat will clear this player's runs and Out status.")
+    ) {
+      return;
+    }
+
+    updatePerformance(playerId, representingTeamId, {
+      didBat,
+      runs: didBat ? normalizeStoredRuns(current.runs) : "",
+      wasOut: didBat ? current.wasOut : false
+    });
+  }
+
+  function updateBowlingOver(
+    teamId: TeamId,
+    id: string,
+    updates: Partial<BowlingOver>
+  ) {
+    if (isLocked) return;
+    setBowlingOvers((current) => ({
+      ...current,
+      [teamId]: current[teamId].map((over) =>
+        over.id === id
+          ? {
+              ...over,
+              ...updates,
+              dismissals:
+                typeof updates.bowlerId === "string"
+                  ? over.dismissals.map((dismissal) =>
+                      dismissal.type === "run_out"
+                        ? dismissal
+                        : { ...dismissal, creditedBowlerId: updates.bowlerId || null }
+                    )
+                  : over.dismissals
+            }
+          : over
+      )
+    }));
+  }
+
+  function updateWicketsTaken(teamId: TeamId, overId: string, wicketsTaken: number) {
+    if (isLocked) return;
+    const currentOver = bowlingOvers[teamId].find((over) => over.id === overId);
+
+    if (!currentOver) return;
+
+    if (
+      wicketsTaken < currentOver.dismissals.length &&
+      currentOver.dismissals
+        .slice(wicketsTaken)
+        .some((dismissal) => isDismissalComplete(dismissal)) &&
+      !window.confirm(
+        "Reducing Wickets Taken will remove completed dismissal details from this over. Continue?"
+      )
+    ) {
+      return;
+    }
+
+    setBowlingOvers((current) => ({
+      ...current,
+      [teamId]: current[teamId].map((over) =>
+        over.id === overId ? syncDismissalRows(over, wicketsTaken) : over
+      )
+    }));
+  }
+
+  function updateDismissal(
+    teamId: TeamId,
+    overId: string,
+    dismissalId: string,
+    updates: Partial<DismissalEvent>
+  ) {
+    if (isLocked) return;
+    setBowlingOvers((current) => ({
+      ...current,
+      [teamId]: current[teamId].map((over) =>
+        over.id === overId
+          ? {
+              ...over,
+              dismissals: over.dismissals.map((dismissal) => {
+                if (dismissal.id !== dismissalId) return dismissal;
+
+                const nextType = updates.type ?? dismissal.type;
+                const fielderIsRequired =
+                  nextType === "caught" ||
+                  nextType === "run_out" ||
+                  nextType === "stumped";
+                const next: DismissalEvent = {
+                  ...dismissal,
+                  ...updates,
+                  type: nextType,
+                  creditedBowlerId:
+                    nextType === "run_out" ? null : over.bowlerId || null,
+                  fielderId:
+                    fielderIsRequired && updates.fielderId !== undefined
+                        ? updates.fielderId
+                        : fielderIsRequired
+                          ? dismissal.fielderId
+                          : null
+                };
+
+                return next;
+              })
+            }
+          : over
+      )
+    }));
+  }
+
+  function removeDismissal(teamId: TeamId, overId: string, dismissalId: string) {
+    if (isLocked) return;
+    setBowlingOvers((current) => ({
+      ...current,
+      [teamId]: current[teamId].map((over) =>
+        over.id === overId
+            ? {
+                ...over,
+                dismissals: over.dismissals.filter(
+                  (dismissal) => dismissal.id !== dismissalId
+                ),
+                wicketsTaken: Math.max(0, over.dismissals.length - 1)
+              }
+          : over
+      )
+    }));
+  }
+
+  function addBowlingOver(teamId: TeamId) {
+    if (isLocked) return;
+    const currentOvers = bowlingOvers[teamId];
+    const inningsState =
+      teamId === "teamA" ? teamABowlingInningsState : teamBBowlingInningsState;
+
+    if (inningsState.isComplete) {
+      setMessage(getInningsCompleteMessage(inningsState) ?? "This innings is complete.");
+      return;
+    }
+
+    if (currentOvers.some((over) => !isBowlingOverComplete(over))) {
+      setMessage("Complete the dismissal details for the wickets taken in this over.");
+      return;
+    }
+
+    setBowlingOvers((current) => ({
+      ...current,
+      [teamId]: [
+        ...current[teamId],
+        createBowlingEntry(teamId, current[teamId].length + 1)
+      ]
+    }));
+  }
+
+  function removeBowlingOver(teamId: TeamId, id: string) {
+    if (isLocked) return;
+    setBowlingOvers((current) => ({
+      ...current,
+      [teamId]: current[teamId]
+        .filter((over) => over.id !== id)
+        .map((over, index) => ({ ...over, overNumber: index + 1 }))
+    }));
+  }
+
+  function buildCurrentMatchRecord(
+    finalStatus: MatchStatus,
+    result: MatchResult,
+    appliedAt: string
+  ): MatchRecord {
+    const allBowlingOvers = [...bowlingOvers.teamA, ...bowlingOvers.teamB];
+    const teamContextFinalisedRecords: FinalisedPlayerMatchRecord[] = performanceList.map(
+      (performance) => ({
+        ...performance,
+        xpBreakdown: calculatePlayerMatchXP(performance, {
+          result,
+          overs: allBowlingOvers.filter(
+            (over) => over.bowlerId === performance.playerId
+          )
+        }),
+        progressionAppliedAt:
+          finalStatus === "finalised" && result.type !== "no_result"
+            ? appliedAt
+            : undefined
+      })
     );
+    const finalisedRecordsByContextKey = new Map(
+      teamContextFinalisedRecords.map((record) => [getPerformanceRecordKey(record), record])
+    );
+    const finalisedPlayerRecords = aggregateFinalisedPlayerRecords({
+      performances: performanceList,
+      allBowlingOvers,
+      result,
+      sharedPlayerId,
+      appliedAt,
+      finalStatus
+    });
+    const teamAMatchData = buildTeamMatchData({
+      teamId: "teamA",
+      teamName: values.teamAName,
+      playerIds: teamA,
+      performances: performanceList,
+      bowlingOvers: bowlingOvers.teamA
+    });
+    const teamBMatchData = buildTeamMatchData({
+      teamId: "teamB",
+      teamName: values.teamBName,
+      playerIds: teamB,
+      performances: performanceList,
+      bowlingOvers: bowlingOvers.teamB
+    });
+
+    return {
+      id: matchId,
+      matchDate: values.matchDate,
+      matchNumber: getMatchNumberValue(values.matchNumber),
+      startTime: values.startTime || undefined,
+      matchName: values.matchName,
+      venue: "CZU Gully Arena",
+      status: finalStatus,
+      scheduledOversPerInnings: getScheduledOversValue(
+        values.scheduledOversPerInnings
+      ),
+      battingFirstTeamId:
+        finalStatus === "draft" ||
+        finalStatus === "abandoned" ||
+        finalStatus === "cancelled"
+          ? battingFirstTeamId || null
+          : effectiveBattingFirstTeamId,
+      chasingTeamId:
+        finalStatus === "draft" ||
+        finalStatus === "abandoned" ||
+        finalStatus === "cancelled"
+          ? battingFirstTeamId
+            ? getChasingTeamId(battingFirstTeamId)
+            : null
+          : chasingTeamId,
+      sharedPlayerId,
+      teams: {
+        teamA: {
+          ...teamAMatchData,
+          playerPerformances: teamAMatchData.playerPerformances.map(
+            (record) => finalisedRecordsByContextKey.get(getPerformanceRecordKey(record)) ?? record
+          )
+        },
+        teamB: {
+          ...teamBMatchData,
+          playerPerformances: teamBMatchData.playerPerformances.map(
+            (record) => finalisedRecordsByContextKey.get(getPerformanceRecordKey(record)) ?? record
+          )
+        }
+      },
+      innings: {
+        first: firstInnings,
+        second: secondInnings
+      },
+      result,
+      finalisedPlayerRecords,
+      progressionAppliedAt:
+        finalStatus === "finalised" && result.type !== "no_result"
+          ? appliedAt
+          : undefined,
+      appliedFinalisationVersion:
+        finalStatus === "finalised" && result.type !== "no_result" ? 1 : undefined
+    };
   }
 
-  function addBowlingOver() {
-    setBowlingOvers((current) => [...current, createBowlingEntry(activePlayerIds)]);
-  }
-
-  function removeBowlingOver(id: string) {
-    setBowlingOvers((current) => current.filter((over) => over.id !== id));
-  }
-
-  async function validateAndSetStatus(nextStatus: MatchStatus) {
+  async function validateAndSetStatus(
+    nextStatus: MatchStatus,
+    stage: MatchValidationStage
+  ): Promise<boolean> {
     try {
+      setLiveConflictMatchId(null);
+
+      const matchNumber = getMatchNumberValue(values.matchNumber);
+
+      if (
+        hasDuplicateMatchNumber({
+          matches: savedMatches,
+          matchDate: values.matchDate,
+          matchNumber,
+          currentMatchId: matchId
+        })
+      ) {
+        setMessage(
+          `Game ${matchNumber} already exists for this date. Choose another game number.`
+        );
+        return false;
+      }
+
+      if (stage === "start") {
+        const liveConflict = getLiveMatchConflict(savedMatches, matchId);
+
+        if (liveConflict) {
+          setLiveConflictMatchId(liveConflict.id);
+          setMessage(
+            "Another match is already in progress. Finalise or close that match before starting this game."
+          );
+          return false;
+        }
+      }
+
       const response = await fetch("/api/matches/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           matchDate: values.matchDate,
+          matchNumber,
+          startTime: values.startTime || undefined,
+          matchName: values.matchName,
+          teamAName: values.teamAName,
+          teamBName: values.teamBName,
+          status: nextStatus,
+          stage,
+          scheduledOversPerInnings: getScheduledOversValue(
+            values.scheduledOversPerInnings
+          ),
+          battingFirstTeamId: battingFirstTeamId || null,
+          inningsExtras,
           availablePlayerIds,
           teamAPlayerIds: teamA,
           teamBPlayerIds: teamB,
-          performances: performanceList
+          sharedPlayerId,
+          performances: performanceList,
+          bowlingOvers
         })
       });
       const result = (await response.json()) as ValidationResponse;
@@ -299,103 +1097,296 @@ export function MockMatchEntryForm() {
 
       if (!response.ok || !result.ok) {
         setMessage(result.errors[0] ?? "Please check the match record.");
-        return;
+        return false;
+      }
+
+      if (nextStatus === "finalised") {
+        const appliedAt = new Date().toISOString();
+        const finalisedMatch = buildCurrentMatchRecord(
+          nextStatus,
+          result.result,
+          appliedAt
+        );
+
+        applyFinalisedMatchToLocalCareerStats(finalisedMatch);
+        localMatchRepository.saveMatch(finalisedMatch);
+        setFinalisedXPBreakdowns(
+          Object.fromEntries(
+            [
+              ...finalisedMatch.teams.teamA.playerPerformances,
+              ...finalisedMatch.teams.teamB.playerPerformances
+            ]
+              .filter((record): record is FinalisedPlayerMatchRecord => "xpBreakdown" in record)
+              .map((record) => [getPerformanceRecordKey(record), record.xpBreakdown])
+          )
+        );
+      } else {
+        localMatchRepository.saveMatch(
+          buildCurrentMatchRecord(nextStatus, result.result, new Date().toISOString())
+        );
+        setFinalisedXPBreakdowns({});
       }
 
       setStatus(nextStatus);
-      setMessage(
-        nextStatus === "draft"
-          ? "Draft checked locally. Totals were recalculated from player runs."
-          : "Submitted for review in mock mode. Totals were recalculated from player runs."
-      );
+      setMessage(getStatusMessage(nextStatus, result.result));
+      return true;
     } catch {
-      setMessage("Could not validate this mock match right now.");
+      setMessage("Could not validate this match right now.");
+      return false;
     }
   }
 
+  async function continueToTeamSetup() {
+    const saved = await validateAndSetStatus("draft", "draft");
+
+    if (saved) {
+      window.location.href = `/matches/${matchId}`;
+    }
+  }
+
+  function handleStatusChange(nextStatus: MatchStatus) {
+    if (isLocked) return;
+
+    if (nextStatus === "abandoned" || nextStatus === "cancelled") {
+      const confirmed = window.confirm(
+        "This will mark the match as No Result. Continue?"
+      );
+
+      if (!confirmed) return;
+
+      void validateAndSetStatus(nextStatus, "schedule");
+      return;
+    }
+
+    if (nextStatus === "finalised") {
+      void validateAndSetStatus("finalised", "finalise");
+      return;
+    }
+
+    if (nextStatus === "in_progress") {
+      void validateAndSetStatus("in_progress", "start");
+      return;
+    }
+
+    setStatus(nextStatus);
+  }
+
   function resetForm() {
+    setMatchId(createLocalMatchId());
     setValues(initialValues);
     setAvailablePlayerIds([]);
     setTeamA([]);
     setTeamB([]);
+    setSharedPlayerId(null);
+    setBattingFirstTeamId("");
+    setInningsExtras({ teamA: 0, teamB: 0 });
     setPerformances({});
-    setBowlingOvers([]);
+    setBowlingOvers({ teamA: [], teamB: [] });
     setStatus("draft");
-    setMessage("Mock form reset.");
+    setFinalisedXPBreakdowns({});
+    setMessage("Match entry reset.");
   }
 
   return (
-    <Card className="border-neon-cyan/45">
+    <Card className={`border-neon-cyan/45 ${isFinalised ? "finalised-match" : ""}`}>
       <div className="flex flex-col justify-between gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-center">
         <div>
           <p className="text-xs font-black uppercase text-neon-cyan">
             Fixed venue: CZU Gully Arena - Open Field, Prague
           </p>
-          <h1 className="mt-1 text-3xl font-black uppercase">Mock Match Entry</h1>
+          <h1 className="mt-1 text-3xl font-black uppercase">{matchPageTitle}</h1>
         </div>
         <span className="rounded-md border border-neon-yellow/40 bg-neon-yellow/10 px-3 py-2 text-xs font-black uppercase text-neon-yellow">
-          Status: {status}
+          Status: {status.replace("_", " ")}
         </span>
       </div>
 
-      <form className="mt-5 grid gap-5" onSubmit={(event) => event.preventDefault()}>
-        <div className="grid gap-4 md:grid-cols-2">
+      <form
+        aria-label={matchPageTitle}
+        className="mt-5 grid gap-5"
+        onSubmit={(event) => event.preventDefault()}
+      >
+        <ResultBanner
+          result={liveResult}
+          status={status}
+          teamAName={values.teamAName}
+          teamBName={values.teamBName}
+          firstInnings={firstInnings}
+          secondInnings={secondInnings}
+          firstInningsIsComplete={firstInningsIsComplete}
+          secondInningsIsComplete={secondInningsIsComplete}
+        />
+
+        {isFinalised ? (
+          <FinalisedMatchOverview
+            matchName={values.matchName}
+            matchDate={values.matchDate}
+            teamAName={values.teamAName}
+            teamBName={values.teamBName}
+            teamAInningsScore={teamAInningsScore}
+            teamBInningsScore={teamBInningsScore}
+            teamAXP={calculateTeamMatchXP(teamAPerformances, liveResult, bowlingOvers.teamA)}
+            teamBXP={calculateTeamMatchXP(teamBPerformances, liveResult, bowlingOvers.teamB)}
+            canReopen={canSafelyReopenFinalisedMatch}
+          />
+        ) : (
+        <>
+          <div className="grid gap-4 md:grid-cols-2">
           <label className="grid gap-2 text-sm font-bold text-stone-200">
             Match date
             <input
               type="date"
               value={values.matchDate}
+              disabled={isLocked}
               onChange={(event) =>
-                setValues((current) => ({ ...current, matchDate: event.target.value }))
+                setValues((current) => ({
+                  ...current,
+                  matchDate: event.target.value,
+                  matchNumber:
+                    initialMatch || current.matchNumber !== "" || !event.target.value
+                      ? current.matchNumber
+                      : getNextAvailableMatchNumber(savedMatches, event.target.value)
+                }))
               }
-              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan"
+              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-bold text-stone-200">
+            Game number
+            <input
+              min={1}
+              step={1}
+              type="number"
+              value={values.matchNumber}
+              disabled={isLocked}
+              onChange={(event) =>
+                setValues((current) => ({
+                  ...current,
+                  matchNumber:
+                    event.target.value === ""
+                      ? ""
+                      : Math.max(1, sanitizeRuns(event.target.value))
+                }))
+              }
+              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-bold text-stone-200">
+            Start time
+            <input
+              type="time"
+              value={values.startTime}
+              disabled={isLocked}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, startTime: event.target.value }))
+              }
+              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
             />
           </label>
           <label className="grid gap-2 text-sm font-bold text-stone-200">
             Match name
             <input
               value={values.matchName}
+              disabled={isLocked}
               onChange={(event) =>
                 setValues((current) => ({ ...current, matchName: event.target.value }))
               }
-              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan"
+              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
             />
           </label>
           <label className="grid gap-2 text-sm font-bold text-stone-200">
             Team A name
             <input
               value={values.teamAName}
+              disabled={isLocked}
               onChange={(event) =>
                 setValues((current) => ({ ...current, teamAName: event.target.value }))
               }
-              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan"
+              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
             />
           </label>
           <label className="grid gap-2 text-sm font-bold text-stone-200">
             Team B name
             <input
               value={values.teamBName}
+              disabled={isLocked}
               onChange={(event) =>
                 setValues((current) => ({ ...current, teamBName: event.target.value }))
               }
-              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan"
+              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
             />
           </label>
           <label className="grid gap-2 text-sm font-bold text-stone-200">
-            Team A total
-            <output className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-2xl font-black text-neon-yellow">
-              {teamTotals.teamATotal}
-            </output>
+            Match status
+            <select
+              value={status}
+              disabled={isLocked}
+              onChange={(event) => handleStatusChange(event.target.value as MatchStatus)}
+              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+            >
+              <option value="draft">Draft</option>
+              <option value="in_progress">In Progress</option>
+              <option value="abandoned">Abandoned</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
           </label>
           <label className="grid gap-2 text-sm font-bold text-stone-200">
-            Team B total
-            <output className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-2xl font-black text-neon-yellow">
-              {teamTotals.teamBTotal}
-            </output>
+            Scheduled overs per innings
+            <input
+              min={1}
+              type="number"
+              value={values.scheduledOversPerInnings}
+              disabled={isRosterLocked}
+              onChange={(event) =>
+                setValues((current) => ({
+                  ...current,
+                  scheduledOversPerInnings:
+                    event.target.value === ""
+                      ? ""
+                      : Math.max(1, sanitizeRuns(event.target.value))
+                }))
+              }
+              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+            />
           </label>
+          <label className="grid gap-2 text-sm font-bold text-stone-200">
+            Who bats first?
+            <select
+              value={battingFirstTeamId}
+              disabled={isRosterLocked}
+              onChange={(event) => setBattingFirstTeamId(event.target.value as TeamId | "")}
+              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+            >
+              <option value="">Select innings order</option>
+              <option value="teamA">{values.teamAName || "Team A"}</option>
+              <option value="teamB">{values.teamBName || "Team B"}</option>
+            </select>
+          </label>
+          <div className="grid gap-2 text-sm font-bold text-stone-200">
+            Live innings scores
+            <div className="grid grid-cols-2 gap-3">
+              <output className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-2xl font-black text-neon-yellow">
+                {formatInningsScore(teamAInningsScore.runs, teamAInningsScore.wicketsLost)}
+              </output>
+              <output className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-2xl font-black text-neon-yellow">
+                {formatInningsScore(teamBInningsScore.runs, teamBInningsScore.wicketsLost)}
+              </output>
+            </div>
+          </div>
         </div>
 
-        <section className="rounded-lg border border-neon-green/30 bg-black/25 p-4">
+          <div className="grid gap-4 md:grid-cols-2">
+          <InningsAllocationPanel
+            teamName={values.teamAName || "Team A"}
+            score={teamAInningsScore}
+          />
+          <InningsAllocationPanel
+            teamName={values.teamBName || "Team B"}
+            score={teamBInningsScore}
+          />
+        </div>
+
+          <section className="rounded-lg border border-neon-green/30 bg-black/25 p-4">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <h2 className="flex items-center gap-2 text-xl font-black uppercase text-stone-50">
@@ -407,16 +1398,21 @@ export function MockMatchEntryForm() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" onClick={selectAllAvailable}>
+              <Button type="button" variant="secondary" onClick={selectAllAvailable} disabled={isRosterLocked}>
                 Select All
               </Button>
-              <Button type="button" variant="ghost" onClick={clearAvailability}>
+              <Button type="button" variant="ghost" onClick={clearAvailability} disabled={isRosterLocked}>
                 Clear All
               </Button>
               <Button
                 type="button"
                 onClick={autoBalanceTeams}
-                disabled={isBalancing || availablePlayerIds.length < 2}
+                disabled={
+                  isRosterLocked ||
+                  isBalancing ||
+                  availablePlayerIds.length < 2 ||
+                  !canUseTeamControls
+                }
               >
                 <Shuffle className="h-4 w-4" aria-hidden="true" />
                 Auto-Balance Teams
@@ -425,29 +1421,35 @@ export function MockMatchEntryForm() {
                 type="button"
                 variant="secondary"
                 onClick={autoBalanceTeams}
-                disabled={isBalancing || availablePlayerIds.length < 2}
+                disabled={
+                  isRosterLocked ||
+                  isBalancing ||
+                  availablePlayerIds.length < 2 ||
+                  !canUseTeamControls
+                }
               >
                 Shuffle Again
               </Button>
-              <Button type="button" variant="ghost" onClick={clearTeams}>
+              <Button type="button" variant="ghost" onClick={clearTeams} disabled={isRosterLocked}>
                 Clear Teams
               </Button>
             </div>
           </div>
 
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {players.map((player) => {
+            {activePlayers.map((player) => {
               const isAvailable = availablePlayerIds.includes(player.id);
 
               return (
                 <label
                   key={`available-${player.id}`}
-                  className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-stone-100 hover:bg-white/10"
+                  className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-stone-100 hover:bg-white/10 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-45"
                 >
                   <span>{player.name}</span>
                   <input
                     type="checkbox"
                     checked={isAvailable}
+                    disabled={isRosterLocked}
                     onChange={(event) =>
                       toggleAvailability(player.id, event.target.checked)
                     }
@@ -458,380 +1460,1559 @@ export function MockMatchEntryForm() {
             })}
           </div>
 
-          {availablePlayerIds.length % 2 === 1 && availablePlayerIds.length > 1 ? (
-            <p className="mt-3 rounded-md border border-neon-yellow/30 bg-neon-yellow/10 p-3 text-sm font-bold text-yellow-100">
-              An odd number of players is available, so one team has one extra player.
-            </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-md border border-neon-cyan/25 bg-black/25 p-3 text-sm font-black uppercase text-stone-100">
+              {availableSummary.uniquePlayers} unique players available
+            </div>
+            <div className="rounded-md border border-neon-yellow/25 bg-black/25 p-3 text-sm font-black uppercase text-neon-yellow">
+              {availableSummary.teamASize} vs {availableSummary.teamBSize}
+            </div>
+            <div className="rounded-md border border-neon-green/25 bg-black/25 p-3 text-sm font-black uppercase text-neon-green">
+              {availableSummary.sharedSlots} shared player
+            </div>
+          </div>
+
+          {hasOddAttendance ? (
+            <div className="mt-4 rounded-lg border border-neon-yellow/35 bg-neon-yellow/10 p-4">
+              <label className="grid gap-2 text-sm font-black uppercase text-yellow-100">
+                Shared Player - Plays for Both Teams
+                <select
+                  value={sharedPlayerId ?? ""}
+                  disabled={isRosterLocked}
+                  onChange={(event) => changeSharedPlayer(event.target.value)}
+                  className="rounded-md border border-white/15 bg-black/45 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+                >
+                  <option value="">Select shared player</option>
+                  {availablePlayers.map((player) => (
+                    <option key={`shared-${player.id}`} value={player.id}>
+                      {player.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="mt-2 text-sm font-bold text-yellow-100">
+                Choose one available player to represent both teams so the playing sides remain equal.
+              </p>
+              {!sharedPlayerId ? (
+                <p className="mt-2 rounded-md border border-neon-red/40 bg-neon-red/10 p-3 text-sm font-black uppercase text-red-100">
+                  Select one Shared Player to create equal teams.
+                </p>
+              ) : null}
+            </div>
           ) : null}
-        </section>
+          </section>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          {(["A", "B"] as const).map((team) => {
-            const source = team === "A" ? teamA : teamB;
-            const other = team === "A" ? teamB : teamA;
+          <div className="grid gap-4 lg:grid-cols-2">
+            {renderTeamSelector("A", teamA, teamB)}
+            {renderTeamSelector("B", teamB, teamA)}
+          </div>
+        </>
+        )}
 
-            return (
-              <fieldset
-                key={team}
-                className="rounded-lg border border-white/12 bg-black/20 p-4"
-              >
-                <legend className="px-1 text-sm font-black uppercase text-neon-yellow">
-                  Team {team} players
-                </legend>
-                <div className="mt-3 grid gap-2">
-                  {players.map((player) => {
-                    const selected = source.includes(player.id);
-                    const isAvailable = availablePlayerIds.includes(player.id);
-                    const disabled = !isAvailable || other.includes(player.id);
-
-                    return (
-                      <label
-                        key={`${team}-${player.id}`}
-                        className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-stone-100 hover:bg-white/10 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-45"
-                      >
-                        <span>{player.name}</span>
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          disabled={disabled}
-                          onChange={() => togglePlayer(team, player.id)}
-                          className="h-5 w-5 accent-neon-yellow"
-                        />
-                      </label>
-                    );
-                  })}
-                </div>
-              </fieldset>
-            );
-          })}
+        <div className="bowling-teams-grid">
+          {isFinalised ? (
+            <MatchDetailsDisclosure
+              id="team-a-bowling"
+              title={`${values.teamAName} Bowling Details`}
+              teamId="teamA"
+              summary={getBowlingDisclosureSummary(bowlingOvers.teamA)}
+            >
+              <TeamBowlingSection
+                teamId="teamA"
+                teamName={values.teamAName}
+                players={teamAPlayers}
+                battingPlayers={teamBPlayers}
+                battingTeamPlayerCount={teamB.length}
+                overs={bowlingOvers.teamA}
+                inningsState={teamABowlingInningsState}
+                isLocked={isLocked}
+                onWicketLimit={(wicketsStillAvailable) =>
+                  setMessage(`Only ${wicketsStillAvailable} wickets remain in this innings.`)
+                }
+                onAddOver={addBowlingOver}
+                onWicketsTakenChange={updateWicketsTaken}
+                onUpdateDismissal={updateDismissal}
+                onRemoveDismissal={removeDismissal}
+                onRemoveOver={removeBowlingOver}
+                onUpdateOver={updateBowlingOver}
+              />
+            </MatchDetailsDisclosure>
+          ) : (
+            <TeamBowlingSection
+            teamId="teamA"
+            teamName={values.teamAName}
+            players={teamAPlayers}
+            battingPlayers={teamBPlayers}
+            battingTeamPlayerCount={teamB.length}
+            overs={bowlingOvers.teamA}
+            inningsState={teamABowlingInningsState}
+            isLocked={isLocked}
+            onWicketLimit={(wicketsStillAvailable) =>
+              setMessage(`Only ${wicketsStillAvailable} wickets remain in this innings.`)
+            }
+            onAddOver={addBowlingOver}
+            onWicketsTakenChange={updateWicketsTaken}
+            onUpdateDismissal={updateDismissal}
+            onRemoveDismissal={removeDismissal}
+            onRemoveOver={removeBowlingOver}
+            onUpdateOver={updateBowlingOver}
+          />
+          )}
+          {isFinalised ? (
+            <MatchDetailsDisclosure
+              id="team-b-bowling"
+              title={`${values.teamBName} Bowling Details`}
+              teamId="teamB"
+              summary={getBowlingDisclosureSummary(bowlingOvers.teamB)}
+            >
+              <TeamBowlingSection
+                teamId="teamB"
+                teamName={values.teamBName}
+                players={teamBPlayers}
+                battingPlayers={teamAPlayers}
+                battingTeamPlayerCount={teamA.length}
+                overs={bowlingOvers.teamB}
+                inningsState={teamBBowlingInningsState}
+                isLocked={isLocked}
+                onWicketLimit={(wicketsStillAvailable) =>
+                  setMessage(`Only ${wicketsStillAvailable} wickets remain in this innings.`)
+                }
+                onAddOver={addBowlingOver}
+                onWicketsTakenChange={updateWicketsTaken}
+                onUpdateDismissal={updateDismissal}
+                onRemoveDismissal={removeDismissal}
+                onRemoveOver={removeBowlingOver}
+                onUpdateOver={updateBowlingOver}
+              />
+            </MatchDetailsDisclosure>
+          ) : (
+            <TeamBowlingSection
+            teamId="teamB"
+            teamName={values.teamBName}
+            players={teamBPlayers}
+            battingPlayers={teamAPlayers}
+            battingTeamPlayerCount={teamA.length}
+            overs={bowlingOvers.teamB}
+            inningsState={teamBBowlingInningsState}
+            isLocked={isLocked}
+            onWicketLimit={(wicketsStillAvailable) =>
+              setMessage(`Only ${wicketsStillAvailable} wickets remain in this innings.`)
+            }
+            onAddOver={addBowlingOver}
+            onWicketsTakenChange={updateWicketsTaken}
+            onUpdateDismissal={updateDismissal}
+            onRemoveDismissal={removeDismissal}
+            onRemoveOver={removeBowlingOver}
+            onUpdateOver={updateBowlingOver}
+          />
+          )}
         </div>
 
-        <label className="grid gap-2 text-sm font-bold text-stone-200">
-          Result
-          <select
-            value={values.winner}
-            onChange={(event) =>
-              setValues((current) => ({
-                ...current,
-                winner: event.target.value as MockMatchFormValues["winner"]
-              }))
-            }
-            className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan"
-          >
-            <option value="">Not selected</option>
-            <option value="A">Team A won</option>
-            <option value="B">Team B won</option>
-            <option value="tie">Tie / no result</option>
-          </select>
-        </label>
+        <div className="grid gap-4 xl:grid-cols-2">
+          {isFinalised ? (
+            <MatchDetailsDisclosure
+              id="team-a-player-records"
+              title={`${values.teamAName} Player Records`}
+              teamId="teamA"
+              summary={getPlayerRecordsDisclosureSummary(teamAInningsScore, teamAPerformances)}
+            >
+              <TeamPlayerRecordsSection
+                title="Team A Player Records"
+                teamId="teamA"
+                teamName={values.teamAName}
+                teamTotal={teamTotals.teamATotal}
+                inningsScore={teamAInningsScore}
+                players={teamAPlayers}
+                performances={teamAPerformances}
+                result={liveResult}
+                bowlingOvers={bowlingOvers.teamA}
+                inningsWicketsLost={calculateWicketsLost(bowlingOvers.teamA)}
+                maxDismissals={teamB.length}
+                isLocked={isLocked}
+                isFinalised={isFinalised}
+                finalisedXPBreakdowns={finalisedXPBreakdowns}
+                onDidBatChange={handleDidBatChange}
+                onUpdatePerformance={updatePerformance}
+              />
+            </MatchDetailsDisclosure>
+          ) : (
+            <TeamPlayerRecordsSection
+            title="Team A Player Records"
+            teamId="teamA"
+            teamName={values.teamAName}
+            teamTotal={teamTotals.teamATotal}
+            inningsScore={teamAInningsScore}
+            players={teamAPlayers}
+            performances={teamAPerformances}
+            result={liveResult}
+            bowlingOvers={bowlingOvers.teamA}
+            inningsWicketsLost={calculateWicketsLost(bowlingOvers.teamA)}
+            maxDismissals={teamB.length}
+            isLocked={isLocked}
+            isFinalised={isFinalised}
+            finalisedXPBreakdowns={finalisedXPBreakdowns}
+            onDidBatChange={handleDidBatChange}
+            onUpdatePerformance={updatePerformance}
+          />
+          )}
+          {isFinalised ? (
+            <MatchDetailsDisclosure
+              id="team-b-player-records"
+              title={`${values.teamBName} Player Records`}
+              teamId="teamB"
+              summary={getPlayerRecordsDisclosureSummary(teamBInningsScore, teamBPerformances)}
+            >
+              <TeamPlayerRecordsSection
+                title="Team B Player Records"
+                teamId="teamB"
+                teamName={values.teamBName}
+                teamTotal={teamTotals.teamBTotal}
+                inningsScore={teamBInningsScore}
+                players={teamBPlayers}
+                performances={teamBPerformances}
+                result={liveResult}
+                bowlingOvers={bowlingOvers.teamB}
+                inningsWicketsLost={calculateWicketsLost(bowlingOvers.teamB)}
+                maxDismissals={teamA.length}
+                isLocked={isLocked}
+                isFinalised={isFinalised}
+                finalisedXPBreakdowns={finalisedXPBreakdowns}
+                onDidBatChange={handleDidBatChange}
+                onUpdatePerformance={updatePerformance}
+              />
+            </MatchDetailsDisclosure>
+          ) : (
+            <TeamPlayerRecordsSection
+            title="Team B Player Records"
+            teamId="teamB"
+            teamName={values.teamBName}
+            teamTotal={teamTotals.teamBTotal}
+            inningsScore={teamBInningsScore}
+            players={teamBPlayers}
+            performances={teamBPerformances}
+            result={liveResult}
+            bowlingOvers={bowlingOvers.teamB}
+            inningsWicketsLost={calculateWicketsLost(bowlingOvers.teamB)}
+            maxDismissals={teamA.length}
+            isLocked={isLocked}
+            isFinalised={isFinalised}
+            finalisedXPBreakdowns={finalisedXPBreakdowns}
+            onDidBatChange={handleDidBatChange}
+            onUpdatePerformance={updatePerformance}
+          />
+          )}
+        </div>
 
-        <section className="rounded-lg border border-neon-cyan/30 bg-black/25 p-4">
-          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-            <div>
-              <h2 className="text-xl font-black uppercase text-stone-50">
-                Completed Bowling Overs
-              </h2>
-              <p className="text-sm text-stone-400">
-                One row per completed over. No ball-by-ball scoring required.
-              </p>
-            </div>
-            <Button type="button" variant="secondary" onClick={addBowlingOver}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Add Over
-            </Button>
-          </div>
-
-          <div className="mt-4 grid gap-3">
-            {bowlingOvers.length === 0 ? (
-              <p className="rounded-md border border-white/10 bg-white/5 p-3 text-sm font-bold text-stone-300">
-                No bowling overs entered yet.
-              </p>
-            ) : null}
-
-            {bowlingOvers.map((over, index) => (
-              <div
-                key={over.id}
-                className="grid gap-3 rounded-md border border-white/10 bg-white/5 p-3 md:grid-cols-[1.3fr_0.7fr_0.7fr_auto_auto]"
-              >
-                <label className="grid gap-1 text-xs font-black uppercase text-stone-300">
-                  Bowler
-                  <select
-                    value={over.bowlerId}
-                    onChange={(event) =>
-                      updateBowlingOver(over.id, { bowlerId: event.target.value })
-                    }
-                    className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan"
-                  >
-                    <option value="">Select bowler</option>
-                    {activePlayers.map((player) => (
-                      <option key={player.id} value={player.id}>
-                        {player.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-1 text-xs font-black uppercase text-stone-300">
-                  Runs
-                  <input
-                    min={0}
-                    type="number"
-                    value={over.runsConceded}
-                    onChange={(event) =>
-                      updateBowlingOver(over.id, {
-                        runsConceded: sanitizeRuns(event.target.value)
-                      })
-                    }
-                    className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan"
-                  />
-                </label>
-                <label className="grid gap-1 text-xs font-black uppercase text-stone-300">
-                  Wickets
-                  <input
-                    min={0}
-                    type="number"
-                    value={over.wickets}
-                    onChange={(event) =>
-                      updateBowlingOver(over.id, {
-                        wickets: sanitizeRuns(event.target.value)
-                      })
-                    }
-                    className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan"
-                  />
-                </label>
-                <label className="flex items-center gap-2 self-end rounded-md border border-white/10 bg-black/30 px-3 py-2 text-xs font-black uppercase text-stone-200">
-                  <input
-                    type="checkbox"
-                    checked={over.maiden}
-                    onChange={(event) =>
-                      updateBowlingOver(over.id, { maiden: event.target.checked })
-                    }
-                    className="h-4 w-4 accent-neon-yellow"
-                  />
-                  Maiden
-                </label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="self-end px-3"
-                  aria-label={`Remove over ${index + 1}`}
-                  onClick={() => removeBowlingOver(over.id)}
-                >
-                  <Trash2 className="h-4 w-4" aria-hidden="true" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-lg border border-neon-yellow/30 bg-black/25 p-4">
-          <h2 className="text-xl font-black uppercase text-stone-50">
-            Player Match Records
-          </h2>
-          <p className="text-sm text-stone-400">
-            Fast live entry: innings totals plus manually selected special events.
-          </p>
-
-          <div className="mt-4 grid gap-4">
-            {performanceList.length === 0 ? (
-              <p className="rounded-md border border-white/10 bg-white/5 p-3 text-sm font-bold text-stone-300">
-                Select team players to enter their scorecard records.
-              </p>
-            ) : null}
-
-            {performanceList.map((performance) => {
-              const player = players.find((candidate) => candidate.id === performance.playerId);
-
-              if (!player) return null;
-
-              return (
-                <div
-                  key={performance.playerId}
-                  className="grid gap-4 rounded-lg border border-white/10 bg-white/5 p-4"
-                >
-                  <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-                    <div>
-                      <h3 className="text-lg font-black uppercase text-stone-50">
-                        {player.name}
-                      </h3>
-                      <p className="text-xs font-bold uppercase text-stone-400">
-                        {performance.teamId === "teamA" ? values.teamAName : values.teamBName} - Projected match XP: {calculateMatchXP(performance)}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-3">
-                      <label className="flex items-center gap-2 text-sm font-bold text-stone-200">
-                        <input
-                          type="checkbox"
-                          checked={performance.played}
-                          onChange={(event) =>
-                            updatePerformance(performance.playerId, {
-                              played: event.target.checked
-                            })
-                          }
-                          className="h-4 w-4 accent-neon-yellow"
-                        />
-                        Played
-                      </label>
-                      <label className="flex items-center gap-2 text-sm font-bold text-stone-200">
-                        <input
-                          type="checkbox"
-                          checked={performance.playerOfMatch}
-                          onChange={(event) =>
-                            updatePerformance(performance.playerId, {
-                              playerOfMatch: event.target.checked
-                            })
-                          }
-                          className="h-4 w-4 accent-neon-yellow"
-                        />
-                        Player of the Match
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <label className="flex items-center gap-2 rounded-md border border-white/10 bg-black/25 px-3 py-2 text-sm font-bold text-stone-200">
-                      <input
-                        type="checkbox"
-                        checked={performance.didBat}
-                        onChange={(event) =>
-                          updatePerformance(performance.playerId, {
-                            didBat: event.target.checked
-                          })
-                        }
-                        className="h-4 w-4 accent-neon-yellow"
-                      />
-                      Did bat
-                    </label>
-                    <label className="grid gap-1 text-xs font-black uppercase text-stone-300">
-                      Runs
-                      <input
-                        min={0}
-                        type="number"
-                        value={performance.runs}
-                        onChange={(event) =>
-                          updatePerformance(performance.playerId, {
-                            runs: sanitizeRuns(event.target.value)
-                          })
-                        }
-                        className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan"
-                      />
-                    </label>
-                    <label className="flex items-center gap-2 rounded-md border border-white/10 bg-black/25 px-3 py-2 text-sm font-bold text-stone-200">
-                      <input
-                        type="checkbox"
-                        checked={performance.wasOut}
-                        onChange={(event) =>
-                          updatePerformance(performance.playerId, {
-                            wasOut: event.target.checked
-                          })
-                        }
-                        className="h-4 w-4 accent-neon-yellow"
-                      />
-                      Out
-                    </label>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <label className="grid gap-1 text-xs font-black uppercase text-stone-300">
-                      Hat-tricks
-                      <input
-                        min={0}
-                        type="number"
-                        value={performance.hatTricks}
-                        onChange={(event) =>
-                          updatePerformance(performance.playerId, {
-                            hatTricks: sanitizeRuns(event.target.value)
-                          })
-                        }
-                        className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan"
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-black uppercase text-stone-300">
-                      Catches
-                      <input
-                        min={0}
-                        type="number"
-                        value={performance.catches}
-                        onChange={(event) =>
-                          updatePerformance(performance.playerId, {
-                            catches: sanitizeRuns(event.target.value)
-                          })
-                        }
-                        className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan"
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-black uppercase text-stone-300">
-                      Run-outs
-                      <input
-                        min={0}
-                        type="number"
-                        value={performance.runOuts}
-                        onChange={(event) =>
-                          updatePerformance(performance.playerId, {
-                            runOuts: sanitizeRuns(event.target.value)
-                          })
-                        }
-                        className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan"
-                      />
-                    </label>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
+        {!isFinalised ? (
         <label className="grid gap-2 text-sm font-bold text-stone-200">
           Notes
           <textarea
             rows={4}
             value={values.notes}
+            disabled={isLocked}
             onChange={(event) =>
               setValues((current) => ({ ...current, notes: event.target.value }))
             }
-            className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan"
+            className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
           />
         </label>
+        ) : null}
 
-        {duplicatePlayers.length > 0 ? (
+        {ordinaryDuplicatePlayers.length > 0 ? (
           <div className="rounded-md border border-neon-red/50 bg-neon-red/10 p-3 text-sm font-bold text-red-100">
             A player cannot be selected for both teams.
           </div>
         ) : null}
 
+        {!isFinalised ? (
+        <ResultBanner
+          result={liveResult}
+          status={status}
+          teamAName={values.teamAName}
+          teamBName={values.teamBName}
+          firstInnings={firstInnings}
+          secondInnings={secondInnings}
+          firstInningsIsComplete={firstInningsIsComplete}
+          secondInningsIsComplete={secondInningsIsComplete}
+        />
+        ) : null}
+
         <div className="rounded-md border border-white/12 bg-white/5 p-3 text-sm text-stone-300">
           {message}
+          {liveConflictMatchId ? (
+            <Link
+              href={`/matches/${liveConflictMatchId}`}
+              className="ml-2 font-black uppercase text-neon-cyan underline"
+            >
+              Continue Current Match
+            </Link>
+          ) : null}
         </div>
 
+        {!isFinalised ? (
         <div className="flex flex-wrap gap-3">
-          <Button type="button" onClick={() => validateAndSetStatus("draft")}>
+          <Button
+            type="button"
+            onClick={() =>
+              validateAndSetStatus(
+                status,
+                status === "in_progress" ? "start" : "draft"
+              )
+            }
+            disabled={isLocked}
+          >
             <Save className="h-4 w-4" aria-hidden="true" />
-            Save Draft
+            {status === "in_progress" ? "Save Live Match" : "Save Draft"}
           </Button>
+          {status === "draft" ? (
+            <Button type="button" variant="ghost" onClick={continueToTeamSetup}>
+              Continue to Team Setup
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="secondary"
-            onClick={() => validateAndSetStatus("submitted")}
+            onClick={() => validateAndSetStatus("finalised", "finalise")}
+            disabled={isLocked || !canUseTeamControls}
           >
-            <Send className="h-4 w-4" aria-hidden="true" />
-            Submit for Review
+            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            Finalise Match
           </Button>
           <Button type="button" variant="ghost" onClick={resetForm}>
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
             Reset
           </Button>
         </div>
+        ) : null}
       </form>
     </Card>
   );
+
+  function renderTeamSelector(team: TeamKey, source: string[], other: string[]) {
+    return (
+      <fieldset className="rounded-lg border border-white/12 bg-black/20 p-4">
+        <legend className="px-1 text-sm font-black uppercase text-neon-yellow">
+          Team {team} players
+        </legend>
+        <div className="mt-3 grid gap-2">
+          {availablePlayers.length === 0 ? (
+            <p className="rounded-md border border-white/10 bg-white/5 p-3 text-sm font-bold text-stone-300">
+              Mark players Available Today before choosing teams.
+            </p>
+          ) : null}
+
+          {availablePlayers.map((player) => {
+            const selected = source.includes(player.id);
+            const isShared = player.id === sharedPlayerId;
+            const disabled = isRosterLocked || isShared || other.includes(player.id);
+
+            return (
+              <label
+                key={`${team}-${player.id}`}
+                className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-stone-100 hover:bg-white/10 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-45"
+              >
+                <span className="flex flex-wrap items-center gap-2">
+                  {player.name}
+                  {isShared ? (
+                    <b className="rounded border border-neon-yellow/35 bg-neon-yellow/10 px-2 py-0.5 text-[10px] font-black uppercase text-neon-yellow">
+                      Shared Player
+                    </b>
+                  ) : null}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  disabled={disabled}
+                  onChange={() => togglePlayer(team, player.id)}
+                  className="h-5 w-5 accent-neon-yellow"
+                />
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+    );
+  }
 }
 
-function didTeamWin(
-  playerId: string,
-  winner: MockMatchFormValues["winner"],
-  teamA: string[],
-  teamB: string[]
+function buildPerformanceList(
+  teamPlayers: Player[],
+  teamId: TeamId,
+  performances: Record<string, PlayerMatchPerformance>,
+  ownBowlingOvers: BowlingOver[],
+  opposingBowlingOvers: BowlingOver[]
+): PlayerMatchPerformance[] {
+  const dismissedBatterIds = new Set(getDismissedBatterIds(opposingBowlingOvers));
+
+  return teamPlayers.map((player) => {
+    const key = getPerformanceKey(player.id, teamId);
+    const base =
+      performances[key] ??
+      performances[player.id] ??
+      createPerformance(player.id, teamId);
+    const wasDismissed = dismissedBatterIds.has(player.id);
+
+    return {
+      ...base,
+      teamId,
+      representingTeamId: teamId,
+      didBat: base.didBat || wasDismissed,
+      runs: normalizeStoredRuns(base.runs),
+      wasOut: wasDismissed,
+      wickets: calculateBowlerWickets(player.id, ownBowlingOvers),
+      hatTricks: calculatePlayerHatTricks(player.id, ownBowlingOvers),
+      catches: calculatePlayerCatches(player.id, ownBowlingOvers),
+      runOuts: calculatePlayerRunOuts(player.id, ownBowlingOvers),
+      stumpings: calculatePlayerStumpings(player.id, ownBowlingOvers)
+    };
+  });
+}
+
+function aggregateFinalisedPlayerRecords({
+  performances,
+  allBowlingOvers,
+  result,
+  sharedPlayerId,
+  appliedAt,
+  finalStatus
+}: {
+  performances: PlayerMatchPerformance[];
+  allBowlingOvers: BowlingOver[];
+  result: MatchResult;
+  sharedPlayerId: string | null;
+  appliedAt: string;
+  finalStatus: MatchStatus;
+}): FinalisedPlayerMatchRecord[] {
+  const groupedByPlayerId = new Map<string, PlayerMatchPerformance[]>();
+
+  for (const performance of performances) {
+    groupedByPlayerId.set(performance.playerId, [
+      ...(groupedByPlayerId.get(performance.playerId) ?? []),
+      performance
+    ]);
+  }
+
+  return [...groupedByPlayerId.entries()].map(([playerId, playerPerformances]) => {
+    const playerOvers = allBowlingOvers.filter((over) => over.bowlerId === playerId);
+    const isSharedPlayerRecord =
+      sharedPlayerId === playerId && playerPerformances.length > 1;
+    const basePerformance = playerPerformances[0];
+    const aggregatePerformance: PlayerMatchPerformance = {
+      ...basePerformance,
+      teamId: basePerformance.teamId,
+      representingTeamId: basePerformance.teamId,
+      played: playerPerformances.some((performance) => performance.played),
+      playerOfMatch: playerPerformances.some(
+        (performance) => performance.playerOfMatch
+      ),
+      didBat: playerPerformances.some((performance) => performance.didBat),
+      runs: playerPerformances.reduce(
+        (sum, performance) =>
+          sum + (performance.didBat ? sanitizeRuns(performance.runs) : 0),
+        0
+      ),
+      wasOut: playerPerformances.some((performance) => performance.wasOut),
+      wickets: playerPerformances.reduce(
+        (sum, performance) => sum + sanitizeRuns(performance.wickets),
+        0
+      ),
+      hatTricks: playerPerformances.reduce(
+        (sum, performance) => sum + sanitizeRuns(performance.hatTricks),
+        0
+      ),
+      catches: playerPerformances.reduce(
+        (sum, performance) => sum + sanitizeRuns(performance.catches),
+        0
+      ),
+      runOuts: playerPerformances.reduce(
+        (sum, performance) => sum + sanitizeRuns(performance.runOuts),
+        0
+      ),
+      stumpings: playerPerformances.reduce(
+        (sum, performance) => sum + sanitizeRuns(performance.stumpings ?? 0),
+        0
+      )
+    };
+
+    return {
+      ...aggregatePerformance,
+      xpBreakdown: isSharedPlayerRecord
+        ? calculateSharedPlayerMatchXP(playerPerformances, {
+            result,
+            overs: playerOvers
+          })
+        : calculatePlayerMatchXP(aggregatePerformance, {
+            result,
+            overs: playerOvers
+          }),
+      progressionAppliedAt:
+        finalStatus === "finalised" && result.type !== "no_result"
+          ? appliedAt
+          : undefined
+    };
+  });
+}
+
+function calculateTeamMatchXP(
+  performances: PlayerMatchPerformance[],
+  result: MatchResult,
+  bowlingOvers: BowlingOver[]
 ) {
-  if (winner === "A") return teamA.includes(playerId);
-  if (winner === "B") return teamB.includes(playerId);
-  return false;
+  return performances.reduce((total, performance) => {
+    const playerOvers = bowlingOvers.filter(
+      (over) => over.bowlerId === performance.playerId
+    );
+
+    return (
+      total +
+      calculateMatchXP(performance, {
+        result,
+        teamWon: isWinningTeam(performance.teamId, result),
+        overs: playerOvers
+      })
+    );
+  }, 0);
+}
+
+function getBowlingDisclosureSummary(overs: BowlingOver[]) {
+  const score = calculateScoreFromBowlingFeed(overs);
+
+  return `${score.completedOvers} overs - ${score.wicketsLost} wickets - ${score.runs} runs conceded`;
+}
+
+function getPlayerRecordsDisclosureSummary(
+  inningsScore: LiveInningsScore,
+  performances: PlayerMatchPerformance[]
+) {
+  const allocation = calculateBattingAllocation(inningsScore.runs, performances);
+
+  return `${formatInningsScore(inningsScore.runs, inningsScore.wicketsLost)} - Player runs ${allocation.playerRunsTotal} - Extras ${allocation.extras}`;
+}
+
+function getTeamAccentStyle(teamId: TeamId): CSSProperties {
+  return {
+    "--team-accent": teamId === "teamA" ? "#2fd4ff" : "#ff9d2f"
+  } as CSSProperties;
+}
+
+function MatchDetailsDisclosure({
+  id,
+  title,
+  summary,
+  defaultOpen = false,
+  teamId,
+  children
+}: {
+  id: string;
+  title: string;
+  summary: ReactNode;
+  defaultOpen?: boolean;
+  teamId: TeamId;
+  children: ReactNode;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const contentId = `${id}-content`;
+
+  return (
+    <section
+      className={`match-details-disclosure team-section ${teamId === "teamA" ? "team-section-a" : "team-section-b"}`}
+      style={getTeamAccentStyle(teamId)}
+    >
+      <div className="match-details-disclosure-header">
+        <div>
+          <h2 className="team-section-title">{title}</h2>
+          <p>{summary}</p>
+        </div>
+        <button
+          type="button"
+          aria-expanded={isOpen}
+          aria-controls={contentId}
+          onClick={() => setIsOpen((current) => !current)}
+          className="match-details-disclosure-button"
+        >
+          {isOpen ? "Hide Details" : "View Details"}
+        </button>
+      </div>
+      <div id={contentId} hidden={!isOpen} className="match-details-disclosure-content">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function FinalisedMatchOverview({
+  matchName,
+  matchDate,
+  teamAName,
+  teamBName,
+  teamAInningsScore,
+  teamBInningsScore,
+  teamAXP,
+  teamBXP,
+  canReopen
+}: {
+  matchName: string;
+  matchDate: string;
+  teamAName: string;
+  teamBName: string;
+  teamAInningsScore: LiveInningsScore;
+  teamBInningsScore: LiveInningsScore;
+  teamAXP: number;
+  teamBXP: number;
+  canReopen: boolean;
+}) {
+  return (
+    <section className="finalised-match-overview rounded-lg border border-white/12 bg-black/25 p-4">
+      <div>
+        <p className="text-xs font-black uppercase text-neon-cyan">
+          Finalised match summary
+        </p>
+        <h2 className="mt-1 text-2xl font-black uppercase text-stone-50">
+          {matchName || "Gully Premier League"}
+        </h2>
+        <p className="text-sm font-bold text-stone-400">
+          {matchDate || "Match date not set"} - CZU Gully Arena
+        </p>
+      </div>
+      <div className="finalised-score-grid">
+        <div className="team-section team-section-a" style={getTeamAccentStyle("teamA")}>
+          <span className="text-xs font-black uppercase text-stone-400">
+            {teamAName || "Team A"}
+          </span>
+          <strong className="team-score-badge">
+            {formatInningsScore(teamAInningsScore.runs, teamAInningsScore.wicketsLost)}
+          </strong>
+        </div>
+        <div className="team-section team-section-b" style={getTeamAccentStyle("teamB")}>
+          <span className="text-xs font-black uppercase text-stone-400">
+            {teamBName || "Team B"}
+          </span>
+          <strong className="team-score-badge">
+            {formatInningsScore(teamBInningsScore.runs, teamBInningsScore.wicketsLost)}
+          </strong>
+        </div>
+      </div>
+      <div className="finalised-xp-summary">
+        <span>XP Awarded</span>
+        <strong>{teamAName || "Team A"}: {teamAXP}</strong>
+        <strong>{teamBName || "Team B"}: {teamBXP}</strong>
+      </div>
+      <FinalisedMatchActions canReopen={canReopen} />
+    </section>
+  );
+}
+
+function FinalisedMatchActions({ canReopen }: { canReopen: boolean }) {
+  return (
+    <div className="finalised-match-actions">
+      <Link href="/matches" className="finalised-match-action">
+        View Match Summary
+      </Link>
+      <Link href="/matches" className="finalised-match-action">
+        Back to Matches
+      </Link>
+      {canReopen ? (
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() =>
+            window.confirm(
+              "REOPEN FINALISED MATCH?\n\nReopening this match will unlock team selection, bowling records and player records."
+            )
+          }
+        >
+          Reopen Match
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function InningsAllocationPanel({
+  teamName,
+  score
+}: {
+  teamName: string;
+  score: LiveInningsScore;
+}) {
+  const reconciliationMessage = score.isReconciled
+    ? "Score allocated"
+    : `Player runs exceed ${teamName}'s official innings total by ${Math.max(0, score.allocatedBatterRuns - score.runs)} runs`;
+
+  return (
+    <section className="rounded-lg border border-white/12 bg-black/25 p-4">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div>
+          <p className="text-xs font-black uppercase text-neon-cyan">{teamName}</p>
+          <p className="text-3xl font-black text-neon-yellow">
+            {formatInningsScore(score.runs, score.wicketsLost)}
+          </p>
+          <p className="text-xs font-black uppercase text-stone-400">
+            {score.completedOvers} overs - source: {score.source.replace("_", " ")}
+          </p>
+        </div>
+        <div className="grid gap-1 rounded-md border border-white/15 bg-black/35 px-3 py-2 text-right text-xs font-black uppercase text-stone-300">
+          Extras
+          <strong className="text-2xl text-neon-yellow">{score.extras}</strong>
+        </div>
+      </div>
+      <p
+        className={`mt-3 rounded-md border p-3 text-xs font-black uppercase ${
+          score.isReconciled
+            ? "border-neon-green/35 bg-neon-green/10 text-neon-green"
+            : "border-neon-yellow/35 bg-neon-yellow/10 text-neon-yellow"
+        }`}
+      >
+        {reconciliationMessage}
+      </p>
+    </section>
+  );
+}
+
+function TeamBowlingSection({
+  teamId,
+  teamName,
+  players: teamPlayers,
+  battingPlayers,
+  battingTeamPlayerCount,
+  overs,
+  inningsState,
+  isLocked,
+  onWicketLimit,
+  onAddOver,
+  onWicketsTakenChange,
+  onUpdateDismissal,
+  onRemoveDismissal,
+  onRemoveOver,
+  onUpdateOver
+}: {
+  teamId: TeamId;
+  teamName: string;
+  players: Player[];
+  battingPlayers: Player[];
+  battingTeamPlayerCount: number;
+  overs: BowlingOver[];
+  inningsState: InningsState;
+  isLocked: boolean;
+  onWicketLimit: (wicketsStillAvailable: number) => void;
+  onAddOver: (teamId: TeamId) => void;
+  onWicketsTakenChange: (teamId: TeamId, overId: string, wicketsTaken: number) => void;
+  onUpdateDismissal: (
+    teamId: TeamId,
+    overId: string,
+    dismissalId: string,
+    updates: Partial<DismissalEvent>
+  ) => void;
+  onRemoveDismissal: (teamId: TeamId, overId: string, dismissalId: string) => void;
+  onRemoveOver: (teamId: TeamId, id: string) => void;
+  onUpdateOver: (teamId: TeamId, id: string, updates: Partial<BowlingOver>) => void;
+}) {
+  const inningsCompleteMessage = getInningsCompleteMessage(inningsState);
+  const hasIncompleteOver = overs.some((over) => !isBowlingOverComplete(over));
+  const canAddOver = !inningsState.isComplete && !hasIncompleteOver;
+  return (
+    <section
+      className={`team-bowling-panel team-section ${teamId === "teamA" ? "team-section-a" : "team-section-b"} rounded-lg bg-black/25 p-4`}
+      style={getTeamAccentStyle(teamId)}
+    >
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div>
+          <h2 className="text-xl font-black uppercase text-stone-50">
+            {teamName} Bowling
+          </h2>
+          <p className="text-sm text-stone-400">
+            Completed overs: {overs.length}
+          </p>
+        </div>
+        {!isLocked ? (
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => onAddOver(teamId)}
+          disabled={isLocked || teamPlayers.length === 0 || !canAddOver}
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          Add Over
+        </Button>
+        ) : null}
+      </div>
+
+      {inningsCompleteMessage ? (
+        <p className="mt-3 rounded-md border border-neon-yellow/35 bg-neon-yellow/10 p-3 text-sm font-black uppercase text-neon-yellow">
+          {inningsCompleteMessage}
+        </p>
+      ) : null}
+      {!inningsCompleteMessage && hasIncompleteOver ? (
+        <p className="mt-3 rounded-md border border-neon-yellow/35 bg-neon-yellow/10 p-3 text-sm font-black uppercase text-neon-yellow">
+          Complete the dismissal details for the wickets taken in this over.
+        </p>
+      ) : null}
+
+      <div className="mt-4 grid gap-3">
+        {overs.length === 0 ? (
+          <p className="rounded-md border border-white/10 bg-white/5 p-3 text-sm font-bold text-stone-300">
+            No bowling overs entered for this team yet.
+          </p>
+        ) : null}
+
+        {overs.map((over) => {
+          const dismissedBatterIdsInOtherOvers = new Set(
+            overs
+              .flatMap((candidate) => candidate.dismissals)
+              .filter((dismissal) => dismissal.overId !== over.id)
+              .map((dismissal) => dismissal.dismissedBatterId)
+          );
+          const wicketsInOtherOvers = overs
+            .filter((candidate) => candidate.id !== over.id)
+            .reduce((total, candidate) => total + candidate.dismissals.length, 0);
+          const remainingWicketsForCurrentOver = Math.max(
+            0,
+            battingTeamPlayerCount - wicketsInOtherOvers
+          );
+
+          return (
+          <div key={over.id} className="bowling-over-card rounded-md border border-white/10 bg-white/5 p-3">
+            <div className="bowling-over-row">
+            <div className="over-number-field grid gap-1 text-xs font-black uppercase text-stone-300">
+              <label>Over</label>
+              <output className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100">
+                {over.overNumber}
+              </output>
+            </div>
+            <label className="bowler-field grid gap-1 text-xs font-black uppercase text-stone-300">
+              Bowler
+              <select
+                value={over.bowlerId}
+                disabled={isLocked}
+                onChange={(event) =>
+                  onUpdateOver(teamId, over.id, { bowlerId: event.target.value })
+                }
+                className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+              >
+                <option value="">Select bowler</option>
+                {teamPlayers.map((player) => (
+                  <option key={player.id} value={player.id}>
+                    {player.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="runs-field grid gap-1 text-xs font-black uppercase text-stone-300">
+              Runs
+              <input
+                min={0}
+                type="number"
+                value={over.runsConceded}
+                disabled={isLocked}
+                onChange={(event) => {
+                  const runsValue = event.target.value;
+
+                  if (runsValue === "") {
+                    onUpdateOver(teamId, over.id, {
+                      runsConceded: "",
+                      maiden: false
+                    });
+                    return;
+                  }
+
+                  const runsConceded = sanitizeRuns(runsValue);
+
+                  onUpdateOver(teamId, over.id, {
+                    runsConceded,
+                    maiden: runsConceded === 0
+                  });
+                }}
+                className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+              />
+            </label>
+            <label className="wickets-field grid gap-1 text-xs font-black uppercase text-stone-300">
+              <span title="Total dismissals in this over, including run-outs.">
+                Wkts taken
+              </span>
+              <input
+                min={0}
+                max={remainingWicketsForCurrentOver}
+                type="number"
+                value={over.wicketsTaken}
+                disabled={isLocked || inningsState.hasReachedTarget}
+                onChange={(event) => {
+                  const wicketsValue = event.target.value;
+
+                  if (wicketsValue === "") {
+                    onUpdateOver(teamId, over.id, {
+                      wicketsTaken: "",
+                      dismissals: []
+                    });
+                    return;
+                  }
+
+                  const wicketsTaken = Math.min(
+                    remainingWicketsForCurrentOver,
+                    sanitizeRuns(wicketsValue)
+                  );
+
+                  if (sanitizeRuns(wicketsValue) > remainingWicketsForCurrentOver) {
+                    onWicketLimit(remainingWicketsForCurrentOver);
+                  }
+
+                  onWicketsTakenChange(teamId, over.id, wicketsTaken);
+                }}
+                className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+              />
+            </label>
+            <div className="bowling-over-actions">
+              {isLocked ? (
+                over.maiden ? (
+                  <span className="maiden-badge">MAIDEN</span>
+                ) : (
+                  <span className="maiden-empty">-</span>
+                )
+              ) : (
+                <label className="maiden-control rounded-md border border-white/10 bg-black/30 px-3 py-2 text-xs font-black uppercase text-stone-200">
+                  <input
+                    type="checkbox"
+                    checked={over.maiden}
+                    onChange={(event) =>
+                      onUpdateOver(teamId, over.id, {
+                        maiden: event.target.checked,
+                        runsConceded: event.target.checked ? 0 : over.runsConceded
+                      })
+                    }
+                    className="h-4 w-4 accent-neon-yellow"
+                  />
+                  <span>MAIDEN</span>
+                </label>
+              )}
+              {!isLocked ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="delete-over-button px-3"
+                aria-label={`Delete over ${over.overNumber}`}
+                disabled={isLocked}
+                onClick={() => onRemoveOver(teamId, over.id)}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </Button>
+              ) : null}
+            </div>
+          </div>
+            <div className="over-dismissals mt-3 rounded-md border border-white/10 bg-black/20 p-3">
+              <div className="over-dismissals-header flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                <span className="text-xs font-black uppercase text-neon-cyan">
+                  Dismissals ({over.dismissals.length})
+                </span>
+                <span className="text-xs font-bold text-stone-400">
+                  Rows match Wkts Taken
+                </span>
+              </div>
+              {over.dismissals.length === 0 ? (
+                <p className="mt-2 text-xs font-bold text-stone-400">
+                  No dismissals recorded in this over.
+                </p>
+              ) : null}
+              <div className="mt-3 grid gap-2">
+                {over.dismissals.map((dismissal, index) => (
+                  <DismissalEditor
+                    key={dismissal.id}
+                    dismissal={dismissal}
+                    dismissalNumber={index + 1}
+                    over={over}
+                    battingPlayers={battingPlayers}
+                    bowlingPlayers={teamPlayers}
+                    dismissedBatterIds={
+                      new Set([
+                        ...dismissedBatterIdsInOtherOvers,
+                        ...over.dismissals
+                          .filter((candidate) => candidate.id !== dismissal.id)
+                          .map((candidate) => candidate.dismissedBatterId)
+                      ])
+                    }
+                    isLocked={isLocked}
+                    onUpdate={(updates) =>
+                      onUpdateDismissal(teamId, over.id, dismissal.id, updates)
+                    }
+                    onRemove={() => onRemoveDismissal(teamId, over.id, dismissal.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function DismissalEditor({
+  dismissal,
+  dismissalNumber,
+  over,
+  battingPlayers,
+  bowlingPlayers,
+  dismissedBatterIds,
+  isLocked,
+  onUpdate,
+  onRemove
+}: {
+  dismissal: DismissalEvent;
+  dismissalNumber: number;
+  over: BowlingOver;
+  battingPlayers: Player[];
+  bowlingPlayers: Player[];
+  dismissedBatterIds: Set<string>;
+  isLocked: boolean;
+  onUpdate: (updates: Partial<DismissalEvent>) => void;
+  onRemove: () => void;
+}) {
+  const bowlerName =
+    bowlingPlayers.find((player) => player.id === over.bowlerId)?.name ??
+    "selected bowler";
+  const batterOptions = battingPlayers.filter(
+    (player) =>
+      (player.id === dismissal.dismissedBatterId ||
+        !dismissedBatterIds.has(player.id)) &&
+      player.id !== over.bowlerId
+  );
+
+  function handleTypeChange(type: DismissalType) {
+    const needsFielder =
+      type === "caught" || type === "run_out" || type === "stumped";
+
+    onUpdate({
+      type,
+      creditedBowlerId: type === "run_out" ? null : over.bowlerId || null,
+      fielderId: needsFielder ? dismissal.fielderId : null
+    });
+  }
+
+  const needsFielder =
+    dismissal.type === "caught" ||
+    dismissal.type === "run_out" ||
+    dismissal.type === "stumped";
+  const fielderLabel =
+    dismissal.type === "caught"
+      ? "Caught by"
+      : dismissal.type === "stumped"
+        ? "Stumped by"
+        : "Run-out by";
+  const fielderOptions =
+    dismissal.type === "stumped"
+      ? bowlingPlayers.filter((player) => player.id !== over.bowlerId)
+      : bowlingPlayers;
+  const safeFielderOptions = fielderOptions.filter(
+    (player) => player.id !== dismissal.dismissedBatterId
+  );
+
+  return (
+    <div className="dismissal-row rounded-md border border-white/10 bg-white/5 p-2">
+      <label className="grid gap-1 text-xs font-black uppercase text-stone-300">
+        Dismissed batter {dismissalNumber}
+        <select
+          value={dismissal.dismissedBatterId}
+          disabled={isLocked}
+          onChange={(event) => onUpdate({ dismissedBatterId: event.target.value })}
+          className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+        >
+          <option value="">Select batter</option>
+          {batterOptions.map((player) => (
+            <option key={player.id} value={player.id}>
+              {player.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs font-black uppercase text-stone-300">
+        How out?
+        <select
+          value={dismissal.type}
+          disabled={isLocked}
+          onChange={(event) => handleTypeChange(event.target.value as DismissalType)}
+          className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+        >
+          <option value="bowled">Bowled</option>
+          <option value="lbw">LBW</option>
+          <option value="caught">Caught</option>
+          <option value="stumped">Stumped</option>
+          <option value="run_out">Run-out</option>
+          <option value="other_bowler_wicket">Other bowler wicket</option>
+        </select>
+      </label>
+      {needsFielder ? (
+        <label className="grid gap-1 text-xs font-black uppercase text-stone-300">
+          {fielderLabel}
+          <select
+            value={dismissal.fielderId ?? ""}
+            disabled={isLocked}
+            onChange={(event) => onUpdate({ fielderId: event.target.value || null })}
+            className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+          >
+            <option value="">Select fielder</option>
+            {safeFielderOptions.map((player) => (
+              <option key={player.id} value={player.id}>
+                {player.name}
+              </option>
+            ))}
+          </select>
+          {dismissal.type !== "run_out" ? (
+            <span className="text-[11px] text-stone-400">
+              Wicket credited to {bowlerName}
+            </span>
+          ) : null}
+        </label>
+      ) : (
+        <p className="rounded-md border border-white/10 bg-black/25 px-3 py-2 text-xs font-black uppercase text-stone-300">
+          Wicket credited to {bowlerName}
+        </p>
+      )}
+      {!isLocked ? (
+      <Button
+        type="button"
+        variant="ghost"
+        className="delete-over-button px-3"
+        aria-label="Remove dismissal"
+        disabled={isLocked}
+        onClick={onRemove}
+      >
+        <Trash2 className="h-4 w-4" aria-hidden="true" />
+      </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function DerivedPlayerStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="derived-player-stat rounded-md border border-white/10 bg-black/25 px-3 py-2">
+      <span className="block text-xs font-black uppercase text-stone-300">
+        {label}
+      </span>
+      <strong className="text-2xl font-black text-neon-yellow">{value}</strong>
+    </div>
+  );
+}
+
+function getDismissalReviewMessage(
+  performances: PlayerMatchPerformance[],
+  inningsWicketsLost: number,
+  maxDismissals: number
+) {
+  const totalBowlerWickets = performances.reduce(
+    (sum, record) => sum + sanitizeRuns(record.wickets),
+    0
+  );
+  const totalRunOuts = performances.reduce(
+    (sum, record) => sum + sanitizeRuns(record.runOuts),
+    0
+  );
+  const totalCatches = performances.reduce(
+    (sum, record) => sum + sanitizeRuns(record.catches),
+    0
+  );
+  const totalHatTricks = performances.reduce(
+    (sum, record) => sum + sanitizeRuns(record.hatTricks),
+    0
+  );
+
+  if (totalBowlerWickets + totalRunOuts > inningsWicketsLost) {
+    return `player wicket and run-out credits exceed the ${inningsWicketsLost} dismissals recorded for this innings.`;
+  }
+
+  if (totalCatches > totalBowlerWickets) {
+    return "catches cannot exceed bowler wickets.";
+  }
+
+  if (totalHatTricks > Math.floor(totalBowlerWickets / 3)) {
+    return "team hat-tricks cannot exceed one per three bowler wickets.";
+  }
+
+  if (
+    totalBowlerWickets > maxDismissals ||
+    totalRunOuts > maxDismissals ||
+    totalCatches > maxDismissals ||
+    totalHatTricks > Math.floor(maxDismissals / 3)
+  ) {
+    return `dismissal credits cannot exceed the ${maxDismissals} available wickets.`;
+  }
+
+  return null;
+}
+
+function TeamPlayerRecordsSection({
+  title,
+  teamId,
+  teamName,
+  teamTotal,
+  inningsScore,
+  players: teamPlayers,
+  performances,
+  result,
+  bowlingOvers,
+  inningsWicketsLost,
+  maxDismissals,
+  isLocked,
+  isFinalised,
+  finalisedXPBreakdowns,
+  onDidBatChange,
+  onUpdatePerformance
+}: {
+  title: string;
+  teamId: TeamId;
+  teamName: string;
+  teamTotal: number;
+  inningsScore: LiveInningsScore;
+  players: Player[];
+  performances: PlayerMatchPerformance[];
+  result: MatchResult;
+  bowlingOvers: BowlingOver[];
+  inningsWicketsLost: number;
+  maxDismissals: number;
+  isLocked: boolean;
+  isFinalised: boolean;
+  finalisedXPBreakdowns: Record<string, PlayerMatchXPBreakdown>;
+  onDidBatChange: (
+    playerId: string,
+    representingTeamId: TeamId,
+    didBat: boolean
+  ) => void;
+  onUpdatePerformance: (
+    playerId: string,
+    representingTeamId: TeamId,
+    updates: Partial<PlayerMatchPerformance>
+  ) => void;
+}) {
+  const reviewMessage = getDismissalReviewMessage(
+    performances,
+    inningsWicketsLost,
+    maxDismissals
+  );
+  const allocation = calculateBattingAllocation(
+    inningsScore.runs,
+    performances
+  );
+
+  return (
+    <section
+      className={`team-player-records team-section ${teamId === "teamA" ? "team-section-a" : "team-section-b"} rounded-lg bg-black/25 p-4`}
+      style={getTeamAccentStyle(teamId)}
+    >
+      <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+        <div>
+          <h2 className="text-xl font-black uppercase text-stone-50">{title}</h2>
+          <p className="text-sm text-stone-400">{teamName}</p>
+        </div>
+        <span className="rounded-md border border-neon-yellow/40 bg-neon-yellow/10 px-3 py-2 text-sm font-black uppercase text-neon-yellow">
+          Total {teamTotal}
+        </span>
+      </div>
+
+      {reviewMessage ? (
+        <p className="mt-3 rounded-md border border-neon-red/45 bg-neon-red/10 p-3 text-sm font-black uppercase text-red-100">
+          Needs review: {reviewMessage}
+        </p>
+      ) : null}
+
+      <div className="mt-3 grid gap-2 rounded-md border border-neon-cyan/25 bg-black/25 p-3 text-xs font-black uppercase text-stone-300 sm:grid-cols-4">
+        <div>
+          <span className="block text-stone-500">Official score</span>
+          <strong className="text-lg text-neon-yellow">
+            {formatInningsScore(inningsScore.runs, inningsScore.wicketsLost)}
+          </strong>
+        </div>
+        <div>
+          <span className="block text-stone-500">Player runs</span>
+          <strong className="text-lg text-stone-50">{allocation.playerRunsTotal}</strong>
+        </div>
+        <div>
+          <span className="block text-stone-500">
+            {allocation.isValid ? "Extras" : "Excess player runs"}
+          </span>
+          <strong className={allocation.isValid ? "text-lg text-neon-green" : "text-lg text-neon-red"}>
+            {allocation.isValid ? allocation.extras : allocation.excessPlayerRuns}
+          </strong>
+        </div>
+        <div>
+          <span className="block text-stone-500">Status</span>
+          <strong className={allocation.isValid ? "text-lg text-neon-green" : "text-lg text-neon-red"}>
+            {allocation.isValid ? "Score allocated" : "Needs correction"}
+          </strong>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4">
+        {teamPlayers.length === 0 ? (
+          <p className="rounded-md border border-white/10 bg-white/5 p-3 text-sm font-bold text-stone-300">
+            Select players for this team to enter records.
+          </p>
+        ) : null}
+
+        {performances.map((performance) => {
+          const player = teamPlayers.find((candidate) => candidate.id === performance.playerId);
+          const performanceTeamId = performance.representingTeamId ?? performance.teamId;
+          const playerOvers = bowlingOvers.filter(
+            (over) => over.bowlerId === performance.playerId
+          );
+          const maximumRunsForPlayer =
+            inningsScore.source === "bowling_feed" && !isFinalised
+              ? getMaximumRunsForPlayer(
+                  performance.playerId,
+                  inningsScore.runs,
+                  performances,
+                  performanceTeamId
+                )
+              : undefined;
+          if (!player) return null;
+          const calculatedPlayerMatchXP = calculateMatchXP(performance, {
+            result,
+            teamWon: isWinningTeam(performance.teamId, result),
+            overs: playerOvers
+          });
+          const playerMatchXP =
+            isFinalised && finalisedXPBreakdowns[getPerformanceRecordKey(performance)]
+              ? finalisedXPBreakdowns[getPerformanceRecordKey(performance)].awardedXP
+              : calculatedPlayerMatchXP;
+          const isSharedContext =
+            performances.filter((record) => record.playerId === performance.playerId)
+              .length > 1;
+
+          return (
+            <div
+              key={getPerformanceRecordKey(performance)}
+              className="player-match-record grid gap-4 rounded-lg border border-white/10 bg-white/5 p-4"
+            >
+              <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                <div>
+                  <h3 className="text-lg font-black uppercase text-stone-50">
+                    {player.name}
+                  </h3>
+                  {isSharedContext ? (
+                    <p className="text-xs font-black uppercase text-neon-yellow">
+                      Shared Player - {performanceTeamId === "teamA" ? "Team A" : "Team B"} Performance
+                    </p>
+                  ) : null}
+                  <p className={`player-match-xp text-xs font-bold uppercase ${isFinalised ? "is-awarded" : "text-stone-400"}`}>
+                    {teamName} - {isFinalised ? "XP Awarded" : "Projected match XP"}:{" "}
+                    {playerMatchXP}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <label className="flex items-center gap-2 text-sm font-bold text-stone-200">
+                    <input
+                      type="checkbox"
+                      checked={performance.played}
+                      disabled={isLocked}
+                      onChange={(event) =>
+                        onUpdatePerformance(
+                          performance.playerId,
+                          performanceTeamId,
+                          {
+                            played: event.target.checked
+                          }
+                        )
+                      }
+                      className="h-4 w-4 accent-neon-yellow"
+                    />
+                    Played
+                  </label>
+                  <label className="flex items-center gap-2 text-sm font-bold text-stone-200">
+                    <input
+                      type="checkbox"
+                      checked={performance.playerOfMatch}
+                      disabled={isLocked}
+                      onChange={(event) =>
+                        onUpdatePerformance(
+                          performance.playerId,
+                          performanceTeamId,
+                          {
+                            playerOfMatch: event.target.checked
+                          }
+                        )
+                      }
+                      className="h-4 w-4 accent-neon-yellow"
+                    />
+                    Player of the Match
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <label className="flex items-center gap-2 rounded-md border border-white/10 bg-black/25 px-3 py-2 text-sm font-bold text-stone-200">
+                  <input
+                    type="checkbox"
+                    checked={performance.didBat}
+                    disabled={isLocked}
+                    onChange={(event) =>
+                      onDidBatChange(
+                        performance.playerId,
+                        performanceTeamId,
+                        event.target.checked
+                      )
+                    }
+                    className="h-4 w-4 accent-neon-yellow"
+                  />
+                  Did bat
+                </label>
+                <label className="player-batting-field grid gap-1 text-xs font-black uppercase text-stone-300">
+                  Runs
+                  <input
+                    min={0}
+                    max={maximumRunsForPlayer}
+                    step={1}
+                    inputMode="numeric"
+                    type="number"
+                    value={performance.runs}
+                    disabled={isLocked || !performance.didBat}
+                    onChange={(event) => {
+                      const normalizedRuns = normalizeNonNegativeIntegerInput(
+                        event.target.value
+                      );
+
+                      onUpdatePerformance(
+                        performance.playerId,
+                        performanceTeamId,
+                        {
+                          runs:
+                            normalizedRuns === "" || maximumRunsForPlayer === undefined
+                              ? normalizedRuns
+                              : Math.min(maximumRunsForPlayer, normalizedRuns)
+                        }
+                      );
+                    }}
+                    onFocus={(event) => event.currentTarget.select()}
+                    className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+                  />
+                  {maximumRunsForPlayer !== undefined ? (
+                    <span className="text-[11px] font-bold normal-case text-stone-400">
+                      Maximum available: {maximumRunsForPlayer}
+                    </span>
+                  ) : null}
+                </label>
+                <label className="player-batting-field flex items-center gap-2 rounded-md border border-white/10 bg-black/25 px-3 py-2 text-sm font-bold text-stone-200">
+                  <input
+                    type="checkbox"
+                    checked={performance.wasOut}
+                    disabled
+                    className="h-4 w-4 accent-neon-yellow"
+                  />
+                  Out
+                </label>
+              </div>
+
+              <div className="player-stat-inputs">
+                <DerivedPlayerStat label="Wickets" value={performance.wickets} />
+                <DerivedPlayerStat label="Hat-tricks" value={performance.hatTricks} />
+                <DerivedPlayerStat label="Catches" value={performance.catches} />
+                <DerivedPlayerStat label="Run-outs" value={performance.runOuts} />
+                <DerivedPlayerStat label="Stumpings" value={performance.stumpings ?? 0} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ResultBanner({
+  result,
+  status,
+  teamAName,
+  teamBName,
+  firstInnings,
+  secondInnings,
+  firstInningsIsComplete,
+  secondInningsIsComplete
+}: {
+  result: MatchResult;
+  status: MatchStatus;
+  teamAName: string;
+  teamBName: string;
+  firstInnings: TeamInnings;
+  secondInnings: TeamInnings;
+  firstInningsIsComplete: boolean;
+  secondInningsIsComplete: boolean;
+}) {
+  const isFinal = status === "finalised" || result.type === "no_result";
+  const firstTeamName = getTeamName(firstInnings.battingTeamId, teamAName, teamBName);
+  const secondTeamName = getTeamName(secondInnings.battingTeamId, teamAName, teamBName);
+  const preview = getLiveResultPreview({
+    firstInnings,
+    secondInnings,
+    chasingTeamName: secondTeamName,
+    matchStatus: status,
+    firstInningsIsComplete,
+    secondInningsIsComplete
+  });
+  const headline = isFinal
+    ? getFinalResultHeadline(result, teamAName, teamBName)
+    : preview.headline;
+  const description = isFinal ? getFinalResultDescription(result) : preview.detail;
+  const resultClassName = isFinal ? result.type : "pending";
+
+  return (
+    <section
+      className={`match-result-banner match-result-${resultClassName} ${isFinal ? "match-result-final" : ""}`}
+      aria-live="polite"
+    >
+      <div className="match-result-icon" aria-hidden="true">
+        {isFinal && (result.type === "win_by_runs" || result.type === "win_by_wickets") ? (
+          <Trophy className="h-10 w-10" />
+        ) : null}
+        {isFinal && result.type === "tie" ? <Swords className="h-10 w-10" /> : null}
+        {result.type === "no_result" ? <Ban className="h-10 w-10" /> : null}
+        {!isFinal ? <Swords className="h-10 w-10" /> : null}
+      </div>
+
+      <div className="match-result-content">
+        <p className="match-result-kicker">
+          {isFinal ? "Final Result" : "Live Result Preview"}
+        </p>
+        <h2>{headline}</h2>
+        <div className="result-innings">
+          <div className="result-innings-row">
+            <span>{firstTeamName}</span>
+            <strong>{formatInningsScore(firstInnings.runs, firstInnings.wicketsLost)}</strong>
+          </div>
+          <div className="result-innings-row">
+            <span>{secondTeamName}</span>
+            <strong>{formatInningsScore(secondInnings.runs, secondInnings.wicketsLost)}</strong>
+          </div>
+        </div>
+        <p>{description}</p>
+      </div>
+    </section>
+  );
+}
+
+function getFinalResultDescription(result: MatchResult) {
+  if (result.type === "tie") return "Equal runs after both innings";
+  if (result.type === "no_result") return "Match abandoned or cancelled";
+  if (result.type === "win_by_runs" || result.type === "win_by_wickets") {
+    return "Result confirmed from official innings scores";
+  }
+
+  return "Finalise the match to confirm the result";
+}
+
+function getTeamName(teamId: TeamId, teamAName: string, teamBName: string) {
+  return teamId === "teamA" ? teamAName || "Team A" : teamBName || "Team B";
+}
+
+function isWinningTeam(teamId: TeamId, result: MatchResult) {
+  return (
+    (result.type === "win_by_runs" || result.type === "win_by_wickets") &&
+    result.winnerTeamId === teamId
+  );
+}
+
+function getStatusMessage(status: MatchStatus, result: MatchResult) {
+  if (status === "draft") return "Draft checked locally. Team data is grouped and totals were recalculated.";
+  if (status === "in_progress") return "Match marked in progress.";
+  if (status === "abandoned" || status === "cancelled") return "Match marked as No Result.";
+  if (result.type === "win_by_runs" || result.type === "win_by_wickets") {
+    return "Match finalised. Result was calculated from innings scores.";
+  }
+  if (result.type === "tie") return "Match finalised as a tie.";
+  return "Match status updated.";
 }

@@ -1,6 +1,13 @@
-import { CalendarClock, MapPin, Plus, Shield, Users, X } from "lucide-react";
+"use client";
+
+import { MapPin, Plus, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { activePlayers } from "@/lib/data/players";
+import type { DashboardSummary } from "@/lib/dashboard-summary";
+import { useDashboardSummary } from "@/components/dashboard/useDashboardSummary";
+import { NextMatchTicket } from "@/components/dashboard/NextMatchTicket";
+import type { MatchRecord } from "@/lib/types/match";
 
 function HeroStat({
   label,
@@ -22,48 +29,7 @@ function HeroStat({
   );
 }
 
-function NextMatchCard() {
-  return (
-    <section className="rounded-lg border border-white/14 bg-black/90 p-4 shadow-2xl">
-      <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
-        <div className="stat-label flex items-center gap-2 text-base font-black uppercase">
-          <CalendarClock className="h-4 w-4 text-stone-300" aria-hidden="true" />
-          Next Match
-        </div>
-        <button
-          type="button"
-          className="grid h-8 w-8 place-items-center rounded-md border border-white/10 bg-white/5 hover:bg-white/10"
-          aria-label="Dismiss next match preview"
-        >
-          <X className="h-4 w-4" aria-hidden="true" />
-        </button>
-      </div>
-      <div className="py-5 text-center font-ui">
-        <p className="text-base font-black uppercase tracking-wide text-stone-100">
-          Not scheduled
-        </p>
-        <p className="mt-1 text-sm font-bold uppercase text-stone-400">
-          Gully Premier League
-        </p>
-      </div>
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
-        <div className="rounded-md border border-white/10 bg-white/5 p-3">
-          <Shield className="mx-auto h-6 w-6 text-neon-violet" aria-hidden="true" />
-          <p className="mt-2 text-xs font-black uppercase">Team A</p>
-        </div>
-        <span className="rounded-full bg-neon-yellow px-2 py-1 text-xs font-black text-pitch-950">
-          VS
-        </span>
-        <div className="rounded-md border border-white/10 bg-white/5 p-3">
-          <Shield className="mx-auto h-6 w-6 text-neon-red" aria-hidden="true" />
-          <p className="mt-2 text-xs font-black uppercase">Team B</p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ActionStats() {
+function ActionStats({ summary }: { summary: DashboardSummary }) {
   return (
     <div className="flex flex-col items-start gap-2 lg:items-end">
       <Link
@@ -82,10 +48,10 @@ function ActionStats() {
         />
       </Link>
       <div className="grid w-full max-w-[560px] gap-2 sm:grid-cols-3">
-        <HeroStat label="Total Matches" value={0} />
+        <HeroStat label="Matches Played" value={summary.totalFinalisedMatches} />
         <HeroStat
           label="Players"
-          value={4}
+          value={summary.activePlayerCount}
           icon={<Users className="h-4 w-4" aria-hidden="true" />}
         />
         <HeroStat
@@ -106,11 +72,13 @@ function ActionStats() {
 }
 
 function HeroControls() {
+  const { matches, summary } = useDashboardSummary(activePlayers);
+
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(250px,300px)_minmax(230px,270px)_minmax(0,1fr)] lg:items-end">
       <div className="hidden lg:block" />
-      <NextMatchCard />
-      <ActionStats />
+      <NextMatchTicket matches={matches as MatchRecord[]} />
+      <ActionStats summary={summary} />
     </div>
   );
 }

@@ -1,9 +1,16 @@
 import { Plus } from "lucide-react";
 import { LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { MatchArchive } from "@/components/matches/MatchArchive";
+import { TodayFixtures } from "@/components/matches/TodayFixtures";
 
-export default function MatchesPage() {
+export default async function MatchesPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ date?: string }>;
+}) {
+  const params = await searchParams;
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 lg:px-6">
       <Card>
@@ -17,11 +24,9 @@ export default function MatchesPage() {
             Create Match
           </LinkButton>
         </div>
-        <div className="mt-6">
-          <EmptyState title="No finalised matches">
-            Match history will appear here after the database and finalisation
-            workflow arrive in later phases.
-          </EmptyState>
+        <div className="mt-6 grid gap-5">
+          <TodayFixtures dateFilter={params?.date} />
+          <MatchArchive />
         </div>
       </Card>
     </div>

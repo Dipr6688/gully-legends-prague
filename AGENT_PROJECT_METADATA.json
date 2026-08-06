@@ -1,15 +1,15 @@
 {
   "metadataVersion": 2,
-  "lastUpdated": "2026-08-04",
+  "lastUpdated": "2026-08-05",
   "project": {
     "name": "Gully Legends Prague",
-    "purpose": "Gaming/comic styled cricket website and local mock match-entry workflow for the Gully Legends Prague cricket group.",
+    "purpose": "Gaming/comic styled cricket website, local match-management workflow, player progression system, Hall of Legends rankings, and Formula Room documentation for the Gully Legends Prague cricket group.",
     "framework": "Next.js App Router",
     "language": "TypeScript",
     "styling": "Tailwind CSS plus custom CSS in app/globals.css",
-    "runtimeDataSource": "Typed local TypeScript data and mock client state",
+    "runtimeDataSource": "Typed local TypeScript data, browser localStorage for local career progress and finalised match history, and server-side validation routes",
     "databaseStatus": "No Supabase integration yet",
-    "phaseStatus": "Phase 1 dashboard, player profiles, progression utilities, mock scorecard, and server-only team balancing are implemented."
+    "phaseStatus": "Dashboard, 16 player profiles, comic player dossier pages, local match-management workflow, XP/rating progression, Formula Room, and Hall of Legends leaderboard are implemented with real responsive components."
   },
   "commands": {
     "windowsNote": "Use npm.cmd in PowerShell because npm.ps1 may be blocked by execution policy.",
@@ -26,11 +26,15 @@
     "globalStyles": "app/globals.css",
     "rootLayout": "app/layout.tsx",
     "navigation": "components/navigation/SiteHeader.tsx",
+    "navigationConfig": "lib/data/navigation.ts",
     "dashboardHero": "components/dashboard/HeroSection.tsx",
     "monthlyBeasts": "components/dashboard/MonthlyBeastsPanel.tsx",
     "gullyRules": "components/dashboard/GullyRulesCard.tsx",
     "recentMatches": "components/dashboard/RecentMatchesPanel.tsx",
     "topPerformers": "components/dashboard/TopPerformersPanel.tsx",
+    "leaderboardPage": "app/leaderboard/page.tsx",
+    "leaderboardComponent": "components/leaderboard/CareerLeaderboard.tsx",
+    "leaderboardLogic": "lib/leaderboard.ts",
     "playersPage": "app/players/page.tsx",
     "playerGrid": "components/players/PlayerGrid.tsx",
     "playerCard": "components/players/PlayerCard.tsx",
@@ -42,7 +46,9 @@
     "createMatchPage": "app/matches/new/page.tsx",
     "mockMatchEntry": "components/matches/MockMatchEntryForm.tsx",
     "progressionLogic": "lib/progression.ts",
+    "playerPowerIcons": "lib/data/player-power-icons.ts",
     "matchRecordHelpers": "lib/match-records.ts",
+    "matchHistoryStore": "lib/match-history-store.ts",
     "teamBalancingCore": "lib/team-balancing-core.ts",
     "serverOnlyTeamBalancing": "server/team-balancing.ts",
     "serverMatchValidation": "server/match-validation.ts",
@@ -51,7 +57,10 @@
     "tests": [
       "tests/progression.test.ts",
       "tests/team-balancing.test.ts",
-      "tests/match-records.test.ts"
+      "tests/match-records.test.ts",
+      "tests/formula-room.test.ts",
+      "tests/leaderboard.test.ts",
+      "tests/dashboard.test.ts"
     ],
     "testConfig": "tsconfig.test.json",
     "serverOnlyTypeStub": "types/server-only.d.ts"
@@ -151,6 +160,22 @@
       "outOrNotOut": "public/ui/gully-rules/rule-out-or-not-out-umpires-mood-trimmed.png",
       "overWhenLightGone": "public/ui/gully-rules/rule-over-when-light-gone-trimmed.png",
       "fightNextBallBestFriends": "public/ui/gully-rules/rule-fight-next-ball-best-friends-trimmed.png"
+    },
+    "playerPowerIcons": {
+      "batting": "public/ui/player-batting-power.png",
+      "bowling": "public/ui/player-bowling-power.png",
+      "fielding": "public/ui/player-fielding-power.png",
+      "sharedConfig": "lib/data/player-power-icons.ts",
+      "publicUrls": {
+        "batting": "/ui/player-batting-power.png",
+        "bowling": "/ui/player-bowling-power.png",
+        "fielding": "/ui/player-fielding-power.png"
+      },
+      "usage": [
+        "Player Profile - Player Power",
+        "Player Profile - Player File",
+        "Stats / Formula Room - Player Power tab"
+      ]
     }
   },
   "dashboardState": {
@@ -187,6 +212,19 @@
         "Recent Matches",
         "Top Performers",
         "zero-progress note"
+      ]
+    },
+    "topPerformers": {
+      "component": "components/dashboard/TopPerformersPanel.tsx",
+      "currentDesign": "Legend Spotlight cards for Most Runs, Most Wickets, and Most Catches only.",
+      "dataSource": "Uses getLeaderboardEntries and getLeaderboardSummary from lib/leaderboard.ts; do not create separate dashboard calculations.",
+      "rules": [
+        "Show one active leader stat per category.",
+        "Use circular player portraits from player.cardImage for active leaders.",
+        "Use approved category artwork only as a subtle watermark or zero-state icon.",
+        "Tie state shows JOINT LEADERS with overlapping portraits and links to the relevant Hall of Legends tab.",
+        "Zero state shows RACE NOT STARTED.",
+        "Header link text is View Hall of Legends and points to /leaderboard."
       ]
     }
   },
@@ -349,9 +387,36 @@
       "Do not repeat the same text in multiple sections."
     ],
     "ratingIconAssets": {
-      "bladePower": "/ui/most-runs-bat.png",
-      "deliveryThreat": "/ui/most-wickets-wicket-smash.png",
-      "fieldReflex": "/ui/most-catches-gloves-ball.png"
+      "bladePower": "/ui/player-batting-power.png",
+      "deliveryThreat": "/ui/player-bowling-power.png",
+      "fieldReflex": "/ui/player-fielding-power.png",
+      "battingDna": "/ui/player-batting-power.png",
+      "bowlingArsenal": "/ui/player-bowling-power.png",
+      "fieldingInstinct": "/ui/player-fielding-power.png"
+    },
+    "iconRendering": {
+      "sharedConfig": "lib/data/player-power-icons.ts",
+      "componentPattern": "components/players/PlayerProfile.tsx uses one shared PlayerProfileIcon renderer for Player Power and Player File icons.",
+      "artworkScaleOnly": true,
+      "doNotChange": [
+        "outer circle size",
+        "card dimensions",
+        "row heights",
+        "heading placement",
+        "progress bars",
+        "text",
+        "spacing",
+        "borders",
+        "glow colours",
+        "page layout",
+        "icon source files"
+      ],
+      "finalArtworkScales": {
+        "batting": 1.9,
+        "bowling": 1.85,
+        "fielding": 1.85
+      },
+      "visualTarget": "Artwork should fill roughly 80-90% of the circular holder, matching Dashboard Monthly Beasts badges, using CSS transform inside overflow-hidden circles."
     }
   },
   "matchWorkflow": {
@@ -446,6 +511,97 @@
         "player moved between teams"
       ],
       "serverValidation": "app/api/matches/validate/route.ts recalculates totals via server/match-validation.ts before save/submit mock actions."
+    },
+    "localPersistence": {
+      "careerProgressStorageKey": "gully-legends-prague-career-v1",
+      "matchHistoryStorageKey": "gully-legends-prague-matches-v1",
+      "matchHistoryUpdatedEvent": "gully-legends-prague-match-history-updated",
+      "files": [
+        "lib/career-store.ts",
+        "lib/match-history-store.ts"
+      ],
+      "rule": "Finalised matches update local career stats and are saved to browser localStorage for Hall of Legends and dashboard summaries. This is not Supabase/database persistence."
+    },
+    "runsInputFormatting": {
+      "draftType": "runs fields in editable player records support number | empty string",
+      "rules": [
+        "When Did Bat changes from false to true, untouched Runs starts blank, not 0.",
+        "Typing 013 normalizes to numeric 13.",
+        "Typing 001 normalizes to numeric 1.",
+        "Clearing the field remains allowed while editing.",
+        "Empty Runs is treated as zero for calculations and saving.",
+        "Do not store raw input strings for Runs."
+      ]
+    },
+    "inningsAndResultRules": {
+      "inningsStopsWhen": [
+        "wicketsLost >= battingTeamPlayerIds.length",
+        "completedOvers >= scheduledOversPerInnings",
+        "during a chase, chasingRuns >= target"
+      ],
+      "resultRules": [
+        "First-batting team wins by first innings runs minus chasing innings runs.",
+        "Chasing team wins by wickets remaining, calculated as chasing team player count minus chasing wickets lost.",
+        "Equal totals mean a tie.",
+        "No Result is only for abandoned or cancelled matches."
+      ],
+      "previewLanguage": "Live result preview must not declare projected winners before enough innings state exists."
+    },
+    "finalisedScorecardView": {
+      "titleRules": {
+        "newUnsaved": "CREATE MATCH",
+        "savedDraft": "EDIT MATCH",
+        "inProgress": "LIVE MATCH ENTRY",
+        "finalisedOrAbandonedOrCancelled": "MATCH SCORECARD"
+      },
+      "rules": [
+        "Draft and In-Progress matches keep the full data-entry layout.",
+        "Finalised matches become readable scorecards.",
+        "Show XP Awarded after finalisation.",
+        "Hide editing controls after finalisation.",
+        "Show each innings-complete notice once.",
+        "Collapse detailed overs and player records after finalisation.",
+        "Use subtle team accent colours to distinguish teams.",
+        "Do not display development terms such as Mock Match Entry, Mock Match, Demo Match, Test Match Entry, or Sample Match."
+      ]
+    }
+  },
+  "leaderboardAndFormulaRoom": {
+    "distinction": {
+      "hallOfLegends": "Who is leading and where does everyone rank?",
+      "formulaRoom": "How are XP, Levels, ratings and cricket results calculated?"
+    },
+    "hallOfLegends": {
+      "route": "/leaderboard",
+      "visibleNavigationLabel": "HALL OF LEGENDS",
+      "pageHeading": "HALL OF LEGENDS",
+      "component": "components/leaderboard/CareerLeaderboard.tsx",
+      "logic": "lib/leaderboard.ts",
+      "queryParams": [
+        "period=all-time | current-month",
+        "category=runs | wickets | catches | xp | level"
+      ],
+      "dataRules": [
+        "Use finalised successful matches only for ranking statistics.",
+        "Current Month uses matchDate parsed into the user's local calendar month.",
+        "ISO YYYY-MM-DD and legacy DD/MM/YYYY match dates are supported.",
+        "Competition ranking preserves ties.",
+        "Podium excludes zero-value leaders for runs, wickets, catches, and XP.",
+        "Level 0 can show all players tied when no player has progressed."
+      ],
+      "doNotRename": [
+        "Do not rename the /leaderboard route.",
+        "Do not rename the app/leaderboard folder unless the user explicitly asks."
+      ]
+    },
+    "formulaRoom": {
+      "route": "/stats",
+      "rule": "Do not maintain separate display formulas and calculation formulas.",
+      "sourceOfTruth": [
+        "lib/progression.ts",
+        "lib/leaderboard.ts",
+        "shared constants and utilities used by real calculations"
+      ]
     }
   },
   "progressionSystem": {
@@ -510,18 +666,28 @@
     "files": [
       "tests/progression.test.ts",
       "tests/team-balancing.test.ts",
-      "tests/match-records.test.ts"
+      "tests/match-records.test.ts",
+      "tests/formula-room.test.ts",
+      "tests/leaderboard.test.ts",
+      "tests/dashboard.test.ts"
     ],
     "coverageThemes": [
       "XP edge cases",
       "expensive-over penalties",
       "level protection",
       "rating sample-size safety",
+      "shared Formula Room source-of-truth formulas",
+      "shared Player Power icon configuration",
       "team balancing availability and roster validity",
       "manual mutual exclusion helpers",
       "team total calculation",
       "invalid run sanitization",
-      "private weights not returned in client result shape"
+      "private weights not returned in client result shape",
+      "runs input leading-zero normalization",
+      "match result preview language",
+      "finalised match scorecard state",
+      "Hall of Legends current-month filtering and competition ranking",
+      "Dashboard Top Performers leader/tie/zero-state summaries"
     ],
     "generatedArtifact": ".test-build is generated by npm run test and should not be committed."
   },
@@ -532,7 +698,8 @@
       "npm.cmd run test",
       "npm.cmd run build"
     ],
-    "result": "All passed after the latest Create Match / team balancing update."
+    "result": "All passed after the latest Dashboard Top Performers, Hall of Legends, Formula Room, match workflow, and Player Profile icon updates.",
+    "testCount": "142/142 tests passed"
   },
   "agentGuidance": {
     "beforeVisualChanges": [

@@ -7,22 +7,29 @@ export type PlayerStats = {
   runs: number;
   wickets: number;
   catches: number;
+  runOuts: number;
+  hatTricks: number;
 };
 
 export type PlayerTag = "pace" | "spin" | "batting" | "fielding" | "all-rounder";
 
+export type PlayerPlayStyle = "batting" | "pace" | "spin" | "utility";
+
 export type PlayerProfile = {
   id: string;
+  slug: string;
   name: string;
   cardTitle: string;
   cardImage: string;
   role: string;
+  playStyles: PlayerPlayStyle[];
   battingProfile: string;
   bowlingProfile: string;
   fieldingProfile: string;
   heroSummary: string;
   specialMoveName: string;
   specialMoveDescription: string;
+  isActive?: boolean;
   funTrait: string;
   avatar: string;
   avatarDescription?: string;
