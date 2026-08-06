@@ -1,90 +1,138 @@
 # Gully Legends Prague
 
-Gaming-style cricket dashboard and match-entry website for the Gully Legends
-Prague group at CZU Gully Arena.
+Gaming/comic-style cricket website for the Gully Legends Prague group at
+CZU Gully Arena.
 
-## Current Status
+The app is built with real responsive Next.js components, typed local data, and
+local browser persistence. It is currently local-first: Supabase, production
+authentication, and hosted database storage are intentionally not connected yet.
 
-This is a local mock-data Next.js application using:
+## Tech Stack
 
 - Next.js App Router
 - TypeScript
-- Tailwind CSS
-- Real responsive React components
-- Approved dashboard and player-card image assets
-- Local typed player data
-- Local mock match-entry state
-- Server-only team balancing logic
-- Progression and rating utilities with tests
+- Tailwind CSS plus custom CSS in `app/globals.css`
+- Local TypeScript roster data
+- Browser `localStorage` for local match history and career progress
+- Browser IndexedDB for local Gallery photo blobs and metadata
+- Server routes for team balancing and match validation
+- Node test runner for project logic and source-level UI checks
 
-Supabase, persistent database writes, and production authentication are not
-connected yet.
+## Main Pages
 
-## Players
+- `/` - Dashboard with approved Prague hero image, next match, player browser,
+  Monthly Beasts preview, Gully Rules, recent match preview, and Top Performers.
+- `/players` - Full roster browser with search, play-style filtering, and
+  sorting.
+- `/players/[playerId]` - Comic-style player dossier with complete approved
+  player-card artwork, Player Power, Player File, stats, and special move.
+- `/matches` - Today fixtures, scheduled matches, and finalised match archive.
+- `/matches/new` - Create Match workflow.
+- `/matches/[matchId]` - Draft editor, live match-entry workflow, or finalised
+  scorecard depending on match status.
+- `/leaderboard` - Hall of Legends rankings.
+- `/monthly-beasts` - Monthly discipline awards based on batting XP, bowling XP,
+  and fielding XP.
+- `/stats` - Formula Room explaining the real XP, Level, Player Power, and
+  match-result calculations.
+- `/gallery` - Local-first Gully photo memory wall.
 
-The project currently includes 16 approved players:
+## Current Roster
 
-- Aninda - Rulebook Rambo
-- Arunabha - Turbo Technician
-- Atripan - Smiling Sniper
-- Biplab - Nerve Ninja
-- Dipanjan - Cutter Commander
-- Gaurav - Loopy Lightning
-- Madhab - Sweep Samurai
-- Rohit - Skidball Sheriff
-- Soman - Silent Sixer
-- Utpal - Tempo Tactician
-- Jogindar - Loopy Loyalist
-- Badhan - Quiet Quake
-- Debraj - Steady Sentinel
-- Dipayan - Chessboard Charger
-- Dheeraj - Leg-Break Jester
-- Saurav - Zen Sixsmith
+The canonical active roster has 21 players. Add players only through the shared
+roster in `lib/data/players.ts`; do not add separate player lists per page.
+
+| Player | Card Title | Role |
+| --- | --- | --- |
+| Aninda | Rulebook Rambo | Balanced All-Rounder |
+| Arunabha | Turbo Technician | Pace All-Rounder |
+| Atripan | Smiling Sniper | Spin All-Rounder |
+| Biplab | Nerve Ninja | Mystery-Spin All-Rounder |
+| Dipanjan | Cutter Commander | Seam All-Rounder |
+| Gaurav | Loopy Lightning | Spin All-Rounder |
+| Madhab | Sweep Samurai | Pace All-Rounder |
+| Rohit | Skidball Sheriff | Fast-Bowling All-Rounder |
+| Soman | Silent Sixer | Power All-Rounder |
+| Utpal | Tempo Tactician | Adaptive All-Rounder |
+| Jogindar | Loopy Loyalist | Spin All-Rounder |
+| Badhan | Quiet Quake | Spin All-Rounder |
+| Debraj | Steady Sentinel | Spin All-Rounder |
+| Dipayan | Chessboard Charger | Tactical All-Rounder |
+| Dheeraj | Leg-Break Jester | Leg-Spin All-Rounder |
+| Saurav | Zen Sixsmith | Batting All-Rounder |
+| Naim | Calm Cannon | Power All-Rounder |
+| Chaitanya | Steady Storm | Utility All-Rounder |
+| Amrit | Looper Legend | Support-Spin All-Rounder |
+| PritVi | Precision Pacer | Seam All-Rounder |
+| Suprateem | Style Striker | Batting All-Rounder |
 
 Every player starts with:
 
 - Level `0`
 - XP `0`
-- Blade Power / batting rating `0/100`
-- Delivery Threat / bowling rating `0/100`
-- Field Reflex / fielding rating `0/100`
-- All-time matches, runs, wickets, and catches at `0`
-
-Monthly awards show `Not decided yet` until finalised match data exists.
+- Batting, bowling, and fielding ratings at `0/100`
+- All-time matches, runs, wickets, catches, run-outs, stumpings, wins, and
+  Player of the Match awards at `0`
 
 ## Approved Visual Assets
 
-The dashboard uses the approved Prague background:
+The dashboard hero uses:
 
 ```text
 public/backgrounds/prague-gully-arena.png
 ```
 
-This image must be used directly. Do not regenerate, repaint, replace, blur
-heavily, or remove the baked-in signboards and wall text.
+Use this image directly. Do not regenerate, repaint, replace, blur heavily, or
+remove the signboards and wall text baked into the image.
 
-Player cards use approved 2:3 PNG artwork from:
-
-```text
-public/images/player-cards
-```
-
-The player-card title is already printed in each PNG. The app renders the
-complete artwork with `object-fit: contain` and keeps dynamic data such as
-name, role, level, ratings, and statistics as HTML.
-
-## Player Progression
-
-Progression logic lives in:
+The navbar brand uses:
 
 ```text
-lib/progression.ts
+public/branding/gully-legends-emblem-tight.png
 ```
 
-Match XP uses simple live-scorecard data only. It does not require balls faced,
-strike rate, dot balls, ball-by-ball bowling, or individual fielding chances.
+The emblem already includes the `No Rules. Only Fun!` tagline, so the app must
+not render a duplicate tagline beside it.
 
-XP rules:
+Player cards use approved 2:3 PNG artwork. The comic card title is already
+printed inside each PNG. The app renders the full image with `object-fit:
+contain` and renders only dynamic values such as player name, role, Level, XP,
+ratings, and statistics in HTML.
+
+## Match Workflow
+
+The match workflow is local-first but no longer a mock placeholder in the UI.
+It supports:
+
+- Scheduled draft fixtures
+- Available Today selection
+- Manual team selection with cross-team mutual exclusion
+- Server-side auto-balancing from available player IDs
+- Odd-player support through a single Shared Player
+- Draft saving without requiring complete scorecard data
+- Live match entry
+- Team Bowling over entry
+- Player Match Records under each team
+- Dismissal details for wickets that have actually occurred
+- Automatic innings stop rules
+- Final result calculation on finalisation
+- Read-only finalised scorecard view
+- Scheduled fixture deletion before play starts
+
+Result rules:
+
+- First-batting team wins by run margin.
+- Chasing team wins by wickets remaining.
+- Equal final totals mean a tie.
+- No Result is only for abandoned or cancelled matches.
+
+## XP, Levels, Ratings, and Awards
+
+The real calculation source is `lib/progression.ts`. Formula Room displays
+values from the same constants and utilities used by the app; it does not keep
+separate display-only formulas.
+
+Core XP rules include:
 
 - Played: `20 XP`
 - Team win: `5 XP`
@@ -92,77 +140,55 @@ XP rules:
 - Batting runs: `floor(runs / 2)`, capped at `30 XP`
 - Fifty: `15 XP`
 - Century: `25 XP`
-- A century also receives the fifty bonus
 - Dismissed duck: `-8 XP`
-- Wicket: `10 XP` each
-- Hat-trick: `25 XP` each, entered manually
+- Wicket: `10 XP`
+- Hat-trick: `25 XP`
 - Maiden over: `5 XP`
-- Expensive over penalties:
-  - 21-24 runs: `-5 XP`
-  - 25-29 runs: `-8 XP`
-  - 30+ runs: `-12 XP`
-  - total expensive-over penalty capped at `-20 XP`
-- Fielding:
-  - Catch: `6 XP`
-  - Run-out: `8 XP`
-  - Stumping: `8 XP`
-  - total fielding XP capped at `24 XP`
-- Match XP is clamped to a minimum of `-15 XP`
+- Expensive-over penalties, capped at `-20 XP`
+- Catch: `6 XP`
+- Run-out: `8 XP`
+- Stumping: `8 XP`
+- Fielding XP capped at `24 XP`
+- Match XP clamped to a minimum of `-15 XP`
 
-Level progression uses increasing XP requirements:
+Level progression uses:
 
 ```ts
 100 + 50 * currentLevel + 20 * currentLevel * currentLevel
 ```
 
-Once a player earns a level, penalties cannot reduce that achieved level.
+Once achieved, a player's Level cannot be reduced by later penalties.
 
-## Ratings
+Monthly Beasts are discipline awards:
 
-Player Power contains three rating categories:
+- Batting Beast: batting XP
+- Bowling Beast: bowling XP
+- Catching Beast: fielding XP
 
-- Blade Power
-- Delivery Threat
-- Field Reflex
+Hall of Legends is separate from Monthly Beasts. It ranks raw statistical and
+career leaders such as runs, bowler wickets, catches, XP, and Level.
 
-Ratings use sample-size protection:
+## Gallery
 
-- `0` finalised matches: `UNRATED`
-- `1-2` finalised matches: `SCOUTING`
-- `3-7` finalised matches: `PROVISIONAL`
-- `8+` finalised matches: `ESTABLISHED`
+The Gallery at `/gallery` is a local-first Gully memory wall for group photos,
+match days, celebrations, awards, Prague outings, and off-field moments.
 
-Numeric ratings are shown only after at least three finalised matches.
-
-## Create Match Workflow
-
-Create Match is a local mock workflow in:
+Normal viewers can browse photos. Admin controls are hidden unless local admin
+mode is active. For local development, open:
 
 ```text
-components/matches/MockMatchEntryForm.tsx
+http://localhost:3001/gallery?admin=1
 ```
 
-It supports:
+Gallery storage uses:
 
-- Available Today selection
-- Manual Team A and Team B selection
-- Mutual exclusion between teams
-- Server-side auto-balancing from available player IDs
-- Shuffle Again
-- Clear Teams
-- Player match records only for selected players
-- Automatic Team A and Team B totals from player runs
-- Server-side validation and total recalculation before mock save/submit
+- `lib/gallery.ts` for the typed `GalleryRepository` interface
+- `lib/gallery-repository.ts` for the local IndexedDB implementation
+- `lib/gallery-image.ts` for browser canvas image optimisation
 
-Private team-balancing weights live only in:
-
-```text
-server/team-balancing.ts
-```
-
-The client sends only available player IDs and receives only Team A and Team B
-player IDs. Hidden balancing data is not exposed in public player profiles,
-HTML, labels, tooltips, logs, or API responses.
+Local Gallery uploads are stored only in the browser/device where they are
+added. A future Supabase adapter can use a `gallery` storage bucket and
+`gallery_photos` metadata table without redesigning the UI.
 
 ## Local Development
 
@@ -184,7 +210,7 @@ Open:
 http://localhost:3001
 ```
 
-Use `npm.cmd` on Windows PowerShell because `npm.ps1` may be blocked by the
+Use `npm.cmd` in Windows PowerShell because `npm.ps1` may be blocked by the
 system execution policy.
 
 ## Verification
@@ -198,13 +224,31 @@ npm.cmd run test
 npm.cmd run build
 ```
 
-The test suite covers progression, expensive-over penalties, level protection,
-rating safety, team balancing, mutual exclusion, and automatic team totals.
+The current test suite covers progression, ratings, team balancing, match
+records, scorecard validation, Hall of Legends, Monthly Beasts, Formula Room,
+Dashboard behavior, and Gallery source/workflow checks.
+
+## Data and Persistence Status
+
+Current local persistence:
+
+- Career progress: browser `localStorage`
+- Match history: browser `localStorage`
+- Gallery photos: browser IndexedDB
+
+Not connected yet:
+
+- Supabase
+- Production authentication
+- Production photo storage
+- Shared multi-device database state
 
 ## Agent Handoff
 
-Detailed implementation metadata for future agents is stored in:
+Detailed project metadata for future agents is stored in:
 
 ```text
 AGENT_PROJECT_METADATA.json
 ```
+
+Future agents should read that file before making broad changes.
