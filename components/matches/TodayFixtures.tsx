@@ -19,8 +19,15 @@ function getFixtureStatus(match: MatchRecord): string {
   return match.status.toUpperCase();
 }
 
-export function TodayFixtures({ dateFilter }: { dateFilter?: string }) {
-  const { matches } = useMatchRepository();
+export function TodayFixtures({
+  dateFilter,
+  matches: suppliedMatches
+}: {
+  dateFilter?: string;
+  matches?: MatchRecord[];
+}) {
+  const localRepository = useMatchRepository();
+  const matches = suppliedMatches ?? localRepository.matches;
   const selectedDate =
     dateFilter ??
     new Date().toLocaleDateString("en-CA", {

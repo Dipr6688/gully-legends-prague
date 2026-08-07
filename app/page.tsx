@@ -5,18 +5,50 @@ import { PlayerBrowserSection } from "@/components/dashboard/PlayerBrowserSectio
 import { RecentMatchesPanel } from "@/components/dashboard/RecentMatchesPanel";
 import { TopPerformersPanel } from "@/components/dashboard/TopPerformersPanel";
 import { activePlayers } from "@/lib/data/players";
+import { isSupabaseDataSource } from "@/lib/data-source";
+import { loadPublicSupabaseReadData } from "@/lib/supabase/public-read-data";
 import Image from "next/image";
 
-export default function DashboardPage() {
+export const dynamic = "force-dynamic";
+export const revalidate = 30;
+
+function PublicReadError() {
+  return (
+    <section className="mx-auto max-w-4xl px-4 py-10 lg:px-6">
+      <div className="gaming-panel card-grit p-5">
+        <p className="text-xs font-black uppercase text-neon-cyan">Shared data unavailable</p>
+        <h1 className="font-display text-4xl uppercase comic-title">Try Again Soon</h1>
+        <p className="mt-3 text-stone-300">
+          We could not load the shared Supabase data right now. Please refresh the page.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+export default async function DashboardPage() {
+  const supabaseMode = isSupabaseDataSource();
+  const data = supabaseMode ? await loadPublicSupabaseReadData().catch(() => null) : null;
+
+  if (supabaseMode && !data) return <PublicReadError />;
+
+  const players = data?.careerPlayers ?? activePlayers;
+  const matches = data?.matches;
+  const crownedAwards = data?.crownedAwards;
+
   return (
     <>
-      <HeroSection />
+      <HeroSection players={players} matches={matches} />
       <section className="lower-dashboard-bg">
         <div className="relative mx-auto max-w-[1680px] px-4 py-7 lg:px-6">
           <div className="dashboard-layout">
             <aside className="dashboard-sidebar">
               <div className="dashboard-monthly">
-                <MonthlyBeastsPanel />
+                <MonthlyBeastsPanel
+                  players={players}
+                  matches={matches}
+                  crownedAwards={crownedAwards}
+                />
               </div>
               <div className="play-hard-wrapper">
                 <Image
@@ -40,7 +72,7 @@ export default function DashboardPage() {
 
             <main className="dashboard-main-content">
               <div className="dashboard-upper-row">
-                <PlayerBrowserSection players={activePlayers} />
+                <PlayerBrowserSection players={players} careerResolved={Boolean(data)} />
 
                 <aside className="dashboard-rules">
                   <GullyRulesCard />
@@ -49,10 +81,14 @@ export default function DashboardPage() {
 
               <div className="dashboard-lower-row">
                 <section className="dashboard-recent">
-                  <RecentMatchesPanel />
+                  <RecentMatchesPanel players={players} matches={matches} />
                 </section>
                 <section className="dashboard-top-performers">
-                  <TopPerformersPanel />
+                  <TopPerformersPanel
+                    players={players}
+                    matches={matches}
+                    careerResolved={Boolean(data)}
+                  />
                 </section>
               </div>
 

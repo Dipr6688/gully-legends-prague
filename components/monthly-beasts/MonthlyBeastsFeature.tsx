@@ -632,12 +632,24 @@ function CrownHistory({ crowns }: { crowns: CrownedMonthlyBeasts[] }) {
   );
 }
 
-export function MonthlyBeastsFeature({ isAdmin }: { isAdmin: boolean }) {
+export function MonthlyBeastsFeature({
+  isAdmin,
+  initialMatches,
+  initialCrownedAwards,
+  supabaseReadMode = false
+}: {
+  isAdmin: boolean;
+  initialMatches?: MatchRecord[];
+  initialCrownedAwards?: CrownedMonthlyBeasts[];
+  supabaseReadMode?: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { matches } = useMatchRepository();
-  const [crownedAwards, setCrownedAwards] = useCrownedAwards();
+  const localRepository = useMatchRepository();
+  const matches = initialMatches ?? localRepository.matches;
+  const [localCrownedAwards, setCrownedAwards] = useCrownedAwards();
+  const crownedAwards = initialCrownedAwards ?? localCrownedAwards;
   const selectedMonth = getSelectedMonth(searchParams.get("month"));
   const currentMonth = getCurrentMonthKey();
   const isSelectedCurrentMonth = selectedMonth === currentMonth;
@@ -659,7 +671,10 @@ export function MonthlyBeastsFeature({ isAdmin }: { isAdmin: boolean }) {
     (category) => summaries[category].status !== "race-not-started"
   );
   const crownDisabled =
-    finalisedMatchesForMonth.length === 0 || !hasAnyRace || Boolean(crownedAward);
+    finalisedMatchesForMonth.length === 0 ||
+    !hasAnyRace ||
+    Boolean(crownedAward) ||
+    supabaseReadMode;
   const hasPastPendingCrown =
     !isSelectedCurrentMonth && !crownedAward && finalisedMatchesForMonth.length > 0;
   const presentationState = crownedAward
@@ -677,6 +692,8 @@ export function MonthlyBeastsFeature({ isAdmin }: { isAdmin: boolean }) {
   }, []);
 
   function refreshAwards() {
+    if (supabaseReadMode) return;
+
     setCrownedAwards(loadCrownedMonthlyBeasts());
   }
 
@@ -689,7 +706,7 @@ export function MonthlyBeastsFeature({ isAdmin }: { isAdmin: boolean }) {
   }
 
   function openCrownDialog() {
-    if (crownDisabled || !isAdmin) return;
+    if (crownDisabled || !isAdmin || supabaseReadMode) return;
 
     setPendingSnapshot(
       createCrownedMonthlyBeasts({
@@ -701,7 +718,7 @@ export function MonthlyBeastsFeature({ isAdmin }: { isAdmin: boolean }) {
   }
 
   function confirmCrown() {
-    if (!pendingSnapshot) return;
+    if (!pendingSnapshot || supabaseReadMode) return;
 
     monthlyBeastCrownRepository.crownMonth({
       monthKey: selectedMonth,
@@ -713,7 +730,7 @@ export function MonthlyBeastsFeature({ isAdmin }: { isAdmin: boolean }) {
   }
 
   function confirmReopen() {
-    if (!reopenMonthKey) return;
+    if (!reopenMonthKey || supabaseReadMode) return;
 
     monthlyBeastCrownRepository.reopenMonth(reopenMonthKey, "local-admin");
     refreshAwards();
@@ -750,6 +767,12 @@ export function MonthlyBeastsFeature({ isAdmin }: { isAdmin: boolean }) {
         </p>
         {hasPastPendingCrown ? (
           <p className="monthly-beasts-pending-copy">Final results are ready.</p>
+        ) : null}
+        {isAdmin && supabaseReadMode ? (
+          <p className="monthly-beasts-pending-copy">
+            Supabase read cutover is active. Crown writes remain local-only until
+            the write phase is implemented.
+          </p>
         ) : null}
         {crownedAward ? (
           <p>

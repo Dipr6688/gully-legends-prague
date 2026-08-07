@@ -1233,7 +1233,7 @@ test("Next Match ticket removes close control and uses shared repository data", 
   const css = cssSource();
 
   assert.match(hero, /useDashboardSummary\(activePlayers\)/);
-  assert.match(hero, /<NextMatchTicket matches=\{matches/);
+  assert.match(hero, /<NextMatchTicket matches=\{resolvedMatches/);
   assert.match(ticket, /getNextMatchState\(matches\)/);
   assert.match(ticket, /NO MATCH SCHEDULED/);
   assert.match(ticket, /LINE-UP PENDING/);
@@ -1264,8 +1264,9 @@ test("Matches page keeps scheduled fixtures separate from archive", () => {
   const page = matchesPageSource();
   const fixtures = todayFixturesSource();
 
-  assert.match(page, /<TodayFixtures dateFilter=\{params\?\.date\}/);
-  assert.match(page, /<MatchArchive \/>/);
+  assert.match(page, /loadPublicSupabaseReadData/);
+  assert.match(page, /<TodayFixtures dateFilter=\{params\?\.date\} matches=\{matches\}/);
+  assert.match(page, /<MatchArchive finalisedMatches=\{finalisedMatches\}/);
   assert.match(fixtures, /Today&apos;s Fixtures/);
   assert.match(fixtures, /getDraftMatchSetupState/);
   assert.match(fixtures, /getSameDayFixtures/);
@@ -1542,7 +1543,8 @@ test("Matches archive uses repository data and removes stale development copy", 
   const page = matchesPageSource();
   const archive = matchArchiveSource();
 
-  assert.match(page, /<MatchArchive \/>/);
+  assert.match(page, /loadPublicSupabaseReadData/);
+  assert.match(page, /<MatchArchive finalisedMatches=\{finalisedMatches\}/);
   assert.match(archive, /useMatchRepository/);
   assert.match(archive, /finalisedMatches\.length === 0/);
   assert.match(archive, /NO MATCHES IN THE ARCHIVE/);
@@ -1792,7 +1794,8 @@ test("Match scorecard route reads the saved match by route id", () => {
   const route = readFileSync("app/matches/[matchId]/page.tsx", "utf8");
 
   assert.match(route, /params: Promise<\{ matchId: string \}>/);
-  assert.match(route, /<MatchScorecard matchId=\{matchId\} \/>/);
+  assert.match(route, /loadPublicSupabaseReadData/);
+  assert.match(route, /initialMatch=\{supabaseMode \? match : undefined\}/);
   assert.match(scorecard, /candidate\.id === matchId/);
   assert.match(scorecard, /Back to Matches/);
   assert.match(scorecard, /getMatchResultHeadline\(match\)/);
@@ -2268,7 +2271,7 @@ test("Player browser UI replaces All-Rounders with accessible controls", () => {
   const source = playerBrowserSource();
   const css = cssSource();
 
-  assert.match(dashboardPage, /<PlayerBrowserSection players=\{activePlayers\} \/>/);
+  assert.match(dashboardPage, /<PlayerBrowserSection players=\{players\} careerResolved=\{Boolean\(data\)\}/);
   assert.doesNotMatch(dashboardPage + source, /All-Rounders/i);
   assert.match(source, /aria-pressed=\{options\.style === "all"\}/);
   assert.match(source, /aria-haspopup="menu"/);
@@ -2305,7 +2308,8 @@ test("Dashboard panels use shared persisted match summary source", () => {
   assert.match(recent, /summary\.recentFinalisedMatches/);
   assert.match(recent, /recentMatches\.length > 0/);
   assert.match(recent, /getMatchResultHeadline/);
-  assert.match(topPerformers, /const \{ matches \} = useDashboardSummary\(activePlayers\)/);
+  assert.match(topPerformers, /const localDashboard = useDashboardSummary\(activePlayers\)/);
+  assert.match(topPerformers, /const matches = suppliedMatches \?\? localDashboard\.matches/);
   assert.match(topPerformers, /matches,/);
   assert.doesNotMatch(topPerformers, /matches:\s*\[\]/);
 });
@@ -2315,10 +2319,12 @@ test("Dashboard and Players page render from the same active player roster", () 
   const playersPage = readFileSync("app/players/page.tsx", "utf8");
   const playerRoute = readFileSync("app/players/[playerId]/page.tsx", "utf8");
 
-  assert.match(dashboardPage, /<PlayerBrowserSection players=\{activePlayers\} \/>/);
+  assert.match(dashboardPage, /loadPublicSupabaseReadData/);
+  assert.match(dashboardPage, /<PlayerBrowserSection players=\{players\} careerResolved=\{Boolean\(data\)\}/);
   assert.doesNotMatch(dashboardPage, /activePlayers\.length\} Warriors|All-Rounders/);
-  assert.match(playersPage, /activePlayers\.length\} WARRIORS/);
-  assert.match(playersPage, /<CareerPlayerGrid players=\{activePlayers\} \/>/);
+  assert.match(playersPage, /loadPublicSupabaseReadData/);
+  assert.match(playersPage, /\{players\.length\} WARRIORS/);
+  assert.match(playersPage, /<CareerPlayerGrid players=\{players\} careerResolved=\{Boolean\(data\)\}/);
   assert.match(playerRoute, /activePlayers\.map\(\(player\) =>/);
   assert.match(playerRoute, /playerId: player\.slug/);
   assert.match(playerRoute, /getPlayerBySlug\(playerSlug\)/);

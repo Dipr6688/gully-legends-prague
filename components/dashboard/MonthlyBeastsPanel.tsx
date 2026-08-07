@@ -17,6 +17,8 @@ import {
   loadCrownedMonthlyBeasts,
   MONTHLY_BEASTS_UPDATED_EVENT
 } from "@/lib/monthly-beasts-store";
+import type { MatchRecord } from "@/lib/types/match";
+import type { Player } from "@/lib/types/player";
 
 const awards = [
   {
@@ -36,22 +38,32 @@ const awards = [
   }
 ] as const;
 
-export function MonthlyBeastsPanel() {
-  const { matches } = useMatchRepository();
+export function MonthlyBeastsPanel({
+  players = activePlayers,
+  matches: suppliedMatches,
+  crownedAwards: suppliedCrownedAwards
+}: {
+  players?: Player[];
+  matches?: MatchRecord[];
+  crownedAwards?: CrownedMonthlyBeasts[];
+}) {
+  const localRepository = useMatchRepository();
+  const matches = suppliedMatches ?? localRepository.matches;
   const [crownedAwards, setCrownedAwards] = useState<CrownedMonthlyBeasts[]>([]);
+  const resolvedCrownedAwards = suppliedCrownedAwards ?? crownedAwards;
   const playerNames = useMemo(
-    () => Object.fromEntries(activePlayers.map((player) => [player.id, player.name])),
-    []
+    () => Object.fromEntries(players.map((player) => [player.id, player.name])),
+    [players]
   );
   const previews = useMemo(
     () =>
       getMonthlyBeastDashboardPreview({
         matches,
-        crownedAwards,
+        crownedAwards: resolvedCrownedAwards,
         monthKey: getCurrentMonthKey(),
         playerNames
       }),
-    [crownedAwards, matches, playerNames]
+    [resolvedCrownedAwards, matches, playerNames]
   );
   const previewByCategory = useMemo(
     () => new Map(previews.map((preview) => [preview.category, preview])),
@@ -59,6 +71,8 @@ export function MonthlyBeastsPanel() {
   );
 
   useEffect(() => {
+    if (suppliedCrownedAwards) return;
+
     function refreshMonthlyBeasts() {
       setCrownedAwards(loadCrownedMonthlyBeasts());
     }
@@ -71,7 +85,7 @@ export function MonthlyBeastsPanel() {
       window.removeEventListener("storage", refreshMonthlyBeasts);
       window.removeEventListener(MONTHLY_BEASTS_UPDATED_EVENT, refreshMonthlyBeasts);
     };
-  }, []);
+  }, [suppliedCrownedAwards]);
 
   return (
     <Card className="border-neon-violet/35 p-4">

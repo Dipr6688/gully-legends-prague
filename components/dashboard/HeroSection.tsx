@@ -5,9 +5,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { activePlayers } from "@/lib/data/players";
 import type { DashboardSummary } from "@/lib/dashboard-summary";
+import { getDashboardSummary } from "@/lib/dashboard-summary";
 import { useDashboardSummary } from "@/components/dashboard/useDashboardSummary";
 import { NextMatchTicket } from "@/components/dashboard/NextMatchTicket";
 import type { MatchRecord } from "@/lib/types/match";
+import type { Player } from "@/lib/types/player";
 
 function HeroStat({
   label,
@@ -71,19 +73,36 @@ function ActionStats({ summary }: { summary: DashboardSummary }) {
   );
 }
 
-function HeroControls() {
-  const { matches, summary } = useDashboardSummary(activePlayers);
+function HeroControls({
+  players,
+  matches
+}: {
+  players?: Player[];
+  matches?: MatchRecord[];
+}) {
+  const localDashboard = useDashboardSummary(activePlayers);
+  const resolvedPlayers = players ?? activePlayers;
+  const resolvedMatches = matches ?? localDashboard.matches;
+  const summary = matches
+    ? getDashboardSummary({ matches: resolvedMatches, players: resolvedPlayers })
+    : localDashboard.summary;
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(250px,300px)_minmax(230px,270px)_minmax(0,1fr)] lg:items-end">
       <div className="hidden lg:block" />
-      <NextMatchTicket matches={matches as MatchRecord[]} />
+      <NextMatchTicket matches={resolvedMatches as MatchRecord[]} />
       <ActionStats summary={summary} />
     </div>
   );
 }
 
-export function HeroSection() {
+export function HeroSection({
+  players,
+  matches
+}: {
+  players?: Player[];
+  matches?: MatchRecord[];
+}) {
   return (
     <section
       className="relative w-full border-b border-white/10 bg-pitch-950"
@@ -105,13 +124,13 @@ export function HeroSection() {
 
         <div className="absolute inset-0 hidden lg:block">
           <div className="absolute inset-x-0 bottom-[clamp(20px,4vw,64px)] mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-8">
-            <HeroControls />
+            <HeroControls players={players} matches={matches} />
           </div>
         </div>
       </div>
 
       <div className="relative z-10 grid gap-4 bg-[#05080d] px-4 py-4 sm:px-6 lg:hidden">
-        <HeroControls />
+        <HeroControls players={players} matches={matches} />
       </div>
     </section>
   );

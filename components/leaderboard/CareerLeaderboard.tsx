@@ -25,6 +25,8 @@ import {
 import { formatPercentage } from "@/lib/progression";
 import { useMatchRepository } from "@/components/matches/useMatchRepository";
 import { useCareerPlayers } from "@/components/players/useCareerPlayers";
+import type { MatchRecord } from "@/lib/types/match";
+import type { Player } from "@/lib/types/player";
 
 const categories = Object.keys(LEADERBOARD_CATEGORIES) as LeaderboardCategory[];
 const periods = [
@@ -556,12 +558,23 @@ function LeaderboardRankList({
   );
 }
 
-export function CareerLeaderboard() {
+export function CareerLeaderboard({
+  players,
+  matches: suppliedMatches,
+  careerResolved = false
+}: {
+  players?: Player[];
+  matches?: MatchRecord[];
+  careerResolved?: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const careerPlayers = useCareerPlayers(activePlayers);
-  const { matches } = useMatchRepository();
+  const suppliedPlayers = players ?? activePlayers;
+  const localCareerPlayers = useCareerPlayers(suppliedPlayers);
+  const careerPlayers = careerResolved ? suppliedPlayers : localCareerPlayers;
+  const localRepository = useMatchRepository();
+  const matches = suppliedMatches ?? localRepository.matches;
   const periodParam = searchParams.get("period");
   const categoryParam = searchParams.get("category");
   const period = isLeaderboardPeriod(periodParam) ? periodParam : "all-time";

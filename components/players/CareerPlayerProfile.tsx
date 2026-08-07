@@ -6,12 +6,15 @@ import type { Player } from "@/lib/types/player";
 
 export function CareerPlayerProfile({
   player,
-  players
+  players,
+  careerResolved = false
 }: {
   player: Player;
   players: Player[];
+  careerResolved?: boolean;
 }) {
-  const careerPlayers = useCareerPlayers(players);
+  const localCareerPlayers = useCareerPlayers(players);
+  const careerPlayers = careerResolved ? players : localCareerPlayers;
   const careerPlayer =
     careerPlayers.find((candidate) => candidate.id === player.id) ?? player;
 

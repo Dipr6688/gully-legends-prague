@@ -16,6 +16,8 @@ import {
   type PlayerLeaderboardEntry
 } from "@/lib/leaderboard";
 import { useCareerPlayers } from "@/components/players/useCareerPlayers";
+import type { MatchRecord } from "@/lib/types/match";
+import type { Player } from "@/lib/types/player";
 
 type TopPerformerCategory = Extract<
   LeaderboardCategory,
@@ -168,9 +170,20 @@ function TopPerformerCard({
   );
 }
 
-export function TopPerformersPanel() {
-  const careerPlayers = useCareerPlayers(activePlayers);
-  const { matches } = useDashboardSummary(activePlayers);
+export function TopPerformersPanel({
+  players,
+  matches: suppliedMatches,
+  careerResolved = false
+}: {
+  players?: Player[];
+  matches?: MatchRecord[];
+  careerResolved?: boolean;
+}) {
+  const suppliedPlayers = players ?? activePlayers;
+  const localCareerPlayers = useCareerPlayers(suppliedPlayers);
+  const careerPlayers = careerResolved ? suppliedPlayers : localCareerPlayers;
+  const localDashboard = useDashboardSummary(activePlayers);
+  const matches = suppliedMatches ?? localDashboard.matches;
   const performers = topPerformerCategories.map((category) => {
     const entries = getLeaderboardEntries({
       players: careerPlayers,

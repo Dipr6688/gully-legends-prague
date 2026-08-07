@@ -18,11 +18,24 @@ import {
   getOrderedInnings,
   type ScorecardInnings
 } from "@/lib/match-scorecard";
+import type { MatchRecord } from "@/lib/types/match";
+import type { Player } from "@/lib/types/player";
 
-export function MatchScorecard({ matchId }: { matchId: string }) {
-  const { matches } = useMatchRepository();
+export function MatchScorecard({
+  matchId,
+  initialMatch,
+  players
+}: {
+  matchId: string;
+  initialMatch?: MatchRecord | null;
+  players?: Player[];
+}) {
+  const localRepository = useMatchRepository();
   const searchParams = useSearchParams();
-  const match = matches.find((candidate) => candidate.id === matchId) ?? null;
+  const match =
+    initialMatch ?? localRepository.matches.find((candidate) => candidate.id === matchId) ?? null;
+  const playerById = (playerId: string) =>
+    players?.find((player) => player.id === playerId) ?? getPlayerById(playerId);
 
   if (!match) {
     return (
@@ -44,12 +57,11 @@ export function MatchScorecard({ matchId }: { matchId: string }) {
     );
   }
 
-  const resolvePlayerName = (playerId: string) =>
-    getPlayerById(playerId)?.name ?? playerId;
+  const resolvePlayerName = (playerId: string) => playerById(playerId)?.name ?? playerId;
   const scorecardInnings = [firstInnings, secondInnings].map((innings) =>
     buildScorecardInnings(match, innings, resolvePlayerName)
   );
-  const playerOfMatch = buildPlayerOfMatchSummary(match, getPlayerById);
+  const playerOfMatch = buildPlayerOfMatchSummary(match, playerById);
   const returnTo = searchParams.get("returnTo");
   const backToMatchesHref =
     returnTo && returnTo.startsWith("/matches") && !returnTo.startsWith("//")

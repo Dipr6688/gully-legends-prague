@@ -5,12 +5,14 @@ import { Card } from "@/components/ui/Card";
 import { LinkButton } from "@/components/ui/Button";
 import { useDashboardSummary } from "@/components/dashboard/useDashboardSummary";
 import { activePlayers } from "@/lib/data/players";
+import { getDashboardSummary } from "@/lib/dashboard-summary";
 import {
   formatMatchDisplayDate,
   getMatchResultHeadline,
   getMatchTeamScore
 } from "@/lib/match-display";
 import type { MatchRecord } from "@/lib/types/match";
+import type { Player } from "@/lib/types/player";
 
 function RecentMatchRow({ match }: { match: MatchRecord }) {
   return (
@@ -45,8 +47,17 @@ function RecentMatchRow({ match }: { match: MatchRecord }) {
   );
 }
 
-export function RecentMatchesPanel() {
-  const { summary } = useDashboardSummary(activePlayers);
+export function RecentMatchesPanel({
+  players,
+  matches
+}: {
+  players?: Player[];
+  matches?: MatchRecord[];
+}) {
+  const localDashboard = useDashboardSummary(activePlayers);
+  const summary = matches
+    ? getDashboardSummary({ matches, players: players ?? activePlayers })
+    : localDashboard.summary;
   const recentMatches = summary.recentFinalisedMatches;
 
   return (

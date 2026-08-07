@@ -34,8 +34,15 @@ const sortOptions = [
   "fieldReflex"
 ] as const satisfies PlayerBrowserSort[];
 
-export function PlayerBrowserSection({ players }: { players: Player[] }) {
-  const careerPlayers = useCareerPlayers(players);
+export function PlayerBrowserSection({
+  players,
+  careerResolved = false
+}: {
+  players: Player[];
+  careerResolved?: boolean;
+}) {
+  const localCareerPlayers = useCareerPlayers(players);
+  const careerPlayers = careerResolved ? players : localCareerPlayers;
   const [options, setOptions] = useState<PlayerBrowserOptions>(
     DEFAULT_PLAYER_BROWSER_OPTIONS
   );

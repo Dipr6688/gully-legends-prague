@@ -906,3 +906,59 @@ test("Supabase diagnostics reuse Monthly Beast and Hall engines in memory", () =
   assert.equal(result.monthlyBeast.summaries.length, 3);
   assert.equal(result.hallOfLegends.summaries.length, 5);
 });
+
+test("Phase 2C2 public read pages use Supabase loaders without requiring auth", () => {
+  const publicPages = [
+    source("app/page.tsx"),
+    source("app/players/page.tsx"),
+    source("app/players/[playerId]/page.tsx"),
+    source("app/matches/page.tsx"),
+    source("app/matches/[matchId]/page.tsx"),
+    source("app/leaderboard/page.tsx"),
+    source("app/monthly-beasts/page.tsx")
+  ];
+  const combinedPages = publicPages.join("\n");
+
+  assert.match(combinedPages, /isSupabaseDataSource/);
+  assert.match(combinedPages, /loadPublicSupabaseReadData/);
+  assert.match(combinedPages, /Try Again Soon/);
+  assert.doesNotMatch(combinedPages, /requireAdmin/);
+  assert.match(source("app/monthly-beasts/page.tsx"), /isCurrentUserAdmin/);
+  assert.match(source("app/loading.tsx"), /Warming Up The Scoreboard/);
+});
+
+test("Phase 2C2 Supabase public loader maps shared data and validates payloads", () => {
+  const loader = source("lib/supabase/public-read-data.ts");
+  const dataSource = source("lib/data-source.ts");
+
+  assert.match(dataSource, /NEXT_PUBLIC_DATA_SOURCE/);
+  assert.match(dataSource, /"local" \? "local" : "supabase"/);
+  assert.match(loader, /SupabasePlayerRepository/);
+  assert.match(loader, /SupabaseMatchRepository/);
+  assert.match(loader, /SupabaseCareerStatsRepository/);
+  assert.match(loader, /SupabaseMonthlyBeastCrownRepository/);
+  assert.match(loader, /validateSupabaseMatchPayload/);
+  assert.match(loader, /mergePlayersWithCareerState/);
+  assert.match(loader, /match_sequence/);
+
+  for (const text of [loader, dataSource]) {
+    assert.doesNotMatch(text, /\.insert\(/);
+    assert.doesNotMatch(text, /\.update\(/);
+    assert.doesNotMatch(text, /\.delete\(/);
+    assert.doesNotMatch(text, /\.upsert\(/);
+  }
+});
+
+test("Phase 2C2 keeps Gallery and admin write paths local-only", () => {
+  const gallery = source("components/gallery/GalleryFeature.tsx");
+  const matchForm = source("components/matches/MockMatchEntryForm.tsx");
+  const monthlyFeature = source("components/monthly-beasts/MonthlyBeastsFeature.tsx");
+
+  assert.match(gallery, /LocalGalleryRepository|useMatchRepository/);
+  assert.doesNotMatch(gallery, /SupabaseGalleryPhotoRepository|loadPublicSupabaseReadData/);
+  assert.match(matchForm, /localMatchRepository\.saveMatch/);
+  assert.match(matchForm, /applyFinalisedMatchToLocalCareerStats/);
+  assert.match(monthlyFeature, /monthlyBeastCrownRepository\.crownMonth/);
+  assert.match(monthlyFeature, /supabaseReadMode/);
+  assert.match(monthlyFeature, /write phase is implemented/);
+});

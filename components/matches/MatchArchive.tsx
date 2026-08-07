@@ -317,8 +317,13 @@ function ArchivePagination({
   );
 }
 
-export function MatchArchive() {
-  const { finalisedMatches } = useMatchRepository();
+export function MatchArchive({
+  finalisedMatches: suppliedFinalisedMatches
+}: {
+  finalisedMatches?: MatchRecord[];
+}) {
+  const localRepository = useMatchRepository();
+  const finalisedMatches = suppliedFinalisedMatches ?? localRepository.finalisedMatches;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
