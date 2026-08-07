@@ -7,6 +7,13 @@ import {
   IMPORT_DEMO_CONFIRMATION_PHRASE
 } from "../lib/admin/local-demo-import";
 import {
+  validateCareerStatsRows,
+  validateProgressionLedgerRows,
+  validateSupabaseMatchPayload,
+  validateSupabasePlayers,
+  verifySupabaseDataSnapshot
+} from "../lib/admin/supabase-data-check";
+import {
   CAREER_PROGRESS_STORAGE_KEY,
   type AppliedPlayerMatchProgression,
   type CareerProgressionState,
@@ -21,6 +28,12 @@ import type {
   MatchRecord,
   PlayerMatchXPBreakdown
 } from "../lib/types/match";
+import type {
+  SupabaseCareerStatsRow,
+  SupabaseMatchRow,
+  SupabaseMatchStatApplicationRow,
+  SupabasePlayerRow
+} from "../lib/supabase/read-repositories";
 
 function source(path: string) {
   return readFileSync(path, "utf8");
@@ -671,4 +684,225 @@ test("local demo importer rejects malformed local records before writing", () =>
   assert.equal(plan.payload, null);
   assert.match(plan.errors.join("\n"), /unknown player ghost-player/);
   assert.deepEqual(storage.writes, []);
+});
+
+function playerRow(playerId: string): SupabasePlayerRow {
+  const player = activePlayers.find((candidate) => candidate.id === playerId) ?? activePlayers[0];
+
+  return {
+    id: player.id,
+    slug: player.slug,
+    display_name: player.name,
+    card_title: player.cardTitle,
+    role: player.role,
+    card_image: player.cardImage,
+    play_styles: [...player.playStyles],
+    tags: [...player.tags],
+    profile_payload: {
+      battingProfile: player.battingProfile,
+      bowlingProfile: player.bowlingProfile,
+      fieldingProfile: player.fieldingProfile,
+      heroSummary: player.heroSummary,
+      specialMoveName: player.specialMoveName,
+      specialMoveDescription: player.specialMoveDescription,
+      funTrait: player.funTrait,
+      avatar: player.avatar
+    },
+    accent: player.accent,
+    accent_color: player.accentColor,
+    is_active: true
+  };
+}
+
+function matchRow(match: MatchRecord, overrides: Partial<SupabaseMatchRow> = {}): SupabaseMatchRow {
+  return {
+    id: match.id,
+    match_date: match.matchDate,
+    start_time: match.startTime ?? null,
+    match_sequence: null,
+    name: match.matchName,
+    venue: match.venue,
+    status: match.status,
+    is_demo: true,
+    payload: match,
+    finalised_at: match.progressionAppliedAt ?? null,
+    stats_applied_at: match.progressionAppliedAt ?? null,
+    deleted_at: match.deletedAt ?? null,
+    ...overrides
+  };
+}
+
+function careerRow(playerId: string, overrides: Partial<SupabaseCareerStatsRow> = {}): SupabaseCareerStatsRow {
+  return {
+    player_id: playerId,
+    matches: 0,
+    innings_batted: 0,
+    runs: 0,
+    fifties: 0,
+    centuries: 0,
+    dismissed_ducks: 0,
+    wickets: 0,
+    catches: 0,
+    run_outs: 0,
+    stumpings: 0,
+    hat_tricks: 0,
+    three_wicket_hauls: 0,
+    matches_bowled: 0,
+    completed_overs: 0,
+    total_runs_conceded: 0,
+    total_xp: 0,
+    level: 0,
+    stats_payload: {},
+    ...overrides
+  };
+}
+
+function progressionRow({
+  matchId,
+  playerId,
+  idempotencyKey = `${matchId}:${playerId}`
+}: {
+  matchId: string;
+  playerId: string;
+  idempotencyKey?: string;
+}): SupabaseMatchStatApplicationRow {
+  return {
+    match_id: matchId,
+    player_id: playerId,
+    idempotency_key: idempotencyKey,
+    xp_breakdown: xpBreakdown(20),
+    applied_at: "2026-08-05T12:00:00.000Z",
+    finalisation_version: 1
+  };
+}
+
+test("Supabase data check route is admin-only and diagnostics are read-only", () => {
+  const page = source("app/admin/supabase-data-check/page.tsx");
+  const repositories = source("lib/supabase/read-repositories.ts");
+  const verifier = source("lib/admin/supabase-data-check.ts");
+
+  assert.match(page, /await requireAdmin\(\)/);
+  assert.match(page, /Supabase Data Check/);
+  assert.match(page, /SELECT-only reads/);
+  assert.match(repositories, /class SupabasePlayerRepository/);
+  assert.match(repositories, /class SupabaseMatchRepository/);
+  assert.match(repositories, /class SupabaseCareerStatsRepository/);
+  assert.match(repositories, /class SupabaseMonthlyBeastCrownRepository/);
+  assert.match(repositories, /runPublicRlsReadChecks/);
+  assert.match(verifier, /getMonthlyBeastSummary/);
+  assert.match(verifier, /getLeaderboardEntries/);
+  assert.match(verifier, /getLeaderboardSummary/);
+
+  for (const text of [page, repositories, verifier]) {
+    assert.doesNotMatch(text, /\.insert\(/);
+    assert.doesNotMatch(text, /\.update\(/);
+    assert.doesNotMatch(text, /\.delete\(/);
+    assert.doesNotMatch(text, /\.upsert\(/);
+    assert.doesNotMatch(text, /SERVICE_ROLE|SUPABASE_SERVICE_ROLE_KEY/i);
+  }
+});
+
+test("Supabase player and MatchRecord diagnostics parse canonical read responses", () => {
+  const players = activePlayers.map((player) => playerRow(player.id));
+  const match = demoMatch(1);
+  const row = matchRow(match, { match_sequence: null });
+  const playerValidation = validateSupabasePlayers(players);
+  const matchValidation = validateSupabaseMatchPayload(row);
+
+  assert.equal(players.length, 21);
+  assert.deepEqual(playerValidation.issues, []);
+  assert.equal(playerValidation.ok, true);
+  assert.deepEqual(matchValidation.issues, []);
+  assert.equal(matchValidation.match?.id, match.id);
+});
+
+test("Supabase MatchRecord validation rejects malformed payloads and checks demo flag", () => {
+  const match = demoMatch(1);
+  const malformed = validateSupabaseMatchPayload(matchRow(match, {
+    payload: {
+      id: match.id,
+      status: "finalised"
+    }
+  }));
+  const result = verifySupabaseDataSnapshot({
+    snapshot: {
+      players: activePlayers.map((player) => playerRow(player.id)),
+      matches: [matchRow(match, { is_demo: false })],
+      careerStats: activePlayers.map((player) => careerRow(player.id)),
+      matchStatApplications: [],
+      monthlyBeastCrowns: [],
+      galleryPhotos: []
+    }
+  });
+
+  assert.match(malformed.issues.join("\n"), /payload is not a valid MatchRecord/);
+  assert.equal(result.demoFlags.ok, false);
+  assert.match(result.demoFlags.issues.join("\n"), /is_demo = true/);
+});
+
+test("Supabase career and progression diagnostics catch bad references and duplicates", () => {
+  const careerValidation = validateCareerStatsRows([
+    careerRow(activePlayers[0].id),
+    careerRow("ghost-player")
+  ]);
+  const progressionValidation = validateProgressionLedgerRows({
+    rows: [
+      progressionRow({
+        matchId: "demo-match-1",
+        playerId: activePlayers[0].id,
+        idempotencyKey: "duplicate-key"
+      }),
+      progressionRow({
+        matchId: "demo-match-1",
+        playerId: activePlayers[0].id,
+        idempotencyKey: "duplicate-key"
+      }),
+      progressionRow({
+        matchId: "missing-match",
+        playerId: "ghost-player"
+      })
+    ],
+    matchIds: new Set(["demo-match-1"]),
+    playerIds: new Set(activePlayers.map((player) => player.id))
+  });
+
+  assert.equal(careerValidation.ok, false);
+  assert.match(careerValidation.issues.join("\n"), /unknown player ghost-player/);
+  assert.equal(progressionValidation.ok, false);
+  assert.equal(progressionValidation.orphaned, 1);
+  assert.equal(progressionValidation.duplicateIdempotencyKeys, 1);
+  assert.equal(progressionValidation.duplicateLogicalApplications, 1);
+});
+
+test("Supabase diagnostics reuse Monthly Beast and Hall engines in memory", () => {
+  const matches = Array.from({ length: 6 }, (_, index) => demoMatch(index + 1));
+  const snapshot = {
+    players: activePlayers.map((player) => playerRow(player.id)),
+    matches: matches.map((match) => matchRow(match)),
+    careerStats: activePlayers.map((player, index) =>
+      careerRow(player.id, {
+        matches: index < 2 ? 6 : 0,
+        runs: index === 0 ? 141 : 0,
+        wickets: index === 0 ? 6 : 0,
+        catches: index === 1 ? 6 : 0,
+        total_xp: index === 0 ? 201 : 0,
+        level: index === 0 ? 1 : 0
+      })
+    ),
+    matchStatApplications: Array.from({ length: 52 }, (_, index) =>
+      progressionRow({
+        matchId: matches[Math.floor(index / activePlayers.length)].id,
+        playerId: activePlayers[index % activePlayers.length].id
+      })
+    ),
+    monthlyBeastCrowns: [],
+    galleryPhotos: []
+  };
+  const result = verifySupabaseDataSnapshot({ snapshot });
+
+  assert.equal(result.counts.every((check) => check.ok), true);
+  assert.equal(result.monthlyBeast.usesExistingEngine, true);
+  assert.equal(result.hallOfLegends.usesExistingEngine, true);
+  assert.equal(result.monthlyBeast.summaries.length, 3);
+  assert.equal(result.hallOfLegends.summaries.length, 5);
 });
