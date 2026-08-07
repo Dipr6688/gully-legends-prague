@@ -16,6 +16,8 @@ import {
   MATCH_ARCHIVE_PAGE_SIZE,
   filterArchivedMatches,
   getAvailableArchiveYears,
+  getMatchArchiveDisplayIdentifier,
+  getMatchArchiveGameLabel,
   getPaginatedArchiveMatches,
   groupArchiveMatchesByDate,
   normaliseArchiveQuery,
@@ -24,7 +26,6 @@ import {
   type MatchArchiveResultFilter,
   type MatchArchiveSortOrder
 } from "@/lib/match-archive";
-import { getFixtureLabel } from "@/lib/next-match";
 import type { MatchRecord } from "@/lib/types/match";
 
 export const MATCH_ARCHIVE_EMPTY_TITLE = "NO MATCHES IN THE ARCHIVE";
@@ -88,12 +89,11 @@ function MatchArchiveCard({
     <Link href={scorecardHref} className="match-archive-card">
       <div className="match-archive-card-header">
         <div>
-          {match.matchNumber ? (
-            <span className="match-archive-game-label">{getFixtureLabel(match)}</span>
-          ) : null}
-          <h2>{match.matchName}</h2>
-          <p>{formatMatchDisplayDate(match.matchDate)}</p>
+          <span className="match-archive-game-label">{getMatchArchiveGameLabel(match)}</span>
+          <h2>{formatMatchDisplayDate(match.matchDate)}</h2>
+          <p>{match.matchName}</p>
           <span>{match.venue}</span>
+          <small>{getMatchArchiveDisplayIdentifier(match)}</small>
         </div>
         <strong>Finalised</strong>
       </div>
@@ -152,6 +152,7 @@ function ArchiveControlBar({
         query.month !== "all" ||
         query.year !== "all" ||
         query.result !== "all" ||
+        query.date ||
         query.sort !== "newest" ? (
           <button type="button" onClick={onClearFilters}>
             Clear Filters
@@ -164,8 +165,16 @@ function ArchiveControlBar({
           <input
             type="search"
             value={query.q}
-            placeholder="Search match..."
+            placeholder="Search player, team or venue..."
             onChange={(event) => onQueryChange({ q: event.target.value })}
+          />
+        </label>
+        <label>
+          <span>Match Date</span>
+          <input
+            type="date"
+            value={query.date}
+            onChange={(event) => onQueryChange({ date: event.target.value })}
           />
         </label>
         <label>
@@ -379,7 +388,7 @@ export function MatchArchive() {
   function clearFilters() {
     const params = new URLSearchParams(searchParamString);
 
-    ["q", "month", "year", "result", "sort", "page"].forEach((key) =>
+    ["q", "date", "month", "year", "result", "sort", "page"].forEach((key) =>
       params.delete(key)
     );
 
@@ -412,7 +421,7 @@ export function MatchArchive() {
       {paginatedArchive.totalMatches === 0 ? (
         <div className="match-archive-empty-filter">
           <h2>NO MATCHES FOUND</h2>
-          <p>Try changing the month, year or search term.</p>
+          <p>Try another player, date, team or venue.</p>
           <button type="button" onClick={clearFilters}>
             Clear Filters
           </button>

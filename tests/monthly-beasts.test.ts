@@ -13,6 +13,10 @@ import {
   getMonthlyBeastCategoryXp,
   isFutureMonthKey
 } from "../lib/monthly-beasts";
+import {
+  LocalMonthlyBeastCrownRepository,
+  MONTHLY_BEASTS_STORAGE_KEY
+} from "../lib/monthly-beasts-store";
 import type {
   BowlingOver,
   FinalisedPlayerMatchRecord,
@@ -28,7 +32,32 @@ const dashboardMonthlySource = () =>
   readFileSync("components/dashboard/MonthlyBeastsPanel.tsx", "utf8");
 const formulaRoomSource = () =>
   readFileSync("components/stats/FormulaRoom.tsx", "utf8");
+const monthlyStoreSource = () =>
+  readFileSync("lib/monthly-beasts-store.ts", "utf8");
+const matchEntrySource = () =>
+  readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+const cssSource = () => readFileSync("app/globals.css", "utf8");
 const packageSource = () => readFileSync("package.json", "utf8");
+
+function withMockWindow(run: () => void) {
+  const previousWindow = (globalThis as { window?: unknown }).window;
+  const storage = new Map<string, string>();
+
+  (globalThis as { window?: unknown }).window = {
+    localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key)
+    },
+    dispatchEvent: () => undefined
+  };
+
+  try {
+    run();
+  } finally {
+    (globalThis as { window?: unknown }).window = previousWindow;
+  }
+}
 
 function xpBreakdown(
   overrides: Partial<PlayerMatchXPBreakdown> = {}
@@ -499,14 +528,14 @@ test("Joint leaders share rank one and crowned snapshots preserve all winners", 
     ]
   );
   assert.deepEqual(
-    snapshot.battingWinners.map((winner) => winner.playerId),
+    snapshot.batting.playerIds,
     ["aninda", "arunabha"]
   );
   assert.equal(
     getCrownedMonthlyBeasts({
       crownedAwards: [snapshot],
       monthKey: "2026-08"
-    })?.battingWinners.length,
+    })?.batting.playerIds.length,
     2
   );
 });
@@ -596,10 +625,104 @@ test("Dashboard preview switches from live leaders to crowned winners", () => {
   assert.equal(crownedPreview[0].supportingText, "AUGUST winner");
 });
 
+test("Monthly Beast crowns are active versioned snapshots with joint winners preserved", () => {
+  withMockWindow(() => {
+    const repository = new LocalMonthlyBeastCrownRepository();
+    const matches = [
+      matchRecord({
+        id: "joint-crown",
+        matchDate: "2026-08-05",
+        records: [
+          record({
+            playerId: "dipanjan",
+            runs: 60,
+            breakdown: xpBreakdown({ battingRunsXP: 30 })
+          }),
+          record({
+            playerId: "naim",
+            runs: 60,
+            breakdown: xpBreakdown({ battingRunsXP: 30 })
+          }),
+          record({
+            playerId: "pritvi",
+            wickets: 3,
+            breakdown: xpBreakdown({ wicketXP: 30 })
+          })
+        ]
+      })
+    ];
+    const crown = repository.crownMonth({
+      monthKey: "2026-08",
+      matches,
+      crownedAt: "2026-08-31T20:00:00.000Z"
+    });
+
+    assert.equal(crown.version, 1);
+    assert.equal(crown.status, "active");
+    assert.deepEqual(crown.batting.playerIds, ["dipanjan", "naim"]);
+    assert.equal(crown.batting.xp, 30);
+    assert.equal(repository.getActiveCrown("2026-08")?.id, crown.id);
+    assert.match(
+      (globalThis as { window: { localStorage: { getItem: (key: string) => string | null } } }).window.localStorage.getItem(MONTHLY_BEASTS_STORAGE_KEY) ?? "",
+      /"status":"active"/
+    );
+  });
+});
+
+test("Reopening revokes the active crown and recrowning creates version two", () => {
+  withMockWindow(() => {
+    const repository = new LocalMonthlyBeastCrownRepository();
+    const matches = [
+      matchRecord({
+        id: "versioned-crown",
+        matchDate: "2026-08-05",
+        records: [
+          record({
+            playerId: "badhan",
+            catches: 2,
+            breakdown: xpBreakdown({ fieldingXP: 12 })
+          })
+        ]
+      })
+    ];
+    const firstCrown = repository.crownMonth({
+      monthKey: "2026-08",
+      matches,
+      crownedAt: "2026-08-31T20:00:00.000Z"
+    });
+
+    repository.reopenMonth("2026-08", "local-admin");
+
+    assert.equal(repository.getActiveCrown("2026-08"), null);
+    assert.equal(repository.listCrownHistory("2026-08")[0].status, "revoked");
+
+    const secondCrown = repository.crownMonth({
+      monthKey: "2026-08",
+      matches,
+      crownedAt: "2026-09-02T20:00:00.000Z"
+    });
+    const history = repository.listCrownHistory("2026-08");
+
+    assert.equal(firstCrown.version, 1);
+    assert.equal(secondCrown.version, 2);
+    assert.equal(repository.getActiveCrown("2026-08")?.id, secondCrown.id);
+    assert.deepEqual(
+      history.map((crown) => [crown.version, crown.status]),
+      [
+        [2, "active"],
+        [1, "revoked"]
+      ]
+    );
+  });
+});
+
 test("Monthly Beasts UI replaces placeholder copy and links to Formula Room", () => {
   const feature = monthlyFeatureSource();
   const dashboard = dashboardMonthlySource();
   const formulaRoom = formulaRoomSource();
+  const store = monthlyStoreSource();
+  const matchEntry = matchEntrySource();
+  const css = cssSource();
   const packageJson = packageSource();
 
   assert.match(feature, /MONTHLY BEASTS/);
@@ -607,7 +730,25 @@ test("Monthly Beasts UI replaces placeholder copy and links to Formula Room", ()
   assert.match(feature, /How are Beasts decided\?/);
   assert.match(feature, /href="\/stats#monthly-beasts"/);
   assert.match(feature, /role="dialog"/);
-  assert.match(feature, /saveCrownedMonthlyBeastSnapshot/);
+  assert.match(feature, /Crown Winners/);
+  assert.match(feature, /I confirm that all matches/);
+  assert.match(feature, /This month is still in progress/);
+  assert.match(feature, /I understand and still want to crown this month/);
+  assert.match(feature, /Reopen Month/);
+  assert.match(feature, /Crown History/);
+  assert.match(feature, /function ReopenMonthMenu/);
+  assert.match(feature, /createPortal\(popover, document\.body\)/);
+  assert.match(feature, /getBoundingClientRect\(\)/);
+  assert.match(feature, /window\.innerHeight/);
+  assert.match(feature, /shouldFlip/);
+  assert.match(feature, /position:\s*"fixed"/);
+  assert.match(feature, /document\.addEventListener\("pointerdown"/);
+  assert.match(feature, /event\.key === "Escape"/);
+  assert.match(feature, /setIsOpen\(\(current\) => !current\)/);
+  assert.match(feature, /useLocalAdminMode/);
+  assert.match(feature, /gully-legends-admin-mode/);
+  assert.match(feature, /monthlyBeastCrownRepository\.crownMonth/);
+  assert.match(feature, /monthlyBeastCrownRepository\.reopenMonth/);
   assert.match(feature, /Past Beasts/);
   assert.doesNotMatch(feature, /Monthly awards are intentionally empty/i);
   assert.match(dashboard, /Fielding Beast/);
@@ -615,5 +756,13 @@ test("Monthly Beasts UI replaces placeholder copy and links to Formula Room", ()
   assert.match(dashboard, /View Monthly Beasts/);
   assert.match(formulaRoom, /id="monthly-beasts"/);
   assert.match(formulaRoom, /Participation, win bonus\s+and Player of the Match XP do not count/);
+  assert.match(store, /type MonthlyBeastCrownRepository/);
+  assert.match(store, /status: "revoked"/);
+  assert.match(store, /version/);
+  assert.match(matchEntry, /has already been crowned/);
+  assert.match(matchEntry, /skipMonthlyCrownGuard/);
+  assert.match(matchEntry, /monthlyBeastCrownRepository\.getActiveCrown/);
+  assert.match(css, /\.monthly-beasts-control-panel[\s\S]*?overflow:\s*hidden/);
+  assert.match(css, /\.monthly-beasts-admin-popover\s*{/);
   assert.match(packageJson, /monthly-beasts\.test\.js/);
 });

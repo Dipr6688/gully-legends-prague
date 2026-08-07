@@ -48,7 +48,10 @@ import {
 import {
   MATCH_ARCHIVE_PAGE_SIZE,
   filterArchivedMatches,
+  getArchiveMatchSearchText,
   getAvailableArchiveYears,
+  getMatchArchiveDisplayIdentifier,
+  getMatchArchiveGameLabel,
   getPaginatedArchiveMatches,
   groupArchiveMatchesByDate,
   normaliseArchiveQuery,
@@ -1598,6 +1601,47 @@ test("Match archive filters search sorts and groups finalised matches", () => {
     matchDate: "2026-08-01",
     matchNumber: 1
   });
+  const sameDayGameThree = {
+    ...matchRecord({
+      id: "same-day-game-three",
+      matchDate: "2026-08-01",
+      matchNumber: 3
+    }),
+    matchName: "Gully Premier League",
+    teams: {
+      ...matchRecord({ id: "same-day-base", matchDate: "2026-08-01" }).teams,
+      teamA: {
+        ...matchRecord({ id: "same-day-a", matchDate: "2026-08-01" }).teams.teamA,
+        playerIds: ["dipanjan", "saurav"],
+        teamName: "Team A"
+      },
+      teamB: {
+        ...matchRecord({ id: "same-day-b", matchDate: "2026-08-01" }).teams.teamB,
+        playerIds: ["biplab"],
+        teamName: "Team B"
+      }
+    },
+    finalisedPlayerRecords: [
+      finalisedPerformance({
+        playerId: "dipanjan",
+        teamId: "teamA",
+        played: true,
+        playerOfMatch: false,
+        didBat: true,
+        runs: 18,
+        wasOut: false,
+        wickets: 0,
+        hatTricks: 0,
+        catches: 0,
+        runOuts: 0
+      })
+    ]
+  };
+  const olderNoGameNumber = matchRecord({
+    id: "older-no-game",
+    matchDate: "2026-07-20",
+    matchNumber: null
+  });
   const tie = {
     ...matchRecord({
       id: "tie",
@@ -1611,7 +1655,7 @@ test("Match archive filters search sorts and groups finalised matches", () => {
     matchDate: "2026-08-04",
     status: "draft"
   });
-  const matches = [teamBWin, teamAWin, tie, draft];
+  const matches = [teamBWin, teamAWin, sameDayGameThree, olderNoGameNumber, tie, draft];
 
   assert.deepEqual(getAvailableArchiveYears(matches), [2027, 2026]);
   assert.deepEqual(
@@ -1619,7 +1663,21 @@ test("Match archive filters search sorts and groups finalised matches", () => {
       matches,
       normaliseArchiveQuery({ month: "8", year: "2026" })
     ).map((match) => match.id),
-    ["team-a"]
+    ["team-a", "same-day-game-three"]
+  );
+  assert.deepEqual(
+    filterArchivedMatches(
+      matches,
+      normaliseArchiveQuery({ date: "2026-08-01" })
+    ).map((match) => match.id),
+    ["team-a", "same-day-game-three"]
+  );
+  assert.deepEqual(
+    filterArchivedMatches(
+      matches,
+      normaliseArchiveQuery({ date: "2026-08-01", q: "Saurav" })
+    ).map((match) => match.id),
+    ["same-day-game-three"]
   );
   assert.deepEqual(
     filterArchivedMatches(matches, normaliseArchiveQuery({ q: "warriors" })).map(
@@ -1631,7 +1689,37 @@ test("Match archive filters search sorts and groups finalised matches", () => {
     filterArchivedMatches(matches, normaliseArchiveQuery({ q: "PREMIER" })).map(
       (match) => match.id
     ),
-    ["team-b"]
+    ["team-b", "same-day-game-three"]
+  );
+  assert.deepEqual(
+    filterArchivedMatches(matches, normaliseArchiveQuery({ q: "Dipanjan" })).map(
+      (match) => match.id
+    ),
+    ["same-day-game-three"]
+  );
+  assert.deepEqual(
+    filterArchivedMatches(matches, normaliseArchiveQuery({ q: "CZU" })).map(
+      (match) => match.id
+    ),
+    ["team-b", "team-a", "same-day-game-three", "older-no-game", "tie"]
+  );
+  assert.deepEqual(
+    filterArchivedMatches(matches, normaliseArchiveQuery({ q: "Game 3" })).map(
+      (match) => match.id
+    ),
+    ["same-day-game-three"]
+  );
+  assert.deepEqual(
+    filterArchivedMatches(matches, normaliseArchiveQuery({ q: "1 August" })).map(
+      (match) => match.id
+    ),
+    ["team-a", "same-day-game-three"]
+  );
+  assert.deepEqual(
+    filterArchivedMatches(matches, normaliseArchiveQuery({ q: "Team A wins" })).map(
+      (match) => match.id
+    ),
+    ["team-a", "same-day-game-three", "older-no-game"]
   );
   assert.deepEqual(
     filterArchivedMatches(matches, normaliseArchiveQuery({ result: "teamB" })).map(
@@ -1658,11 +1746,21 @@ test("Match archive filters search sorts and groups finalised matches", () => {
     ["team-a", "team-b", "tie"]
   );
   assert.deepEqual(
+    sortArchivedMatches([sameDayGameThree, teamAWin], "newest").map(
+      (match) => match.id
+    ),
+    ["team-a", "same-day-game-three"]
+  );
+  assert.deepEqual(
     groupArchiveMatchesByDate([teamAWin, teamBWin], [teamAWin, teamBWin]).map(
       (group) => group.label
     ),
     ["1 AUGUST 2026", "2 SEPTEMBER 2026"]
   );
+  assert.equal(getMatchArchiveGameLabel(sameDayGameThree), "GAME 3");
+  assert.equal(getMatchArchiveGameLabel(olderNoGameNumber), "MATCH");
+  assert.match(getMatchArchiveDisplayIdentifier(sameDayGameThree), /G3/);
+  assert.match(getArchiveMatchSearchText(sameDayGameThree), /dipanjan/);
 });
 
 test("Match archive page controls pagination reset empty state and scorecard return URL", () => {
@@ -1672,8 +1770,14 @@ test("Match archive page controls pagination reset empty state and scorecard ret
 
   assert.match(archive, /MATCH_ARCHIVE_PAGE_SIZE/);
   assert.match(archive, /params\.delete\("page"\)/);
+  assert.match(archive, /placeholder="Search player, team or venue\.\.\."/);
+  assert.match(archive, /<span>Match Date<\/span>/);
+  assert.match(archive, /type="date"/);
+  assert.match(archive, /\["q", "date", "month", "year", "result", "sort", "page"\]/);
+  assert.match(archive, /getMatchArchiveGameLabel\(match\)/);
+  assert.match(archive, /getMatchArchiveDisplayIdentifier\(match\)/);
   assert.match(archive, /NO MATCHES FOUND/);
-  assert.match(archive, /Try changing the month, year or search term\./);
+  assert.match(archive, /Try another player, date, team or venue\./);
   assert.match(archive, /aria-current=\{item === currentPage \? "page" : undefined\}/);
   assert.match(archive, /disabled=\{currentPage === 1\}/);
   assert.match(archive, /disabled=\{currentPage === pageCount\}/);

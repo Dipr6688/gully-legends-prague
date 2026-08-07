@@ -1,6 +1,10 @@
 import { parseLocalMatchDate, isSuccessfullyFinalisedMatch } from "./leaderboard";
 import { compareFixtureOrder } from "./next-match";
 import { buildPlayerOfMatchSummary } from "./match-scorecard";
+import {
+  formatMatchDisplayDate,
+  getMatchResultHeadline
+} from "./match-display";
 import { getPlayerById } from "./data/players";
 import type { MatchRecord, TeamId } from "./types/match";
 
@@ -26,6 +30,7 @@ export type MatchArchiveSortOrder = "newest" | "oldest";
 
 export type MatchArchiveQuery = {
   q: string;
+  date: string;
   month: number | "all";
   year: number | "all";
   result: MatchArchiveResultFilter;
@@ -48,6 +53,22 @@ function parsePositiveInteger(value: string | null): number | null {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function isDateInputValue(value: string | null): value is string {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+}
+
+function getDateInputValue(matchDate: string): string | null {
+  const parsedDate = parseLocalMatchDate(matchDate);
+
+  if (!parsedDate) return null;
+
+  return [
+    parsedDate.getFullYear(),
+    String(parsedDate.getMonth() + 1).padStart(2, "0"),
+    String(parsedDate.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
 export function normaliseArchiveQuery(
   params: URLSearchParams | Record<string, string | string[] | undefined>
 ): MatchArchiveQuery {
@@ -66,6 +87,7 @@ export function normaliseArchiveQuery(
 
   return {
     q: getValue("q")?.trim() ?? "",
+    date: isDateInputValue(getValue("date")) ? getValue("date")! : "",
     month: month && month >= 1 && month <= 12 ? month : "all",
     year: year ?? "all",
     result:
@@ -75,6 +97,26 @@ export function normaliseArchiveQuery(
     sort: sort === "oldest" ? "oldest" : "newest",
     page
   };
+}
+
+export function getMatchArchiveGameLabel(match: MatchRecord): string {
+  return match.matchNumber ? `GAME ${match.matchNumber}` : "MATCH";
+}
+
+export function getMatchArchiveDisplayIdentifier(match: MatchRecord): string {
+  const matchDate = parseLocalMatchDate(match.matchDate);
+  const dateLabel = matchDate
+    ? new Intl.DateTimeFormat("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "2-digit"
+      })
+        .format(matchDate)
+        .replace(/\s/g, "")
+        .toUpperCase()
+    : match.matchDate.toUpperCase();
+
+  return match.matchNumber ? `${dateLabel}-G${match.matchNumber}` : dateLabel;
 }
 
 export function getArchiveResultCategory(
@@ -104,13 +146,32 @@ export function getAvailableArchiveYears(matches: MatchRecord[]): number[] {
 
 export function getArchiveMatchSearchText(match: MatchRecord): string {
   const playerOfMatch = buildPlayerOfMatchSummary(match, getPlayerById);
+  const playerIds = new Set([
+    ...match.teams.teamA.playerIds,
+    ...match.teams.teamB.playerIds,
+    ...(match.finalisedPlayerRecords ?? []).map((record) => record.playerId),
+    ...match.teams.teamA.playerPerformances.map((record) => record.playerId),
+    ...match.teams.teamB.playerPerformances.map((record) => record.playerId)
+  ]);
+  const participatingPlayerNames = [...playerIds]
+    .map((playerId) => getPlayerById(playerId)?.name)
+    .filter(Boolean);
+  const formattedDate = formatMatchDisplayDate(match.matchDate);
+  const gameLabel = getMatchArchiveGameLabel(match);
+  const resultText = getMatchResultHeadline(match);
 
   return [
     match.matchName,
     match.venue,
     match.teams.teamA.teamName,
     match.teams.teamB.teamName,
-    playerOfMatch?.name
+    formattedDate,
+    match.matchDate,
+    gameLabel,
+    getMatchArchiveDisplayIdentifier(match),
+    resultText,
+    playerOfMatch?.name,
+    ...participatingPlayerNames
   ]
     .filter(Boolean)
     .join(" ")
@@ -130,12 +191,16 @@ export function filterArchivedMatches(
 
       if (!matchDate) return false;
 
-      if (query.month !== "all" && matchDate.getMonth() + 1 !== query.month) {
-        return false;
-      }
+      if (query.date) {
+        if (getDateInputValue(match.matchDate) !== query.date) return false;
+      } else {
+        if (query.month !== "all" && matchDate.getMonth() + 1 !== query.month) {
+          return false;
+        }
 
-      if (query.year !== "all" && matchDate.getFullYear() !== query.year) {
-        return false;
+        if (query.year !== "all" && matchDate.getFullYear() !== query.year) {
+          return false;
+        }
       }
 
       if (

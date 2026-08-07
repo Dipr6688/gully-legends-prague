@@ -2556,6 +2556,103 @@ textarea {
   color: #9cff24;
 }
 
+.monthly-beasts-control-panel .monthly-beasts-pending-copy {
+  color: #f7c734;
+}
+
+.monthly-beasts-state {
+  border: 1px solid rgba(70, 223, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.24);
+  padding: 8px 12px;
+}
+
+.monthly-beasts-state-crowned {
+  border-color: rgba(247, 199, 52, 0.42);
+  color: #f7c734;
+}
+
+.monthly-beasts-state-crown-pending {
+  border-color: rgba(255, 143, 31, 0.42);
+  color: #ff8f1f;
+}
+
+.monthly-beasts-admin-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.monthly-beasts-admin-trigger {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.32);
+  color: #fff5d8;
+}
+
+.monthly-beasts-admin-popover {
+  display: grid;
+  border: 1px solid rgba(247, 199, 52, 0.28);
+  border-radius: 10px;
+  background: #07111b;
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.45);
+  padding: 8px;
+}
+
+.monthly-beasts-admin-popover button {
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #f7c734;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.monthly-beasts-admin-popover button:hover,
+.monthly-beasts-admin-popover button:focus-visible {
+  background: rgba(247, 199, 52, 0.12);
+  outline: none;
+}
+
+.monthly-beasts-admin-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 20;
+  display: none;
+  min-width: 170px;
+  border: 1px solid rgba(247, 199, 52, 0.28);
+  border-radius: 10px;
+  background: #07111b;
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.45);
+  padding: 8px;
+}
+
+.monthly-beasts-admin-menu:hover .monthly-beasts-admin-menu-list,
+.monthly-beasts-admin-menu:focus-within .monthly-beasts-admin-menu-list {
+  display: grid;
+}
+
+.monthly-beasts-admin-menu-list button {
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #f7c734;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.monthly-beasts-admin-menu-list button:hover,
+.monthly-beasts-admin-menu-list button:focus-visible {
+  background: rgba(247, 199, 52, 0.12);
+  outline: none;
+}
+
 .monthly-beasts-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2861,6 +2958,35 @@ textarea {
   text-transform: uppercase;
 }
 
+.monthly-beasts-dialog-summary {
+  margin-top: 12px;
+  color: #d8d2c0;
+  font-size: 0.94rem;
+  font-weight: 800;
+  line-height: 1.55;
+}
+
+.monthly-beasts-warning {
+  display: grid;
+  gap: 4px;
+  margin-top: 14px;
+  border: 1px solid rgba(255, 143, 31, 0.32);
+  border-radius: 10px;
+  background: rgba(255, 143, 31, 0.08);
+  padding: 12px;
+}
+
+.monthly-beasts-warning strong,
+.monthly-beasts-warning span {
+  color: #fff5d8;
+  font-size: 0.88rem;
+  font-weight: 950;
+}
+
+.monthly-beasts-warning span {
+  color: #f7c734;
+}
+
 .monthly-beasts-dialog-list {
   display: grid;
   gap: 10px;
@@ -2895,6 +3021,22 @@ textarea {
   font-size: 0.86rem;
 }
 
+.monthly-beasts-confirm-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  color: #d8d2c0;
+  font-size: 0.9rem;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.monthly-beasts-confirm-check input {
+  margin-top: 4px;
+  accent-color: #f7c734;
+}
+
 .monthly-beasts-dialog-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2903,9 +3045,64 @@ textarea {
   margin-top: 18px;
 }
 
+.monthly-beasts-official-label {
+  color: #f7c734;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.monthly-beasts-crown-history {
+  display: grid;
+  gap: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(70, 223, 255, 0.08), transparent 38%),
+    #07111b;
+  padding: clamp(18px, 3vw, 32px);
+}
+
+.monthly-beasts-history-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.monthly-beasts-history-list article {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.24);
+  padding: 14px;
+}
+
+.monthly-beasts-history-list strong {
+  color: #fff5d8;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: 1.7rem;
+  font-style: italic;
+  text-transform: uppercase;
+}
+
+.monthly-beasts-history-list span,
+.monthly-beasts-history-list b {
+  color: #d8d2c0;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.monthly-beasts-history-list b {
+  color: #f7c734;
+}
+
 @media (max-width: 1180px) {
   .monthly-beasts-card-grid,
-  .monthly-beasts-archive-grid {
+  .monthly-beasts-archive-grid,
+  .monthly-beasts-history-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -2922,7 +3119,8 @@ textarea {
   }
 
   .monthly-beasts-card-grid,
-  .monthly-beasts-archive-grid {
+  .monthly-beasts-archive-grid,
+  .monthly-beasts-history-list {
     grid-template-columns: 1fr;
   }
 }
@@ -3783,7 +3981,7 @@ textarea {
 
 .match-archive-controls {
   display: grid;
-  grid-template-columns: minmax(190px, 1.4fr) repeat(4, minmax(126px, 1fr));
+  grid-template-columns: minmax(190px, 1.35fr) repeat(5, minmax(118px, 1fr));
   gap: 10px;
   min-width: 0;
 }
@@ -4015,9 +4213,18 @@ textarea {
 
 .match-archive-card-header p,
 .match-archive-card-header span,
+.match-archive-card-header small,
 .match-scorecard-header span {
   color: #d8d2c0;
   font-size: 0.78rem;
+}
+
+.match-archive-card-header small {
+  display: block;
+  margin-top: 6px;
+  color: #f7c734;
+  font-weight: 950;
+  text-transform: uppercase;
 }
 
 .match-archive-card-header strong,
@@ -6396,6 +6603,12 @@ textarea {
 }
 
 @media (max-width: 640px) {
+  .players-carousel {
+    grid-auto-columns: calc(100% - 12px);
+    gap: 12px;
+    padding-inline: 0;
+  }
+
   .next-match-ticket {
     padding: 12px;
   }

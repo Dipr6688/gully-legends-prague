@@ -18,13 +18,28 @@ export type CrownedBeastWinner = {
   categoryXp: number;
 };
 
-export type CrownedMonthlyBeasts = {
-  monthKey: string;
-  crownedAt: string;
-  battingWinners: CrownedBeastWinner[];
-  bowlingWinners: CrownedBeastWinner[];
-  fieldingWinners: CrownedBeastWinner[];
+export type MonthlyBeastWinnerSnapshot = {
+  playerIds: string[];
+  xp: number;
 };
+
+export type MonthlyBeastCrownStatus = "active" | "revoked";
+
+export type MonthlyBeastCrown = {
+  id: string;
+  monthKey: string;
+  batting: MonthlyBeastWinnerSnapshot;
+  bowling: MonthlyBeastWinnerSnapshot;
+  fielding: MonthlyBeastWinnerSnapshot;
+  status: MonthlyBeastCrownStatus;
+  crownedAt: string;
+  crownedBy?: string | null;
+  revokedAt?: string | null;
+  revokedBy?: string | null;
+  version: number;
+};
+
+export type CrownedMonthlyBeasts = MonthlyBeastCrown;
 
 export type MonthlyBeastStanding = {
   rank: number;
@@ -141,6 +156,12 @@ export function getCurrentMonthKey(now = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+export function getMatchMonthKey(matchDateValue: string): string | null {
+  const matchDate = parseLocalMatchDate(matchDateValue);
+
+  return matchDate ? getCurrentMonthKey(matchDate) : null;
+}
+
 export function isValidMonthKey(value: string | null | undefined): value is string {
   return Boolean(value && /^\d{4}-(0[1-9]|1[0-2])$/.test(value));
 }
@@ -158,6 +179,23 @@ export function formatMonthLabel(monthKey: string): string {
   })
     .format(parseMonthKey(monthKey))
     .toUpperCase();
+}
+
+export function formatMonthTitle(monthKey: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric"
+  }).format(parseMonthKey(monthKey));
+}
+
+export function formatMonthEndLabel(monthKey: string): string {
+  const [year, month] = monthKey.split("-").map(Number);
+
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  }).format(new Date(year, month, 0));
 }
 
 export function addMonthsToMonthKey(monthKey: string, amount: number): string {
@@ -324,24 +362,37 @@ export function getMonthlyBeastSummary({
 export function createCrownedMonthlyBeasts({
   matches,
   monthKey,
-  crownedAt = new Date().toISOString()
+  crownedAt = new Date().toISOString(),
+  crownedBy = "local-admin",
+  version = 1
 }: {
   matches: MatchRecord[];
   monthKey: string;
   crownedAt?: string;
+  crownedBy?: string | null;
+  version?: number;
 }): CrownedMonthlyBeasts {
-  const winnersFor = (category: MonthlyBeastCategory): CrownedBeastWinner[] =>
-    getMonthlyBeastSummary({ matches, monthKey, category }).leaders.map((leader) => ({
-      playerId: leader.playerId,
-      categoryXp: leader.categoryXp
-    }));
+  const winnersFor = (category: MonthlyBeastCategory): MonthlyBeastWinnerSnapshot => {
+    const leaders = getMonthlyBeastSummary({ matches, monthKey, category }).leaders;
+
+    return {
+      playerIds: leaders.map((leader) => leader.playerId),
+      xp: leaders[0]?.categoryXp ?? 0
+    };
+  };
 
   return {
+    id: `monthly-beasts-${monthKey}-v${version}-${Date.parse(crownedAt) || Date.now()}`,
     monthKey,
+    batting: winnersFor("batting"),
+    bowling: winnersFor("bowling"),
+    fielding: winnersFor("fielding"),
+    status: "active",
     crownedAt,
-    battingWinners: winnersFor("batting"),
-    bowlingWinners: winnersFor("bowling"),
-    fieldingWinners: winnersFor("fielding")
+    crownedBy,
+    revokedAt: null,
+    revokedBy: null,
+    version
   };
 }
 
@@ -352,17 +403,23 @@ export function getCrownedMonthlyBeasts({
   crownedAwards: CrownedMonthlyBeasts[];
   monthKey: string;
 }): CrownedMonthlyBeasts | null {
-  return crownedAwards.find((award) => award.monthKey === monthKey) ?? null;
+  return (
+    crownedAwards
+      .filter((award) => award.monthKey === monthKey && award.status === "active")
+      .sort((left, right) => right.version - left.version)[0] ?? null
+  );
 }
 
 export function getWinnersForCategory(
   crownedAward: CrownedMonthlyBeasts,
   category: MonthlyBeastCategory
 ): CrownedBeastWinner[] {
-  if (category === "batting") return crownedAward.battingWinners;
-  if (category === "bowling") return crownedAward.bowlingWinners;
+  const snapshot = crownedAward[category];
 
-  return crownedAward.fieldingWinners;
+  return snapshot.playerIds.map((playerId) => ({
+    playerId,
+    categoryXp: snapshot.xp
+  }));
 }
 
 export function getMonthlyBeastDashboardPreview({

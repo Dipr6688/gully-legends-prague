@@ -89,6 +89,13 @@ import type {
 import type { Player } from "@/lib/types/player";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ReopenMonthlyBeastsDialog } from "@/components/monthly-beasts/MonthlyBeastsFeature";
+import {
+  formatMonthLabel,
+  formatMonthTitle,
+  getMatchMonthKey
+} from "@/lib/monthly-beasts";
+import { monthlyBeastCrownRepository } from "@/lib/monthly-beasts-store";
 
 type TeamKey = "A" | "B";
 type TeamBowlingState = Record<TeamId, BowlingOver[]>;
@@ -102,6 +109,10 @@ type ValidationResponse = {
   };
   completedOvers: Record<TeamId, number>;
   result: MatchResult;
+};
+
+type ValidateAndSetStatusOptions = {
+  skipMonthlyCrownGuard?: boolean;
 };
 
 const initialValues: MockMatchFormValues = {
@@ -260,6 +271,12 @@ export function MockMatchEntryForm({
     "Match workflow ready. Enter team, innings and player records."
   );
   const [liveConflictMatchId, setLiveConflictMatchId] = useState<string | null>(null);
+  const [blockedCrownMonthKey, setBlockedCrownMonthKey] = useState<string | null>(
+    null
+  );
+  const [reopenCrownMonthKey, setReopenCrownMonthKey] = useState<string | null>(
+    null
+  );
 
   const isLocked = status === "finalised";
   const isFinalised = status === "finalised";
@@ -1033,10 +1050,12 @@ export function MockMatchEntryForm({
 
   async function validateAndSetStatus(
     nextStatus: MatchStatus,
-    stage: MatchValidationStage
+    stage: MatchValidationStage,
+    options: ValidateAndSetStatusOptions = {}
   ): Promise<boolean> {
     try {
       setLiveConflictMatchId(null);
+      setBlockedCrownMonthKey(null);
 
       const matchNumber = getMatchNumberValue(values.matchNumber);
 
@@ -1061,6 +1080,21 @@ export function MockMatchEntryForm({
           setLiveConflictMatchId(liveConflict.id);
           setMessage(
             "Another match is already in progress. Finalise or close that match before starting this game."
+          );
+          return false;
+        }
+      }
+
+      if (nextStatus === "finalised" && !options.skipMonthlyCrownGuard) {
+        const matchMonthKey = getMatchMonthKey(values.matchDate);
+        const activeCrown = matchMonthKey
+          ? monthlyBeastCrownRepository.getActiveCrown(matchMonthKey)
+          : null;
+
+        if (matchMonthKey && activeCrown) {
+          setBlockedCrownMonthKey(matchMonthKey);
+          setMessage(
+            `${formatMonthLabel(matchMonthKey)} has already been crowned. Reopen the month before finalising this match.`
           );
           return false;
         }
@@ -1171,6 +1205,24 @@ export function MockMatchEntryForm({
     setStatus(nextStatus);
   }
 
+  function openReopenCrownDialog(monthKey: string) {
+    setBlockedCrownMonthKey(null);
+    setReopenCrownMonthKey(monthKey);
+  }
+
+  function confirmMonthlyBeastReopenFromMatch() {
+    if (!reopenCrownMonthKey) return;
+
+    monthlyBeastCrownRepository.reopenMonth(reopenCrownMonthKey, "local-admin");
+    setReopenCrownMonthKey(null);
+    setMessage(
+      `${formatMonthLabel(reopenCrownMonthKey)} reopened. Finalising this match again now.`
+    );
+    void validateAndSetStatus("finalised", "finalise", {
+      skipMonthlyCrownGuard: true
+    });
+  }
+
   function resetForm() {
     setMatchId(createLocalMatchId());
     setValues(initialValues);
@@ -1188,6 +1240,7 @@ export function MockMatchEntryForm({
   }
 
   return (
+    <>
     <Card className={`border-neon-cyan/45 ${isFinalised ? "finalised-match" : ""}`}>
       <div className="flex flex-col justify-between gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-center">
         <div>
@@ -1786,6 +1839,21 @@ export function MockMatchEntryForm({
         ) : null}
       </form>
     </Card>
+    {blockedCrownMonthKey ? (
+      <MonthlyCrownFinalisationWarning
+        monthKey={blockedCrownMonthKey}
+        onCancel={() => setBlockedCrownMonthKey(null)}
+        onReopen={() => openReopenCrownDialog(blockedCrownMonthKey)}
+      />
+    ) : null}
+    {reopenCrownMonthKey ? (
+      <ReopenMonthlyBeastsDialog
+        monthKey={reopenCrownMonthKey}
+        onCancel={() => setReopenCrownMonthKey(null)}
+        onConfirm={confirmMonthlyBeastReopenFromMatch}
+      />
+    ) : null}
+    </>
   );
 
   function renderTeamSelector(team: TeamKey, source: string[], other: string[]) {
@@ -1833,6 +1901,45 @@ export function MockMatchEntryForm({
       </fieldset>
     );
   }
+}
+
+function MonthlyCrownFinalisationWarning({
+  monthKey,
+  onCancel,
+  onReopen
+}: {
+  monthKey: string;
+  onCancel: () => void;
+  onReopen: () => void;
+}) {
+  return (
+    <div className="monthly-beasts-dialog-backdrop">
+      <section
+        className="monthly-beasts-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="match-monthly-crown-warning-title"
+      >
+        <p className="formula-eyebrow">Monthly Beast crown active</p>
+        <h2 id="match-monthly-crown-warning-title">
+          {formatMonthLabel(monthKey)} has already been crowned
+        </h2>
+        <p className="monthly-beasts-dialog-summary">
+          Finalising this match could change the Monthly Beast results.
+          <br />
+          Reopen {formatMonthTitle(monthKey)} before finalising this match.
+        </p>
+        <div className="monthly-beasts-dialog-actions">
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            Go Back
+          </Button>
+          <Button type="button" variant="secondary" onClick={onReopen}>
+            Reopen {formatMonthLabel(monthKey)}
+          </Button>
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function buildPerformanceList(
