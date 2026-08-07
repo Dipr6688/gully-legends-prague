@@ -1246,12 +1246,15 @@ test("Next Match ticket removes close control and uses shared repository data", 
   assert.match(ticket, /More actions for/);
   assert.match(ticket, /Reschedule Match/);
   assert.match(ticket, /DELETE SCHEDULED MATCH\?/);
+  assert.match(ticket, /deleteSupabaseAdminDraftMatch/);
+  assert.match(ticket, /saveSupabaseAdminMatch/);
   assert.match(ticket, /localMatchRepository\.deleteScheduledMatch\(match\.id\)/);
   assert.match(ticket, /next-battle-team-crest--a/);
   assert.match(ticket, /next-battle-team-crest--b/);
   assert.doesNotMatch(ticket + hero, /Dismiss next match preview|<X\b|from "lucide-react";[\s\S]*\bX\b/);
   assert.doesNotMatch(ticket, /FINALISED/);
-  assert.match(form, /localMatchRepository\.saveMatch\(\s*buildCurrentMatchRecord\(nextStatus/);
+  assert.match(form, /persistNonFinalisedMatch/);
+  assert.match(form, /saveSupabaseAdminMatch/);
   assert.match(hero, /href="\/matches\/new"/);
   assert.match(hero, /Create Match/);
   assert.match(css, /\.next-match-ticket/);

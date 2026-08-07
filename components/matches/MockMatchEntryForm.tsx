@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useEffect,
   useMemo,
@@ -59,6 +60,8 @@ import {
 } from "@/lib/match-records";
 import type { LiveInningsScore, MatchValidationStage } from "@/lib/match-records";
 import { applyFinalisedMatchToLocalCareerStats } from "@/lib/career-store";
+import { saveSupabaseAdminMatch } from "@/lib/admin-match-write-client";
+import { isSupabaseDataSource } from "@/lib/data-source";
 import { localMatchRepository } from "@/lib/match-repository";
 import { useMatchRepository } from "@/components/matches/useMatchRepository";
 import {
@@ -224,13 +227,21 @@ function getMatchNumberValue(value: number | ""): number | null {
 }
 
 export function MockMatchEntryForm({
-  initialMatch = null
+  initialMatch = null,
+  matches: suppliedMatches
 }: {
   initialMatch?: MatchRecord | null;
+  matches?: MatchRecord[];
 } = {}) {
-  const { matches: savedMatches } = useMatchRepository();
+  const router = useRouter();
+  const supabaseWriteMode = isSupabaseDataSource();
+  const { matches: localSavedMatches } = useMatchRepository();
+  const savedMatches = suppliedMatches ?? localSavedMatches;
   const loadedMatchIdRef = useRef<string | null>(null);
   const [matchId, setMatchId] = useState(() => initialMatch?.id ?? createLocalMatchId());
+  const [supabaseUpdatedAt, setSupabaseUpdatedAt] = useState<string | null>(
+    () => initialMatch?.supabaseUpdatedAt ?? null
+  );
   const [values, setValues] = useState<MockMatchFormValues>(() =>
     initialMatch ? getFormValuesFromMatch(initialMatch) : initialValues
   );
@@ -270,7 +281,9 @@ export function MockMatchEntryForm({
   const [message, setMessage] = useState(
     "Match workflow ready. Enter team, innings and player records."
   );
+  const [isSavingMatch, setIsSavingMatch] = useState(false);
   const [liveConflictMatchId, setLiveConflictMatchId] = useState<string | null>(null);
+  const [showSupabaseFinaliseWarning, setShowSupabaseFinaliseWarning] = useState(false);
   const [blockedCrownMonthKey, setBlockedCrownMonthKey] = useState<string | null>(
     null
   );
@@ -306,6 +319,7 @@ export function MockMatchEntryForm({
 
     loadedMatchIdRef.current = initialMatch.id;
     setMatchId(initialMatch.id);
+    setSupabaseUpdatedAt(initialMatch.supabaseUpdatedAt ?? null);
     setValues(getFormValuesFromMatch(initialMatch));
     setAvailablePlayerIds(getAvailablePlayerIdsFromMatch(initialMatch));
     setTeamA(initialMatch.teams.teamA.playerIds);
@@ -1048,11 +1062,42 @@ export function MockMatchEntryForm({
     };
   }
 
+  async function persistNonFinalisedMatch(match: MatchRecord) {
+    if (!supabaseWriteMode) {
+      localMatchRepository.saveMatch(match);
+      return true;
+    }
+
+    const result = await saveSupabaseAdminMatch({
+      match,
+      expectedUpdatedAt: supabaseUpdatedAt
+    });
+
+    if (!result.ok) {
+      if (result.code === "live_match_conflict") {
+        setLiveConflictMatchId(result.conflictMatchId ?? null);
+        setMessage("ANOTHER MATCH IS ALREADY IN PROGRESS");
+      } else if (result.code === "stale_record") {
+        setMessage("COULD NOT SAVE MATCH. This match changed in another tab. Refresh and try again.");
+      } else {
+        setMessage(`${result.message}. Your changes were not saved. Please try again.`);
+      }
+
+      return false;
+    }
+
+    setSupabaseUpdatedAt(result.updatedAt);
+    router.refresh();
+    return true;
+  }
+
   async function validateAndSetStatus(
     nextStatus: MatchStatus,
     stage: MatchValidationStage,
     options: ValidateAndSetStatusOptions = {}
   ): Promise<boolean> {
+    setIsSavingMatch(true);
+
     try {
       setLiveConflictMatchId(null);
       setBlockedCrownMonthKey(null);
@@ -1078,14 +1123,18 @@ export function MockMatchEntryForm({
 
         if (liveConflict) {
           setLiveConflictMatchId(liveConflict.id);
-          setMessage(
-            "Another match is already in progress. Finalise or close that match before starting this game."
-          );
+          setMessage("ANOTHER MATCH IS ALREADY IN PROGRESS");
           return false;
         }
       }
 
       if (nextStatus === "finalised" && !options.skipMonthlyCrownGuard) {
+        if (supabaseWriteMode) {
+          setShowSupabaseFinaliseWarning(true);
+          setMessage("SUPABASE FINALISATION IS NOT ENABLED YET");
+          return false;
+        }
+
         const matchMonthKey = getMatchMonthKey(values.matchDate);
         const activeCrown = matchMonthKey
           ? monthlyBeastCrownRepository.getActiveCrown(matchMonthKey)
@@ -1155,9 +1204,12 @@ export function MockMatchEntryForm({
           )
         );
       } else {
-        localMatchRepository.saveMatch(
+        const saved = await persistNonFinalisedMatch(
           buildCurrentMatchRecord(nextStatus, result.result, new Date().toISOString())
         );
+
+        if (!saved) return false;
+
         setFinalisedXPBreakdowns({});
       }
 
@@ -1165,8 +1217,10 @@ export function MockMatchEntryForm({
       setMessage(getStatusMessage(nextStatus, result.result));
       return true;
     } catch {
-      setMessage("Could not validate this match right now.");
+      setMessage("COULD NOT SAVE MATCH. Your changes were not saved. Please try again.");
       return false;
+    } finally {
+      setIsSavingMatch(false);
     }
   }
 
@@ -1225,6 +1279,7 @@ export function MockMatchEntryForm({
 
   function resetForm() {
     setMatchId(createLocalMatchId());
+    setSupabaseUpdatedAt(null);
     setValues(initialValues);
     setAvailablePlayerIds([]);
     setTeamA([]);
@@ -1812,13 +1867,22 @@ export function MockMatchEntryForm({
                 status === "in_progress" ? "start" : "draft"
               )
             }
-            disabled={isLocked}
+            disabled={isLocked || isSavingMatch}
           >
             <Save className="h-4 w-4" aria-hidden="true" />
-            {status === "in_progress" ? "Save Live Match" : "Save Draft"}
+            {isSavingMatch
+              ? "Saving Match"
+              : status === "in_progress"
+                ? "Save Live Match"
+                : "Save Draft"}
           </Button>
           {status === "draft" ? (
-            <Button type="button" variant="ghost" onClick={continueToTeamSetup}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={continueToTeamSetup}
+              disabled={isSavingMatch}
+            >
               Continue to Team Setup
             </Button>
           ) : null}
@@ -1826,12 +1890,12 @@ export function MockMatchEntryForm({
             type="button"
             variant="secondary"
             onClick={() => validateAndSetStatus("finalised", "finalise")}
-            disabled={isLocked || !canUseTeamControls}
+            disabled={isLocked || !canUseTeamControls || isSavingMatch}
           >
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
             Finalise Match
           </Button>
-          <Button type="button" variant="ghost" onClick={resetForm}>
+          <Button type="button" variant="ghost" onClick={resetForm} disabled={isSavingMatch}>
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
             Reset
           </Button>
@@ -1844,6 +1908,11 @@ export function MockMatchEntryForm({
         monthKey={blockedCrownMonthKey}
         onCancel={() => setBlockedCrownMonthKey(null)}
         onReopen={() => openReopenCrownDialog(blockedCrownMonthKey)}
+      />
+    ) : null}
+    {showSupabaseFinaliseWarning ? (
+      <SupabaseFinalisationWarning
+        onClose={() => setShowSupabaseFinaliseWarning(false)}
       />
     ) : null}
     {reopenCrownMonthKey ? (
@@ -1935,6 +2004,33 @@ function MonthlyCrownFinalisationWarning({
           </Button>
           <Button type="button" variant="secondary" onClick={onReopen}>
             Reopen {formatMonthLabel(monthKey)}
+          </Button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SupabaseFinalisationWarning({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="monthly-beasts-dialog-backdrop">
+      <section
+        className="monthly-beasts-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="supabase-finalisation-warning-title"
+      >
+        <p className="formula-eyebrow">Finalisation migration pending</p>
+        <h2 id="supabase-finalisation-warning-title">
+          SUPABASE FINALISATION IS NOT ENABLED YET
+        </h2>
+        <p className="monthly-beasts-dialog-summary">
+          This match is safely stored in Supabase, but career XP/stat
+          finalisation is being migrated separately.
+        </p>
+        <div className="monthly-beasts-dialog-actions">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Keep Editing Match
           </Button>
         </div>
       </section>

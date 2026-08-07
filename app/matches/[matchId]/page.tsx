@@ -36,6 +36,7 @@ export default async function MatchScorecardPage({
       matchId={matchId}
       initialMatch={supabaseMode ? match : undefined}
       players={data?.careerPlayers}
+      matches={data?.matches}
     />
   );
 }

@@ -155,6 +155,7 @@ export type TeamMatchData = {
 
 export type MatchRecord = {
   id: string;
+  supabaseUpdatedAt?: string;
   matchDate: string;
   matchNumber?: number | null;
   startTime?: string;

@@ -728,6 +728,7 @@ function matchRow(match: MatchRecord, overrides: Partial<SupabaseMatchRow> = {})
     finalised_at: match.progressionAppliedAt ?? null,
     stats_applied_at: match.progressionAppliedAt ?? null,
     deleted_at: match.deletedAt ?? null,
+    updated_at: "2026-08-05T12:00:00.000Z",
     ...overrides
   };
 }
@@ -949,16 +950,44 @@ test("Phase 2C2 Supabase public loader maps shared data and validates payloads",
   }
 });
 
-test("Phase 2C2 keeps Gallery and admin write paths local-only", () => {
+test("Phase 2C2 keeps Gallery local and Phase 2D1 moves match writes behind admin Supabase API", () => {
   const gallery = source("components/gallery/GalleryFeature.tsx");
   const matchForm = source("components/matches/MockMatchEntryForm.tsx");
   const monthlyFeature = source("components/monthly-beasts/MonthlyBeastsFeature.tsx");
+  const matchWriteRoute = source("app/api/admin/matches/route.ts");
+  const matchWriteRepository = source("lib/supabase/match-write-repository.ts");
+  const matchWriteClient = source("lib/admin-match-write-client.ts");
 
   assert.match(gallery, /LocalGalleryRepository|useMatchRepository/);
   assert.doesNotMatch(gallery, /SupabaseGalleryPhotoRepository|loadPublicSupabaseReadData/);
-  assert.match(matchForm, /localMatchRepository\.saveMatch/);
+  assert.match(matchForm, /saveSupabaseAdminMatch/);
+  assert.match(matchForm, /SUPABASE FINALISATION IS NOT ENABLED YET/);
   assert.match(matchForm, /applyFinalisedMatchToLocalCareerStats/);
+  assert.match(matchWriteClient, /\/api\/admin\/matches/);
+  assert.match(matchWriteRoute, /isAdminWithClient/);
+  assert.match(matchWriteRoute, /validateMatchOnServer/);
+  assert.match(matchWriteRepository, /SupabaseAdminMatchWriteRepository/);
+  assert.match(matchWriteRepository, /\.insert\(/);
+  assert.match(matchWriteRepository, /\.update\(/);
   assert.match(monthlyFeature, /monthlyBeastCrownRepository\.crownMonth/);
   assert.match(monthlyFeature, /supabaseReadMode/);
   assert.match(monthlyFeature, /write phase is implemented/);
+});
+
+test("Phase 2D1 admin match writes are protected and do not mutate finalisation data", () => {
+  const newMatchPage = source("app/matches/new/page.tsx");
+  const matchWriteRoute = source("app/api/admin/matches/route.ts");
+  const matchWriteRepository = source("lib/supabase/match-write-repository.ts");
+
+  assert.match(newMatchPage, /await requireAdmin\(\)/);
+  assert.match(matchWriteRoute, /ADMIN LOGIN REQUIRED/);
+  assert.match(matchWriteRoute, /ADMIN ACCESS REQUIRED/);
+  assert.match(matchWriteRoute, /operation: "save"/);
+  assert.match(matchWriteRoute, /operation: "delete"/);
+  assert.match(matchWriteRoute, /validationInputFromMatch/);
+  assert.match(matchWriteRepository, /SUPABASE FINALISATION IS NOT ENABLED YET/);
+  assert.match(matchWriteRepository, /live_match_conflict/);
+  assert.match(matchWriteRepository, /stale_record/);
+  assert.match(matchWriteRepository, /is_demo: existing\?\.is_demo \?\? false/);
+  assert.doesNotMatch(matchWriteRoute + matchWriteRepository, /player_career_stats|match_stat_applications/);
 });

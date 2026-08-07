@@ -180,6 +180,7 @@ export async function loadPublicSupabaseReadData(): Promise<PublicSupabaseReadDa
 
     return {
       ...result.match,
+      supabaseUpdatedAt: row.updated_at,
       matchNumber: row.match_sequence ?? result.match.matchNumber ?? null
     };
   });

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   canDeleteScheduledFixture,
   formatNextMatchDateLine,
@@ -19,6 +20,11 @@ import {
   hasDuplicateMatchNumber
 } from "@/lib/next-match";
 import { localMatchRepository } from "@/lib/match-repository";
+import {
+  deleteSupabaseAdminDraftMatch,
+  saveSupabaseAdminMatch
+} from "@/lib/admin-match-write-client";
+import { isSupabaseDataSource } from "@/lib/data-source";
 import type { MatchRecord, TeamId } from "@/lib/types/match";
 
 function useDialogFocusTrap(onClose: () => void) {
@@ -313,15 +319,18 @@ function RescheduleDialog({
   matches: MatchRecord[];
   onClose: () => void;
 }) {
+  const router = useRouter();
+  const supabaseWriteMode = isSupabaseDataSource();
   const [matchDate, setMatchDate] = useState(match.matchDate);
   const [matchNumber, setMatchNumber] = useState<number | "">(
     match.matchNumber ?? ""
   );
   const [startTime, setStartTime] = useState(match.startTime ?? "");
   const [error, setError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const { dialogRef, initialFocusRef } = useDialogFocusTrap(onClose);
 
-  function saveSchedule() {
+  async function saveSchedule() {
     const nextMatchNumber =
       matchNumber === "" ? null : Math.max(1, Number(matchNumber));
 
@@ -344,12 +353,39 @@ function RescheduleDialog({
       return;
     }
 
-    localMatchRepository.saveMatch({
+    const nextMatch = {
       ...match,
       matchDate,
       matchNumber: nextMatchNumber,
       startTime: startTime || undefined
-    });
+    };
+
+    setIsSaving(true);
+    setError("");
+
+    if (supabaseWriteMode) {
+      const result = await saveSupabaseAdminMatch({
+        match: nextMatch,
+        expectedUpdatedAt: match.supabaseUpdatedAt
+      });
+
+      setIsSaving(false);
+
+      if (!result.ok) {
+        setError(
+          result.code === "stale_record"
+            ? "This match changed in another tab. Refresh and try again."
+            : "Could not save match. Please try again."
+        );
+        return;
+      }
+
+      router.refresh();
+    } else {
+      localMatchRepository.saveMatch(nextMatch);
+      setIsSaving(false);
+    }
+
     onClose();
   }
 
@@ -398,8 +434,8 @@ function RescheduleDialog({
           <button type="button" ref={initialFocusRef} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" onClick={saveSchedule}>
-            Save Schedule
+          <button type="button" onClick={saveSchedule} disabled={isSaving}>
+            {isSaving ? "Saving Schedule" : "Save Schedule"}
           </button>
         </div>
       </section>
@@ -414,10 +450,35 @@ function DeleteMatchDialog({
   match: MatchRecord;
   onClose: () => void;
 }) {
+  const router = useRouter();
+  const supabaseWriteMode = isSupabaseDataSource();
+  const [error, setError] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   const { dialogRef, initialFocusRef } = useDialogFocusTrap(onClose);
 
-  function deleteMatch() {
-    localMatchRepository.deleteScheduledMatch(match.id);
+  async function deleteMatch() {
+    setIsDeleting(true);
+    setError("");
+
+    if (supabaseWriteMode) {
+      const result = await deleteSupabaseAdminDraftMatch({
+        matchId: match.id,
+        expectedUpdatedAt: match.supabaseUpdatedAt
+      });
+
+      setIsDeleting(false);
+
+      if (!result.ok) {
+        setError("Could not delete match. Please try again.");
+        return;
+      }
+
+      router.refresh();
+    } else {
+      localMatchRepository.deleteScheduledMatch(match.id);
+      setIsDeleting(false);
+    }
+
     onClose();
     window.setTimeout(() => {
       document.querySelector<HTMLAnchorElement>('a[href="/matches/new"]')?.focus();
@@ -444,6 +505,7 @@ function DeleteMatchDialog({
           This fixture will be removed from today&apos;s slate. No player
           statistics or XP will be affected.
         </p>
+        {error ? <p>{error}</p> : null}
         <div className="next-match-dialog-actions">
           <button type="button" ref={initialFocusRef} onClick={onClose}>
             Keep Match
@@ -452,8 +514,9 @@ function DeleteMatchDialog({
             type="button"
             className="next-match-dialog-delete"
             onClick={deleteMatch}
+            disabled={isDeleting}
           >
-            Delete Match
+            {isDeleting ? "Deleting Match" : "Delete Match"}
           </button>
         </div>
       </section>

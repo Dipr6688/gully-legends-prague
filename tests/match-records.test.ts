@@ -495,7 +495,7 @@ test("Draft saving does not trigger finalisation side effects", () => {
   assert.match(form, /stage,\s*\n\s*scheduledOversPerInnings/);
   assert.match(form, /validateAndSetStatus\(\s*status,[\s\S]*?"draft"/);
   assert.match(draftBranch, /applyFinalisedMatchToLocalCareerStats\(finalisedMatch\)/);
-  assert.match(draftBranch, /localMatchRepository\.saveMatch\(\s*buildCurrentMatchRecord\(nextStatus/);
+  assert.match(draftBranch, /persistNonFinalisedMatch\(/);
   assert.doesNotMatch(
     draftBranch.match(/\} else \{[\s\S]*?setFinalisedXPBreakdowns\(\{\}\);/)?.[0] ?? "",
     /applyFinalisedMatchToLocalCareerStats/
@@ -522,9 +522,31 @@ test("Create Match form rejects duplicate same-day game numbers and blocks secon
   assert.match(form, /getLiveMatchConflict\(savedMatches, matchId\)/);
   assert.match(
     form,
-    /Another match is already in progress\. Finalise or close that match before starting this game\./
+    /ANOTHER MATCH IS ALREADY IN PROGRESS/
   );
   assert.match(form, /Continue Current Match/);
+});
+
+test("Supabase mode sends non-finalised match writes to the admin API and blocks finalisation", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const apiClient = readFileSync("lib/admin-match-write-client.ts", "utf8");
+  const apiRoute = readFileSync("app/api/admin/matches/route.ts", "utf8");
+  const writeRepository = readFileSync("lib/supabase/match-write-repository.ts", "utf8");
+
+  assert.match(form, /const supabaseWriteMode = isSupabaseDataSource\(\)/);
+  assert.match(form, /saveSupabaseAdminMatch\(\{/);
+  assert.match(form, /expectedUpdatedAt: supabaseUpdatedAt/);
+  assert.match(form, /SUPABASE FINALISATION IS NOT ENABLED YET/);
+  assert.match(form, /localMatchRepository\.saveMatch\(finalisedMatch\)/);
+  assert.match(apiClient, /\/api\/admin\/matches/);
+  assert.match(apiRoute, /isAdminWithClient/);
+  assert.match(apiRoute, /validateMatchOnServer/);
+  assert.match(apiRoute, /revalidatePath\("\/"\)/);
+  assert.match(writeRepository, /is_demo: existing\?\.is_demo \?\? false/);
+  assert.match(writeRepository, /assertNoOtherLiveMatch/);
+  assert.match(writeRepository, /deleted_at: deletedAt/);
+  assert.match(writeRepository, /expectedUpdatedAt/);
+  assert.doesNotMatch(apiClient, /localStorage|MATCH_HISTORY_STORAGE_KEY/);
 });
 
 test("finalised match uses XP Awarded while drafts use Projected Match XP", () => {

@@ -24,16 +24,19 @@ import type { Player } from "@/lib/types/player";
 export function MatchScorecard({
   matchId,
   initialMatch,
-  players
+  players,
+  matches: suppliedMatches
 }: {
   matchId: string;
   initialMatch?: MatchRecord | null;
   players?: Player[];
+  matches?: MatchRecord[];
 }) {
   const localRepository = useMatchRepository();
   const searchParams = useSearchParams();
+  const matches = suppliedMatches ?? localRepository.matches;
   const match =
-    initialMatch ?? localRepository.matches.find((candidate) => candidate.id === matchId) ?? null;
+    initialMatch ?? matches.find((candidate) => candidate.id === matchId) ?? null;
   const playerById = (playerId: string) =>
     players?.find((player) => player.id === playerId) ?? getPlayerById(playerId);
 
@@ -52,7 +55,7 @@ export function MatchScorecard({
   if (match.status === "draft" || match.status === "in_progress") {
     return (
       <div className="mx-auto max-w-6xl px-4 py-8 lg:px-6">
-        <MockMatchEntryForm initialMatch={match} />
+        <MockMatchEntryForm initialMatch={match} matches={matches} />
       </div>
     );
   }

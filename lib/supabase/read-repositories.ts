@@ -34,6 +34,7 @@ export type SupabaseMatchRow = {
   finalised_at: string | null;
   stats_applied_at: string | null;
   deleted_at: string | null;
+  updated_at: string;
 };
 
 export type SupabaseCareerStatsRow = {
@@ -159,7 +160,8 @@ export class SupabaseMatchRepository {
         "payload",
         "finalised_at",
         "stats_applied_at",
-        "deleted_at"
+        "deleted_at",
+        "updated_at"
       ].join(", ")
     );
   }
