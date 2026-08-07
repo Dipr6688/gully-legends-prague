@@ -42,7 +42,8 @@ test("Gallery page replaces the placeholder with the complete Gallery feature", 
   const page = galleryPageSource();
   const feature = galleryFeatureSource();
 
-  assert.match(page, /<GalleryFeature \/>/);
+  assert.match(page, /<GalleryFeature isAdmin=\{isAdmin\} \/>/);
+  assert.match(page, /isCurrentUserAdmin/);
   assert.match(feature, /OUR GULLY MOMENTS/);
   assert.match(feature, /Cricket, friendship and unforgettable Prague days\./);
   assert.match(feature, /NO MEMORIES ADDED YET/);
@@ -164,12 +165,13 @@ test("Gallery featured grid lightbox edit and delete flows are wired", () => {
   assert.match(css, /@media \(max-width:\s*520px\)[\s\S]*?\.gallery-grid,[\s\S]*?grid-template-columns:\s*1fr/);
 });
 
-test("Gallery admin controls are hidden until local admin mode is active", () => {
+test("Gallery admin controls are driven by verified server admin state", () => {
   const feature = galleryFeatureSource();
 
-  assert.match(feature, /useGalleryAdminMode/);
-  assert.match(feature, /gully-legends-admin-mode/);
-  assert.match(feature, /requestedAdminMode === "1"/);
+  assert.match(feature, /export function GalleryFeature\(\{ isAdmin \}/);
+  assert.doesNotMatch(feature, /useGalleryAdminMode/);
+  assert.doesNotMatch(feature, /gully-legends-admin-mode/);
+  assert.doesNotMatch(feature, /requestedAdminMode === "1"/);
   assert.match(feature, /\{isAdmin \? \(/);
   assert.match(feature, /Add Photos/);
   assert.match(feature, /Edit Details/);

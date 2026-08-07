@@ -745,8 +745,9 @@ test("Monthly Beasts UI replaces placeholder copy and links to Formula Room", ()
   assert.match(feature, /document\.addEventListener\("pointerdown"/);
   assert.match(feature, /event\.key === "Escape"/);
   assert.match(feature, /setIsOpen\(\(current\) => !current\)/);
-  assert.match(feature, /useLocalAdminMode/);
-  assert.match(feature, /gully-legends-admin-mode/);
+  assert.match(feature, /export function MonthlyBeastsFeature\(\{ isAdmin \}/);
+  assert.doesNotMatch(feature, /useLocalAdminMode/);
+  assert.doesNotMatch(feature, /gully-legends-admin-mode/);
   assert.match(feature, /monthlyBeastCrownRepository\.crownMonth/);
   assert.match(feature, /monthlyBeastCrownRepository\.reopenMonth/);
   assert.match(feature, /Past Beasts/);

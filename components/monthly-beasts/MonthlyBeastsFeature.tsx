@@ -57,27 +57,6 @@ const accentColors = {
   green: "#9cff24"
 } as const;
 
-function useLocalAdminMode() {
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      const params = new URLSearchParams(window.location.search);
-      const requestedAdminMode = params.get("admin");
-
-      if (requestedAdminMode === "1") {
-        window.localStorage.setItem("gully-legends-admin-mode", "true");
-      } else if (requestedAdminMode === "0") {
-        window.localStorage.removeItem("gully-legends-admin-mode");
-      }
-
-      setIsAdmin(window.localStorage.getItem("gully-legends-admin-mode") === "true");
-    });
-  }, []);
-
-  return isAdmin;
-}
-
 function useCrownedAwards() {
   const [crownedAwards, setCrownedAwards] = useState<CrownedMonthlyBeasts[]>([]);
 
@@ -653,12 +632,11 @@ function CrownHistory({ crowns }: { crowns: CrownedMonthlyBeasts[] }) {
   );
 }
 
-export function MonthlyBeastsFeature() {
+export function MonthlyBeastsFeature({ isAdmin }: { isAdmin: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { matches } = useMatchRepository();
-  const isAdmin = useLocalAdminMode();
   const [crownedAwards, setCrownedAwards] = useCrownedAwards();
   const selectedMonth = getSelectedMonth(searchParams.get("month"));
   const currentMonth = getCurrentMonthKey();

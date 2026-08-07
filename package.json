@@ -8,9 +8,11 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "tsc -p tsconfig.test.json && node --test .test-build/tests/progression.test.js .test-build/tests/team-balancing.test.js .test-build/tests/match-records.test.js .test-build/tests/formula-room.test.js .test-build/tests/leaderboard.test.js .test-build/tests/dashboard.test.js .test-build/tests/monthly-beasts.test.js .test-build/tests/gallery.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test .test-build/tests/progression.test.js .test-build/tests/team-balancing.test.js .test-build/tests/match-records.test.js .test-build/tests/formula-room.test.js .test-build/tests/leaderboard.test.js .test-build/tests/dashboard.test.js .test-build/tests/monthly-beasts.test.js .test-build/tests/gallery.test.js .test-build/tests/admin-auth.test.js"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.112.2",
     "clsx": "^2.1.1",
     "lucide-react": "^0.468.0",
     "next": "16.2.12",

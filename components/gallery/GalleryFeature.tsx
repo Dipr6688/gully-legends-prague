@@ -64,27 +64,6 @@ type EditDraft = {
   isFeatured: boolean;
 };
 
-function useGalleryAdminMode() {
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      const params = new URLSearchParams(window.location.search);
-      const requestedAdminMode = params.get("admin");
-
-      if (requestedAdminMode === "1") {
-        window.localStorage.setItem("gully-legends-admin-mode", "true");
-      } else if (requestedAdminMode === "0") {
-        window.localStorage.removeItem("gully-legends-admin-mode");
-      }
-
-      setIsAdmin(window.localStorage.getItem("gully-legends-admin-mode") === "true");
-    });
-  }, []);
-
-  return isAdmin;
-}
-
 function useGalleryPhotos() {
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -735,8 +714,7 @@ function GallerySkeletons() {
   );
 }
 
-export function GalleryFeature() {
-  const isAdmin = useGalleryAdminMode();
+export function GalleryFeature({ isAdmin }: { isAdmin: boolean }) {
   const { photos, isLoading, refreshPhotos } = useGalleryPhotos();
   const [filter, setFilter] = useState<GalleryFilter>("all");
   const [uploadOpen, setUploadOpen] = useState(false);

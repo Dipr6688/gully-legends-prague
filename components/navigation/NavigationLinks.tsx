@@ -34,7 +34,13 @@ export function DesktopNavigation() {
   );
 }
 
-export function MobileNavigationPanel() {
+export function MobileNavigationPanel({
+  adminHref,
+  isAdmin
+}: {
+  adminHref: string;
+  isAdmin: boolean;
+}) {
   const pathname = usePathname();
 
   return (
@@ -57,12 +63,14 @@ export function MobileNavigationPanel() {
           </Link>
         );
       })}
-      <Link className="mobile-navigation-link" href="/admin">
+      <Link className="mobile-navigation-link" href={adminHref}>
         Admin
       </Link>
-      <Link className="mobile-navigation-link" href="/login">
+      {!isAdmin ? (
+      <Link className="mobile-navigation-link" href="/admin/login">
         Login
       </Link>
+      ) : null}
     </nav>
   );
 }
