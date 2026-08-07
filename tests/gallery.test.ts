@@ -52,7 +52,7 @@ test("Gallery page replaces the placeholder with the complete Gallery feature", 
   assert.doesNotMatch(page + feature, /GALLERY COMING LATER|Gallery coming later|Photos and shareable result cards will be added/);
 });
 
-test("Gallery repository boundary is local IndexedDB now and Supabase-ready later", () => {
+test("Gallery repository uses Supabase in Supabase mode and preserves IndexedDB local mode", () => {
   const types = galleryTypesSource();
   const repository = galleryRepositorySource();
 
@@ -65,15 +65,56 @@ test("Gallery repository boundary is local IndexedDB now and Supabase-ready late
   assert.match(repository, /GALLERY_BLOB_STORE = "galleryPhotoBlobs"/);
   assert.match(repository, /indexedDB\.open\(GALLERY_DATABASE_NAME,\s*1\)/);
   assert.match(repository, /class LocalGalleryRepository implements GalleryRepository/);
+  assert.match(repository, /class SupabaseGalleryRepository implements GalleryRepository/);
   assert.match(repository, /listPhotos\(\): Promise<GalleryPhoto\[\]>/);
+  assert.match(repository, /uploadPhotos\(input: GalleryUploadInput\[\]\): Promise<GalleryPhoto\[\]>/);
+  assert.match(repository, /updatePhoto\(/);
   assert.match(repository, /deletePhoto\(id: GalleryPhotoId\): Promise<void>/);
   assert.match(repository, /setFeaturedPhoto\(id: GalleryPhotoId\)/);
-  assert.match(repository, /NEXT_PUBLIC_GALLERY_STORAGE_MODE/);
-  assert.match(repository, /SupabaseGalleryRepository/);
+  assert.match(repository, /isSupabaseDataSource\(\)/);
+  assert.match(repository, /return new SupabaseGalleryRepository\(\)/);
+  assert.match(repository, /return new LocalGalleryRepository\(\)/);
+  assert.doesNotMatch(repository, /NEXT_PUBLIC_GALLERY_STORAGE_MODE/);
   assert.match(repository, /gallery_photos/);
+  assert.match(repository, /GALLERY_STORAGE_BUCKET = "gallery"/);
+  assert.match(repository, /createSupabaseBrowserClient/);
   assert.doesNotMatch(repository, /localStorage\.setItem/);
   assert.doesNotMatch(repository, /base64/);
   assert.doesNotMatch(repository, /public\/gallery|public\/uploads|public\/images/);
+});
+
+test("Supabase Gallery persistence uses public Storage URLs and protected metadata writes", () => {
+  const repository = galleryRepositorySource();
+
+  assert.match(repository, /\.from\(GALLERY_STORAGE_BUCKET\)/);
+  assert.match(repository, /\.getPublicUrl\(storagePath\)/);
+  assert.doesNotMatch(repository, /createSignedUrl|signedUrl/);
+  assert.match(repository, /\.from\("gallery_photos"\)/);
+  assert.match(repository, /\.is\("deleted_at", null\)/);
+  assert.match(repository, /\.order\("taken_on", \{ ascending: false, nullsFirst: false \}\)/);
+  assert.match(repository, /\.order\("uploaded_at", \{ ascending: false \}\)/);
+  assert.match(repository, /auth\.getUser\(\)/);
+  assert.match(repository, /uploaded_by: uploadedBy/);
+  assert.match(repository, /is_demo: false/);
+  assert.match(repository, /assertRelatedMatchExists/);
+});
+
+test("Supabase Gallery uploads use unique non-overwrite paths and compensate failed metadata", () => {
+  const repository = galleryRepositorySource();
+  const galleryTypes = galleryTypesSource();
+
+  assert.match(galleryTypes, /GALLERY_MAX_STORED_FILE_SIZE = 6 \* 1024 \* 1024/);
+  assert.match(repository, /export function createGalleryStoragePath/);
+  assert.match(repository, /GALLERY_STORAGE_BUCKET\}\/\$\{year\}\/\$\{month\}\/\$\{id\}-\$\{safeFileName\}\.\$\{extension\}/);
+  assert.match(repository, /createGalleryPhotoId\(\)/);
+  assert.match(repository, /sanitizeStorageFileName/);
+  assert.match(repository, /upsert: false/);
+  assert.match(repository, /contentType: item\.mimeType/);
+  assert.match(repository, /item\.blob\.size > GALLERY_MAX_STORED_FILE_SIZE/);
+  assert.match(repository, /\.insert\(insertPayload\)/);
+  assert.match(repository, /cleanupError/);
+  assert.match(repository, /Photo uploaded, but Gallery details could not be saved/);
+  assert.match(repository, /Storage cleanup also failed/);
 });
 
 test("Gallery file validation filtering sorting and featured fallback work", () => {
@@ -158,11 +199,27 @@ test("Gallery featured grid lightbox edit and delete flows are wired", () => {
   assert.match(feature, /EditDialog/);
   assert.match(feature, /galleryRepository\.updatePhoto/);
   assert.match(feature, /DELETE THIS MEMORY\?/);
+  assert.match(feature, /KEEP PHOTO/);
+  assert.match(feature, /DELETE PHOTO/);
   assert.match(feature, /galleryRepository\.deletePhoto\(photo\.id\)/);
   assert.match(feature, /View Match Scorecard/);
   assert.match(css, /\.gallery-grid\s*{[\s\S]*?repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(css, /@media \(max-width:\s*900px\)[\s\S]*?\.gallery-grid\s*{[\s\S]*?repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(css, /@media \(max-width:\s*520px\)[\s\S]*?\.gallery-grid,[\s\S]*?grid-template-columns:\s*1fr/);
+});
+
+test("Supabase Gallery edit feature and delete flows avoid replacing files or deleting storage.objects", () => {
+  const repository = galleryRepositorySource();
+
+  assert.match(repository, /updatePhoto\(/);
+  assert.match(repository, /\.update\(\{[\s\S]*title:[\s\S]*caption:[\s\S]*category:[\s\S]*taken_on:[\s\S]*related_match_id:[\s\S]*album_title:[\s\S]*is_featured/);
+  assert.doesNotMatch(repository, /updatePhoto[\s\S]*\.upload\(/);
+  assert.match(repository, /\.update\(\{ is_featured: false \}\)[\s\S]*\.eq\("is_featured", true\)/);
+  assert.match(repository, /setFeaturedPhoto\(id: GalleryPhotoId\)/);
+  assert.match(repository, /\.update\(\{ deleted_at: deletedAt, is_featured: false \}\)/);
+  assert.match(repository, /\.storage[\s\S]*\.remove\(\[current\.storage_path\]\)/);
+  assert.match(repository, /\.update\(\{ deleted_at: null \}\)/);
+  assert.doesNotMatch(repository, /storage\.objects|from\("objects"\)|delete\(\)\.eq\("storage_path"/);
 });
 
 test("Gallery admin controls are driven by verified server admin state", () => {

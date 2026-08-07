@@ -98,6 +98,7 @@ export const GALLERY_ACCEPTED_MIME_TYPES = [
 ] as const;
 
 export const GALLERY_MAX_ORIGINAL_FILE_SIZE = 20 * 1024 * 1024;
+export const GALLERY_MAX_STORED_FILE_SIZE = 6 * 1024 * 1024;
 export const GALLERY_IMAGE_LONG_EDGE = 2048;
 export const GALLERY_IMAGE_QUALITY = 0.85;
 

@@ -696,8 +696,8 @@ function DeleteDialog({
         <h2>DELETE THIS MEMORY?</h2>
         <p>The photograph and its Gallery information will be removed.</p>
         <div className="gallery-dialog-actions">
-          <button ref={firstButtonRef} type="button" onClick={onClose}>Keep Photo</button>
-          <button type="button" className="gallery-delete-action" onClick={deletePhoto}>Delete Photo</button>
+          <button ref={firstButtonRef} type="button" onClick={onClose}>KEEP PHOTO</button>
+          <button type="button" className="gallery-delete-action" onClick={deletePhoto}>DELETE PHOTO</button>
         </div>
       </section>
     </div>

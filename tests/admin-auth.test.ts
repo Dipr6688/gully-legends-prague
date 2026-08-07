@@ -951,8 +951,9 @@ test("Phase 2C2 Supabase public loader maps shared data and validates payloads",
   }
 });
 
-test("Phase 2C2 keeps Gallery local and Phase 2D moves match writes behind admin Supabase APIs", () => {
+test("Phase 2C2 and Phase 3 keep Gallery behind a repository and match writes behind admin APIs", () => {
   const gallery = source("components/gallery/GalleryFeature.tsx");
+  const galleryRepository = source("lib/gallery-repository.ts");
   const matchForm = source("components/matches/MockMatchEntryForm.tsx");
   const monthlyFeature = source("components/monthly-beasts/MonthlyBeastsFeature.tsx");
   const matchWriteRoute = source("app/api/admin/matches/route.ts");
@@ -963,8 +964,11 @@ test("Phase 2C2 keeps Gallery local and Phase 2D moves match writes behind admin
   const matchWriteClient = source("lib/admin-match-write-client.ts");
   const atomicFinalisationSql = source("supabase/migrations/20260807103000_atomic_match_finalisation.sql");
 
-  assert.match(gallery, /LocalGalleryRepository|useMatchRepository/);
-  assert.doesNotMatch(gallery, /SupabaseGalleryPhotoRepository|loadPublicSupabaseReadData/);
+  assert.match(gallery, /galleryRepository/);
+  assert.match(gallery, /useMatchRepository/);
+  assert.match(galleryRepository, /class SupabaseGalleryRepository implements GalleryRepository/);
+  assert.match(galleryRepository, /isSupabaseDataSource\(\)/);
+  assert.doesNotMatch(gallery, /SupabaseGalleryPhotoRepository|loadPublicSupabaseReadData|indexedDB/);
   assert.match(matchForm, /saveSupabaseAdminMatch/);
   assert.match(matchForm, /finalizeSupabaseAdminMatch/);
   assert.match(matchForm, /applyFinalisedMatchToLocalCareerStats/);
