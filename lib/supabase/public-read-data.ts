@@ -182,6 +182,8 @@ export async function loadSupabaseReadData(
 
     return {
       ...result.match,
+      isDemo: row.is_demo,
+      isDemoTestMatch: row.is_demo && result.match.isDemoTestMatch === true,
       supabaseUpdatedAt: row.updated_at,
       matchNumber: row.match_sequence ?? result.match.matchNumber ?? null
     };

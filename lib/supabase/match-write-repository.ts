@@ -1,4 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  buildDemoTestDraftMatch,
+  isDemoTestMatchPayload
+} from "@/lib/demo-test-match";
 import type { MatchRecord } from "@/lib/types/match";
 
 type SupabaseErrorLike = {
@@ -60,15 +64,22 @@ export class SupabaseMatchWriteError extends Error {
 function toDatabaseRow({
   match,
   userId,
-  existing
+  existing,
+  forceDemo = false
 }: {
   match: MatchRecord;
   userId: string;
   existing: SupabaseMatchWriteRow | null;
+  forceDemo?: boolean;
 }): MatchMutationRow {
   const payload = { ...match };
 
   delete payload.supabaseUpdatedAt;
+  delete payload.isDemo;
+
+  if (forceDemo || isDemoTestMatchPayload(existing?.payload)) {
+    payload.isDemoTestMatch = true;
+  }
 
   return {
     id: match.id,
@@ -78,7 +89,7 @@ function toDatabaseRow({
     name: match.matchName,
     venue: match.venue,
     status: match.status,
-    is_demo: existing?.is_demo ?? false,
+    is_demo: forceDemo || (existing?.is_demo ?? false),
     payload,
     created_by: existing ? undefined : userId,
     updated_by: userId,
@@ -143,7 +154,10 @@ export class SupabaseAdminMatchWriteRepository {
       );
     }
 
-    if (existing?.status === "finalised" || existing?.is_demo) {
+    if (
+      existing?.status === "finalised" ||
+      (existing?.is_demo && !isDemoTestMatchPayload(existing.payload))
+    ) {
       throw new SupabaseMatchWriteError("COULD NOT SAVE MATCH", "not_allowed");
     }
 
@@ -230,6 +244,30 @@ export class SupabaseAdminMatchWriteRepository {
 
     if (error || !data) {
       throw new SupabaseMatchWriteError("COULD NOT SAVE MATCH", "write_failed");
+    }
+
+    return toWriteResult(data);
+  }
+
+  async createDemoTestMatch(): Promise<SupabaseMatchWriteResult> {
+    const match = buildDemoTestDraftMatch();
+    const row = toDatabaseRow({
+      match,
+      userId: this.userId,
+      existing: null,
+      forceDemo: true
+    });
+    const { data, error } = (await this.client
+      .from("matches")
+      .insert(row)
+      .select("id, status, is_demo, updated_at, deleted_at")
+      .single()) as unknown as {
+      data: SupabaseMatchWriteResultRow | null;
+      error: SupabaseErrorLike | null;
+    };
+
+    if (error || !data) {
+      throw new SupabaseMatchWriteError("COULD NOT CREATE DEMO TEST MATCH", "write_failed");
     }
 
     return toWriteResult(data);

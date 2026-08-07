@@ -297,6 +297,8 @@ export function MockMatchEntryForm({
   const isLocked = status === "finalised";
   const isFinalised = status === "finalised";
   const canSafelyReopenFinalisedMatch = false;
+  const isDemoMatch = initialMatch?.isDemo === true;
+  const isDemoTestMatch = initialMatch?.isDemoTestMatch === true;
   const isNewMatch =
     status === "draft" &&
     values.matchDate === "" &&
@@ -1012,6 +1014,8 @@ export function MockMatchEntryForm({
 
     return {
       id: matchId,
+      isDemo: isDemoMatch,
+      isDemoTestMatch,
       matchDate: values.matchDate,
       matchNumber: getMatchNumberValue(values.matchNumber),
       startTime: values.startTime || undefined,
@@ -1350,6 +1354,11 @@ export function MockMatchEntryForm({
           Status: {status.replace("_", " ")}
         </span>
       </div>
+      {isDemoTestMatch ? (
+        <div className="mt-4 inline-flex w-fit rounded-md border border-neon-yellow/45 bg-neon-yellow/10 px-3 py-2 text-xs font-black uppercase text-neon-yellow">
+          Demo Test - Will Be Removed By Demo Reset
+        </div>
+      ) : null}
 
       <form
         aria-label={matchPageTitle}

@@ -1060,6 +1060,53 @@ test("Phase 2D1 admin match writes are protected and do not mutate finalisation 
   assert.match(matchWriteRepository, /USE MATCH FINALISATION WORKFLOW/);
   assert.match(matchWriteRepository, /live_match_conflict/);
   assert.match(matchWriteRepository, /stale_record/);
-  assert.match(matchWriteRepository, /is_demo: existing\?\.is_demo \?\? false/);
+  assert.match(matchWriteRepository, /is_demo: forceDemo \|\| \(existing\?\.is_demo \?\? false\)/);
   assert.doesNotMatch(matchWriteRoute + matchWriteRepository, /player_career_stats|match_stat_applications/);
+});
+
+test("admin-only demo test match helper keeps normal match creation real", () => {
+  const adminPage = source("app/admin/page.tsx");
+  const resetControl = source("components/admin/DemoDataResetControl.tsx");
+  const demoRoute = source("app/api/admin/matches/demo-test/route.ts");
+  const matchWriteRoute = source("app/api/admin/matches/route.ts");
+  const finaliseRoute = source("app/api/admin/matches/finalize/route.ts");
+  const client = source("lib/admin-match-write-client.ts");
+  const demoHelper = source("lib/demo-test-match.ts");
+  const readData = source("lib/supabase/public-read-data.ts");
+  const matchForm = source("components/matches/MockMatchEntryForm.tsx");
+  const matchWriteRepository = source("lib/supabase/match-write-repository.ts");
+  const atomicFinalisationSql = source(
+    "supabase/migrations/20260807103000_atomic_match_finalisation.sql"
+  );
+  const resetMigration = source(
+    "supabase/migrations/20260807110000_monthly_beast_writes_and_demo_reset.sql"
+  );
+
+  assert.match(adminPage, /await requireAdmin\(\)/);
+  assert.match(adminPage, /DemoDataResetControl/);
+  assert.match(resetControl, /Create Demo Test Match/);
+  assert.match(resetControl, /Demo test only/);
+  assert.match(resetControl, /createSupabaseDemoTestMatch/);
+  assert.match(client, /\/api\/admin\/matches\/demo-test/);
+  assert.match(demoRoute, /ADMIN LOGIN REQUIRED/);
+  assert.match(demoRoute, /ADMIN ACCESS REQUIRED/);
+  assert.match(demoRoute, /isAdminWithClient/);
+  assert.match(demoRoute, /createDemoTestMatch\(\)/);
+  assert.match(demoHelper, /isDemo:\s*true/);
+  assert.match(demoHelper, /isDemoTestMatch:\s*true/);
+  assert.match(matchWriteRepository, /forceDemo = false/);
+  assert.match(matchWriteRepository, /is_demo: forceDemo \|\| \(existing\?\.is_demo \?\? false\)/);
+  assert.match(matchWriteRepository, /isDemoTestMatchPayload\(existing\.payload\)/);
+  assert.match(matchWriteRepository, /createDemoTestMatch/);
+  assert.match(matchWriteRepository, /forceDemo:\s*true/);
+  assert.match(readData, /isDemo: row\.is_demo/);
+  assert.match(readData, /isDemoTestMatch: row\.is_demo && result\.match\.isDemoTestMatch === true/);
+  assert.match(matchForm, /Demo Test - Will Be Removed By Demo Reset/);
+  assert.match(matchForm, /isDemo:\s*isDemoMatch/);
+  assert.match(matchForm, /isDemoTestMatch/);
+  assert.doesNotMatch(matchWriteRoute, /isDemo|is_demo|demo-test/);
+  assert.match(finaliseRoute, /isDemoTestMatchPayload\(currentPayload\.match\)/);
+  assert.match(finaliseRoute, /finalizeAtomically/);
+  assert.doesNotMatch(atomicFinalisationSql, /set\s+is_demo|is_demo\s*=/i);
+  assert.match(resetMigration, /delete from public\.matches[\s\S]*where is_demo = true/);
 });

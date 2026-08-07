@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { createSupabaseDemoTestMatch } from "@/lib/admin-match-write-client";
 import { resetSupabaseDemoData } from "@/lib/admin-monthly-beasts-client";
 
 const RESET_DEMO_CONFIRMATION_PHRASE = "RESET DEMO";
@@ -10,6 +11,7 @@ export function DemoDataResetControl({ demoMatchCount }: { demoMatchCount: numbe
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const [isResetting, setIsResetting] = useState(false);
+  const [isCreatingDemoTestMatch, setIsCreatingDemoTestMatch] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const canReset = confirmation === RESET_DEMO_CONFIRMATION_PHRASE && !isResetting;
 
@@ -35,6 +37,24 @@ export function DemoDataResetControl({ demoMatchCount }: { demoMatchCount: numbe
     );
   }
 
+  async function createDemoTestMatch() {
+    if (isCreatingDemoTestMatch) return;
+
+    setIsCreatingDemoTestMatch(true);
+    setMessage(null);
+
+    const result = await createSupabaseDemoTestMatch();
+
+    setIsCreatingDemoTestMatch(false);
+
+    if (!result.ok) {
+      setMessage(result.message);
+      return;
+    }
+
+    window.location.href = `/matches/${result.matchId}`;
+  }
+
   return (
     <section className="admin-control-card">
       <div>
@@ -43,8 +63,19 @@ export function DemoDataResetControl({ demoMatchCount }: { demoMatchCount: numbe
       <p className="font-ui text-xs font-black uppercase text-neon-cyan">
         {demoMatchCount} sample matches active
       </p>
+      <p className="text-xs font-bold uppercase text-stone-300">
+        Demo test only: creates a temporary match marked as demo. It will be removed by Reset Demo Data.
+      </p>
       {message ? <p className="text-sm text-stone-200">{message}</p> : null}
       <div className="admin-control-links">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={createDemoTestMatch}
+          disabled={isCreatingDemoTestMatch}
+        >
+          {isCreatingDemoTestMatch ? "Creating Demo Test" : "Create Demo Test Match"}
+        </Button>
         <Button
           type="button"
           variant="secondary"

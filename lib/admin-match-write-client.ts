@@ -61,6 +61,22 @@ export function deleteSupabaseAdminDraftMatch({
   });
 }
 
+export function createSupabaseDemoTestMatch() {
+  return fetch("/api/admin/matches/demo-test", {
+    method: "POST"
+  }).then(async (response): Promise<AdminMatchWriteResult> => {
+    const result = (await response.json().catch(() => null)) as AdminMatchWriteResult | null;
+
+    if (result && "ok" in result) return result;
+
+    return {
+      ok: false,
+      message: "COULD NOT CREATE DEMO TEST MATCH",
+      code: response.ok ? "invalid_response" : "write_failed"
+    };
+  });
+}
+
 export function finalizeSupabaseAdminMatch({
   match,
   expectedUpdatedAt

@@ -564,7 +564,7 @@ test("Supabase mode sends match writes and finalisation to protected admin APIs"
   assert.match(finaliseRoute, /getMatchApplications/);
   assert.match(finaliseRoute, /buildFinalisationPlan/);
   assert.match(finaliseRoute, /finalizeAtomically/);
-  assert.match(writeRepository, /is_demo: existing\?\.is_demo \?\? false/);
+  assert.match(writeRepository, /is_demo: forceDemo \|\| \(existing\?\.is_demo \?\? false\)/);
   assert.match(writeRepository, /assertNoOtherLiveMatch/);
   assert.match(writeRepository, /deleted_at: deletedAt/);
   assert.match(writeRepository, /expectedUpdatedAt/);
