@@ -122,6 +122,11 @@ begin
     raise exception 'stale_match';
   end if;
 
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtext('gully-legends-reset-demo-data'),
+    0
+  );
+
   v_match_month_key := pg_catalog.to_char(v_match.match_date, 'YYYY-MM');
 
   perform pg_catalog.pg_advisory_xact_lock(

@@ -17,6 +17,7 @@ import {
   type SupabaseMonthlyBeastCrownRow,
   type SupabasePlayerRow
 } from "@/lib/supabase/read-repositories";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { validateSupabaseMatchPayload } from "@/lib/admin/supabase-data-check";
 
 export const PUBLIC_SUPABASE_REVALIDATE_SECONDS = 30;
@@ -156,8 +157,9 @@ export type PublicSupabaseReadData = {
   crownedAwards: CrownedMonthlyBeasts[];
 };
 
-export async function loadPublicSupabaseReadData(): Promise<PublicSupabaseReadData> {
-  const client = createSupabaseAnonymousReadClient();
+export async function loadSupabaseReadData(
+  client: SupabaseClient
+): Promise<PublicSupabaseReadData> {
   const playerRepository = new SupabasePlayerRepository(client);
   const matchRepository = new SupabaseMatchRepository(client);
   const careerRepository = new SupabaseCareerStatsRepository(client);
@@ -192,4 +194,8 @@ export async function loadPublicSupabaseReadData(): Promise<PublicSupabaseReadDa
     matches,
     crownedAwards: crownRows.map(crownFromSupabaseRow)
   };
+}
+
+export async function loadPublicSupabaseReadData(): Promise<PublicSupabaseReadData> {
+  return loadSupabaseReadData(createSupabaseAnonymousReadClient());
 }

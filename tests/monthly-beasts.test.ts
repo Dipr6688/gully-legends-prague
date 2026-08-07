@@ -752,6 +752,9 @@ test("Monthly Beasts UI replaces placeholder copy and links to Formula Room", ()
   assert.doesNotMatch(feature, /gully-legends-admin-mode/);
   assert.match(feature, /monthlyBeastCrownRepository\.crownMonth/);
   assert.match(feature, /monthlyBeastCrownRepository\.reopenMonth/);
+  assert.match(feature, /crownSupabaseMonthlyBeasts/);
+  assert.match(feature, /reopenSupabaseMonthlyBeasts/);
+  assert.doesNotMatch(feature, /write phase is implemented/);
   assert.match(feature, /Past Beasts/);
   assert.doesNotMatch(feature, /Monthly awards are intentionally empty/i);
   assert.match(dashboard, /Fielding Beast/);
@@ -768,4 +771,53 @@ test("Monthly Beasts UI replaces placeholder copy and links to Formula Room", ()
   assert.match(css, /\.monthly-beasts-control-panel[\s\S]*?overflow:\s*hidden/);
   assert.match(css, /\.monthly-beasts-admin-popover\s*{/);
   assert.match(packageJson, /monthly-beasts\.test\.js/);
+});
+
+test("Monthly Beast Supabase writes use server calculation and protected RPCs", () => {
+  const feature = monthlyFeatureSource();
+  const monthlyPage = readFileSync("app/monthly-beasts/page.tsx", "utf8");
+  const crownRoute = readFileSync("app/api/admin/monthly-beasts/crown/route.ts", "utf8");
+  const reopenRoute = readFileSync("app/api/admin/monthly-beasts/reopen/route.ts", "utf8");
+  const client = readFileSync("lib/admin-monthly-beasts-client.ts", "utf8");
+  const plan = readFileSync("lib/supabase/monthly-beast-write-plans.ts", "utf8");
+  const repository = readFileSync("lib/supabase/monthly-beast-write-repository.ts", "utf8");
+  const migration = readFileSync(
+    "supabase/migrations/20260807110000_monthly_beast_writes_and_demo_reset.sql",
+    "utf8"
+  );
+
+  assert.match(feature, /CrownDialog/);
+  assert.match(feature, /I confirm that all matches/);
+  assert.match(feature, /This month is still in progress/);
+  assert.match(feature, /crownSupabaseMonthlyBeasts\(selectedMonth\)/);
+  assert.match(feature, /reopenSupabaseMonthlyBeasts\(reopenMonthKey\)/);
+  assert.match(monthlyPage, /loadSupabaseReadData/);
+  assert.match(monthlyPage, /createSupabaseServerClient/);
+  assert.match(crownRoute, /ADMIN LOGIN REQUIRED/);
+  assert.match(crownRoute, /ADMIN ACCESS REQUIRED/);
+  assert.match(crownRoute, /buildCrownMonthlyBeastsPlan/);
+  assert.match(crownRoute, /SupabaseMatchRepository/);
+  assert.match(crownRoute, /SupabaseMonthlyBeastCrownRepository/);
+  assert.match(crownRoute, /crownMonth\(plan\)/);
+  assert.match(reopenRoute, /ADMIN LOGIN REQUIRED/);
+  assert.match(reopenRoute, /ADMIN ACCESS REQUIRED/);
+  assert.match(reopenRoute, /reopenMonth\(body\.monthKey\)/);
+  assert.match(client, /\/api\/admin\/monthly-beasts\/crown/);
+  assert.match(client, /\/api\/admin\/monthly-beasts\/reopen/);
+  assert.match(plan, /createCrownedMonthlyBeasts/);
+  assert.match(plan, /getFinalisedMatchesForMonth/);
+  assert.match(plan, /isDemo: rowsForMonth\.some/);
+  assert.match(repository, /crown_monthly_beasts_atomic/);
+  assert.match(repository, /reopen_monthly_beast_crown/);
+  assert.match(migration, /create or replace function public\.crown_monthly_beasts_atomic/);
+  assert.match(migration, /create or replace function public\.reopen_monthly_beast_crown/);
+  assert.match(migration, /public\.is_admin\(\)/);
+  assert.match(migration, /pg_advisory_xact_lock/);
+  assert.match(migration, /active_crown_exists/);
+  assert.match(migration, /jsonb_typeof\(snapshot->'playerIds'\)/);
+  assert.match(migration, /jsonb_array_length\(snapshot->'playerIds'\) = 0/);
+  assert.match(migration, /count\(distinct player_id\.value\)/);
+  assert.match(migration, /from public\.players/);
+  assert.match(migration, /status = 'revoked'/);
+  assert.match(migration, /coalesce\(max\(version\), 0\) \+ 1/);
 });

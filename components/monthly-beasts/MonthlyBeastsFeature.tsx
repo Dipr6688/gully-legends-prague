@@ -21,6 +21,10 @@ import {
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/Button";
 import { useMatchRepository } from "@/components/matches/useMatchRepository";
+import {
+  crownSupabaseMonthlyBeasts,
+  reopenSupabaseMonthlyBeasts
+} from "@/lib/admin-monthly-beasts-client";
 import { activePlayers } from "@/lib/data/players";
 import { parseLocalMatchDate } from "@/lib/leaderboard";
 import {
@@ -673,8 +677,7 @@ export function MonthlyBeastsFeature({
   const crownDisabled =
     finalisedMatchesForMonth.length === 0 ||
     !hasAnyRace ||
-    Boolean(crownedAward) ||
-    supabaseReadMode;
+    Boolean(crownedAward);
   const hasPastPendingCrown =
     !isSelectedCurrentMonth && !crownedAward && finalisedMatchesForMonth.length > 0;
   const presentationState = crownedAward
@@ -686,6 +689,9 @@ export function MonthlyBeastsFeature({
     null
   );
   const [reopenMonthKey, setReopenMonthKey] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isMonthlyBeastsActionRunning, setIsMonthlyBeastsActionRunning] =
+    useState(false);
 
   useEffect(() => {
     document.title = "MONTHLY BEASTS | Gully Legends Prague";
@@ -706,7 +712,7 @@ export function MonthlyBeastsFeature({
   }
 
   function openCrownDialog() {
-    if (crownDisabled || !isAdmin || supabaseReadMode) return;
+    if (crownDisabled || !isAdmin || isMonthlyBeastsActionRunning) return;
 
     setPendingSnapshot(
       createCrownedMonthlyBeasts({
@@ -717,8 +723,31 @@ export function MonthlyBeastsFeature({
     );
   }
 
-  function confirmCrown() {
-    if (!pendingSnapshot || supabaseReadMode) return;
+  async function confirmCrown() {
+    if (!pendingSnapshot || isMonthlyBeastsActionRunning) return;
+
+    setIsMonthlyBeastsActionRunning(true);
+    setActionMessage(null);
+
+    if (supabaseReadMode) {
+      const result = await crownSupabaseMonthlyBeasts(selectedMonth);
+
+      setIsMonthlyBeastsActionRunning(false);
+
+      if (!result.ok) {
+        setActionMessage(result.message);
+        return;
+      }
+
+      setPendingSnapshot(null);
+      setActionMessage(
+        result.isDemo
+          ? "DEMO MONTHLY BEASTS CROWNED. Demo Reset will remove this crown."
+          : "MONTHLY BEASTS CROWNED."
+      );
+      router.refresh();
+      return;
+    }
 
     monthlyBeastCrownRepository.crownMonth({
       monthKey: selectedMonth,
@@ -727,14 +756,35 @@ export function MonthlyBeastsFeature({
     });
     refreshAwards();
     setPendingSnapshot(null);
+    setIsMonthlyBeastsActionRunning(false);
   }
 
-  function confirmReopen() {
-    if (!reopenMonthKey || supabaseReadMode) return;
+  async function confirmReopen() {
+    if (!reopenMonthKey || isMonthlyBeastsActionRunning) return;
+
+    setIsMonthlyBeastsActionRunning(true);
+    setActionMessage(null);
+
+    if (supabaseReadMode) {
+      const result = await reopenSupabaseMonthlyBeasts(reopenMonthKey);
+
+      setIsMonthlyBeastsActionRunning(false);
+
+      if (!result.ok) {
+        setActionMessage(result.message);
+        return;
+      }
+
+      setReopenMonthKey(null);
+      setActionMessage("MONTH REOPENED. The live race has resumed.");
+      router.refresh();
+      return;
+    }
 
     monthlyBeastCrownRepository.reopenMonth(reopenMonthKey, "local-admin");
     refreshAwards();
     setReopenMonthKey(null);
+    setIsMonthlyBeastsActionRunning(false);
   }
 
   return (
@@ -768,11 +818,8 @@ export function MonthlyBeastsFeature({
         {hasPastPendingCrown ? (
           <p className="monthly-beasts-pending-copy">Final results are ready.</p>
         ) : null}
-        {isAdmin && supabaseReadMode ? (
-          <p className="monthly-beasts-pending-copy">
-            Supabase read cutover is active. Crown writes remain local-only until
-            the write phase is implemented.
-          </p>
+        {isAdmin && actionMessage ? (
+          <p className="monthly-beasts-pending-copy">{actionMessage}</p>
         ) : null}
         {crownedAward ? (
           <p>
@@ -781,7 +828,11 @@ export function MonthlyBeastsFeature({
           </p>
         ) : null}
         {isAdmin && !crownedAward ? (
-          <Button type="button" onClick={openCrownDialog} disabled={crownDisabled}>
+          <Button
+            type="button"
+            onClick={openCrownDialog}
+            disabled={crownDisabled || isMonthlyBeastsActionRunning}
+          >
             <Crown aria-hidden="true" />
             Crown {formatMonthLabel(selectedMonth)} Beasts
           </Button>

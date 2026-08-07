@@ -579,6 +579,7 @@ test("Supabase mode sends match writes and finalisation to protected admin APIs"
   assert.match(atomicFinalisationSql, /set search_path = ''/);
   assert.match(atomicFinalisationSql, /for update/);
   assert.match(atomicFinalisationSql, /v_match\.status <> 'in_progress'/);
+  assert.match(atomicFinalisationSql, /gully-legends-reset-demo-data/);
   assert.match(atomicFinalisationSql, /pg_advisory_xact_lock/);
   assert.match(atomicFinalisationSql, /month_already_crowned/);
   assert.match(atomicFinalisationSql, /update public\.player_career_stats/);

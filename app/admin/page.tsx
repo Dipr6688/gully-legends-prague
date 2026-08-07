@@ -1,8 +1,10 @@
 import { Camera, Crown, LogOut, Swords, Trophy, Users } from "lucide-react";
 import { logoutAdmin } from "@/app/admin/actions";
+import { DemoDataResetControl } from "@/components/admin/DemoDataResetControl";
 import { LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { requireAdmin } from "@/lib/admin/auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const controlSections = [
   {
@@ -38,6 +40,11 @@ const controlSections = [
 
 export default async function AdminPage() {
   await requireAdmin();
+  const supabase = await createSupabaseServerClient();
+  const { count } = await supabase
+    .from("matches")
+    .select("id", { count: "exact", head: true })
+    .eq("is_demo", true);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 lg:px-6">
@@ -72,6 +79,7 @@ export default async function AdminPage() {
               </section>
             );
           })}
+          <DemoDataResetControl demoMatchCount={count ?? 0} />
         </div>
 
         <form action={logoutAdmin} className="mt-6">

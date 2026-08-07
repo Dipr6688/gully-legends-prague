@@ -64,6 +64,7 @@ import {
   finalizeSupabaseAdminMatch,
   saveSupabaseAdminMatch
 } from "@/lib/admin-match-write-client";
+import { reopenSupabaseMonthlyBeasts } from "@/lib/admin-monthly-beasts-client";
 import { isSupabaseDataSource } from "@/lib/data-source";
 import { localMatchRepository } from "@/lib/match-repository";
 import { useMatchRepository } from "@/components/matches/useMatchRepository";
@@ -1293,10 +1294,22 @@ export function MockMatchEntryForm({
     setReopenCrownMonthKey(monthKey);
   }
 
-  function confirmMonthlyBeastReopenFromMatch() {
+  async function confirmMonthlyBeastReopenFromMatch() {
     if (!reopenCrownMonthKey) return;
 
-    monthlyBeastCrownRepository.reopenMonth(reopenCrownMonthKey, "local-admin");
+    if (supabaseWriteMode) {
+      setIsSavingMatch(true);
+      const result = await reopenSupabaseMonthlyBeasts(reopenCrownMonthKey);
+      setIsSavingMatch(false);
+
+      if (!result.ok) {
+        setMessage(result.message);
+        return;
+      }
+    } else {
+      monthlyBeastCrownRepository.reopenMonth(reopenCrownMonthKey, "local-admin");
+    }
+
     setReopenCrownMonthKey(null);
     setMessage(
       `${formatMonthLabel(reopenCrownMonthKey)} reopened. Finalising this match again now.`

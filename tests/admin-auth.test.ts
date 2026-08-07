@@ -995,7 +995,55 @@ test("Phase 2C2 keeps Gallery local and Phase 2D moves match writes behind admin
   assert.match(atomicFinalisationSql, /match_stat_applications/);
   assert.match(monthlyFeature, /monthlyBeastCrownRepository\.crownMonth/);
   assert.match(monthlyFeature, /supabaseReadMode/);
-  assert.match(monthlyFeature, /write phase is implemented/);
+  assert.match(monthlyFeature, /crownSupabaseMonthlyBeasts/);
+  assert.match(monthlyFeature, /reopenSupabaseMonthlyBeasts/);
+});
+
+test("Phase 2D2B protects Monthly Beast writes and Demo Reset", () => {
+  const adminPage = source("app/admin/page.tsx");
+  const resetControl = source("components/admin/DemoDataResetControl.tsx");
+  const resetRoute = source("app/api/admin/demo-data/reset/route.ts");
+  const crownRoute = source("app/api/admin/monthly-beasts/crown/route.ts");
+  const reopenRoute = source("app/api/admin/monthly-beasts/reopen/route.ts");
+  const client = source("lib/admin-monthly-beasts-client.ts");
+  const plan = source("lib/supabase/monthly-beast-write-plans.ts");
+  const repository = source("lib/supabase/monthly-beast-write-repository.ts");
+  const migration = source(
+    "supabase/migrations/20260807110000_monthly_beast_writes_and_demo_reset.sql"
+  );
+
+  assert.match(adminPage, /await requireAdmin\(\)/);
+  assert.match(adminPage, /DemoDataResetControl/);
+  assert.match(adminPage, /\.eq\("is_demo", true\)/);
+  assert.match(resetControl, /RESET DEMO/);
+  assert.match(resetControl, /disabled=\{!canReset\}/);
+  assert.match(resetControl, /resetSupabaseDemoData/);
+  assert.match(resetRoute, /ADMIN LOGIN REQUIRED/);
+  assert.match(resetRoute, /ADMIN ACCESS REQUIRED/);
+  assert.match(resetRoute, /RESET_DEMO_CONFIRMATION_PHRASE/);
+  assert.match(resetRoute, /buildResetDemoPlan/);
+  assert.match(resetRoute, /resetDemoData\(plan\)/);
+  assert.match(crownRoute, /isAdminWithClient/);
+  assert.match(reopenRoute, /isAdminWithClient/);
+  assert.match(client, /\/api\/admin\/demo-data\/reset/);
+  assert.match(plan, /applyFinalisedMatchToCareerStats/);
+  assert.match(plan, /createEmptyPlayerCareerStats/);
+  assert.match(plan, /expectedDemoMatches/);
+  assert.match(plan, /expectedRealFinalisedMatches/);
+  assert.match(repository, /reset_demo_data_atomic/);
+  assert.match(migration, /create or replace function public\.reset_demo_data_atomic/);
+  assert.match(migration, /public\.is_admin\(\)/);
+  assert.match(migration, /pg_advisory_xact_lock/);
+  assert.match(migration, /where is_demo = true/);
+  assert.match(migration, /on conflict \(player_id\) do update/);
+  assert.match(migration, /demo_match_set_changed/);
+  assert.match(migration, /real_match_set_changed/);
+  assert.match(migration, /stale_career/);
+  assert.match(migration, /delete from public\.matches[\s\S]*where is_demo = true/);
+  assert.match(migration, /delete from public\.monthly_beast_crowns[\s\S]*where is_demo = true/);
+  assert.doesNotMatch(migration, /delete from public\.players|delete from public\.admin_users|auth\.users/);
+  assert.match(migration, /revoke all on function public\.reset_demo_data_atomic\(jsonb\) from anon/);
+  assert.match(migration, /grant execute on function public\.reset_demo_data_atomic\(jsonb\) to authenticated/);
 });
 
 test("Phase 2D1 admin match writes are protected and do not mutate finalisation data", () => {

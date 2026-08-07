@@ -3,7 +3,11 @@ import { MonthlyBeastsFeature } from "@/components/monthly-beasts/MonthlyBeastsF
 import { Card } from "@/components/ui/Card";
 import { isCurrentUserAdmin } from "@/lib/admin/auth";
 import { isSupabaseDataSource } from "@/lib/data-source";
-import { loadPublicSupabaseReadData } from "@/lib/supabase/public-read-data";
+import {
+  loadPublicSupabaseReadData,
+  loadSupabaseReadData
+} from "@/lib/supabase/public-read-data";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 30;
@@ -11,7 +15,12 @@ export const revalidate = 30;
 export default async function MonthlyBeastsPage() {
   const isAdmin = await isCurrentUserAdmin();
   const supabaseMode = isSupabaseDataSource();
-  const data = supabaseMode ? await loadPublicSupabaseReadData().catch(() => null) : null;
+  const data = supabaseMode
+    ? await (isAdmin
+        ? createSupabaseServerClient().then(loadSupabaseReadData)
+        : loadPublicSupabaseReadData()
+      ).catch(() => null)
+    : null;
 
   if (supabaseMode && !data) {
     return (
