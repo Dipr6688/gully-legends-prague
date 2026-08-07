@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import {
+  buildLocalDemoImportPlan,
+  EXPECTED_LOCAL_DEMO_MATCH_COUNT,
+  IMPORT_DEMO_CONFIRMATION_PHRASE
+} from "../lib/admin/local-demo-import";
+import {
+  CAREER_PROGRESS_STORAGE_KEY,
+  type AppliedPlayerMatchProgression,
+  type CareerProgressionState,
+  type PlayerCareerStats
+} from "../lib/career-store";
+import { activePlayers } from "../lib/data/players";
+import { MATCH_HISTORY_STORAGE_KEY } from "../lib/match-history-store";
+import { MONTHLY_BEASTS_STORAGE_KEY } from "../lib/monthly-beasts-store";
+import { createCrownedMonthlyBeasts } from "../lib/monthly-beasts";
+import type {
+  FinalisedPlayerMatchRecord,
+  MatchRecord,
+  PlayerMatchXPBreakdown
+} from "../lib/types/match";
 
 function source(path: string) {
   return readFileSync(path, "utf8");
@@ -219,4 +239,436 @@ test("private admin email and passwords are not rendered to browser-facing UI", 
     assert.doesNotMatch(text, /ADMIN_PASSWORD/);
     assert.doesNotMatch(text, /SUPABASE_SERVICE_ROLE_KEY|SUPABASE_SECRET_KEY/);
   }
+});
+
+function xpBreakdown(awardedXP: number): PlayerMatchXPBreakdown {
+  return {
+    participationXP: 20,
+    winBonusXP: 5,
+    playerOfMatchXP: 0,
+    battingRunsXP: awardedXP,
+    battingMilestoneXP: 0,
+    duckPenaltyXP: 0,
+    wicketXP: 0,
+    hatTrickXP: 0,
+    maidenXP: 0,
+    expensiveOverPenaltyXP: 0,
+    fieldingXP: 0,
+    rawTotalXP: awardedXP,
+    awardedXP
+  };
+}
+
+function finalisedRecord({
+  playerId,
+  teamId,
+  runs,
+  awardedXP,
+  playerOfMatch = false
+}: {
+  playerId: string;
+  teamId: "teamA" | "teamB";
+  runs: number;
+  awardedXP: number;
+  playerOfMatch?: boolean;
+}): FinalisedPlayerMatchRecord {
+  return {
+    playerId,
+    teamId,
+    played: true,
+    playerOfMatch,
+    didBat: true,
+    runs,
+    wasOut: false,
+    wickets: teamId === "teamA" ? 1 : 0,
+    hatTricks: 0,
+    catches: teamId === "teamB" ? 1 : 0,
+    runOuts: 0,
+    stumpings: 0,
+    xpBreakdown: xpBreakdown(awardedXP),
+    progressionAppliedAt: "2026-08-05T12:00:00.000Z"
+  };
+}
+
+function demoMatch(index: number): MatchRecord {
+  const teamAPlayerId = activePlayers[0].id;
+  const teamBPlayerId = activePlayers[1].id;
+  const teamARecord = finalisedRecord({
+    playerId: teamAPlayerId,
+    teamId: "teamA",
+    runs: 20 + index,
+    awardedXP: 30 + index,
+    playerOfMatch: index === 1
+  });
+  const teamBRecord = finalisedRecord({
+    playerId: teamBPlayerId,
+    teamId: "teamB",
+    runs: 10 + index,
+    awardedXP: 20 + index
+  });
+  const teamARuns = Number(teamARecord.runs);
+  const teamBRuns = Number(teamBRecord.runs);
+
+  return {
+    id: `demo-match-${index}`,
+    matchDate: `2026-08-${String(index).padStart(2, "0")}`,
+    matchNumber: index,
+    startTime: "18:30",
+    deletedAt: null,
+    matchName: `Demo Match ${index}`,
+    venue: "CZU Gully Arena",
+    status: "finalised",
+    scheduledOversPerInnings: 4,
+    battingFirstTeamId: "teamA",
+    chasingTeamId: "teamB",
+    sharedPlayerId: null,
+    teams: {
+      teamA: {
+        teamId: "teamA",
+        teamName: "Team A",
+        playerIds: [teamAPlayerId],
+        playerPerformances: [teamARecord],
+        bowlingOvers: [],
+        totalRuns: teamARuns,
+        completedBowlingOvers: 0
+      },
+      teamB: {
+        teamId: "teamB",
+        teamName: "Team B",
+        playerIds: [teamBPlayerId],
+        playerPerformances: [teamBRecord],
+        bowlingOvers: [],
+        totalRuns: teamBRuns,
+        completedBowlingOvers: 0
+      }
+    },
+    innings: {
+      first: {
+        battingTeamId: "teamA",
+        bowlingTeamId: "teamB",
+        runs: teamARuns,
+        wicketsLost: 0,
+        extras: 0,
+        playerCount: 1,
+        completedOvers: 0,
+        battingPerformances: [teamARecord],
+        bowlingOvers: []
+      },
+      second: {
+        battingTeamId: "teamB",
+        bowlingTeamId: "teamA",
+        runs: teamBRuns,
+        wicketsLost: 0,
+        extras: 0,
+        playerCount: 1,
+        completedOvers: 0,
+        battingPerformances: [teamBRecord],
+        bowlingOvers: []
+      }
+    },
+    result: {
+      type: "win_by_runs",
+      winnerTeamId: "teamA",
+      loserTeamId: "teamB",
+      marginRuns: 10
+    },
+    finalisedPlayerRecords: [teamARecord, teamBRecord],
+    progressionAppliedAt: "2026-08-05T12:00:00.000Z",
+    appliedFinalisationVersion: 1
+  };
+}
+
+function career(playerId: string, overrides: Partial<PlayerCareerStats> = {}): PlayerCareerStats {
+  return {
+    playerId,
+    matches: 0,
+    inningsBatted: 0,
+    runs: 0,
+    fifties: 0,
+    centuries: 0,
+    dismissedDucks: 0,
+    wickets: 0,
+    catches: 0,
+    runOuts: 0,
+    stumpings: 0,
+    hatTricks: 0,
+    threeWicketHauls: 0,
+    matchesBowled: 0,
+    completedOvers: 0,
+    totalRunsConceded: 0,
+    totalXP: 0,
+    level: 0,
+    ...overrides
+  };
+}
+
+function localDemoStorage(overrides: Record<string, unknown> = {}) {
+  const matches = Array.from(
+    { length: EXPECTED_LOCAL_DEMO_MATCH_COUNT },
+    (_, index) => demoMatch(index + 1)
+  );
+  const firstPlayerId = activePlayers[0].id;
+  const playerCareers = Object.fromEntries(
+    activePlayers.map((player) => [
+      player.id,
+      career(player.id, player.id === firstPlayerId ? {
+        matches: 6,
+        inningsBatted: 6,
+        runs: 123,
+        wickets: 6,
+        catches: 2,
+        totalXP: 250,
+        level: 1
+      } : {})
+    ])
+  );
+  const appliedProgressions = Object.fromEntries(
+    matches.map((match) => {
+      const idempotencyKey = `${match.id}:${firstPlayerId}`;
+
+      return [
+        idempotencyKey,
+        {
+          idempotencyKey,
+          matchId: match.id,
+          playerId: firstPlayerId,
+          xpBreakdown: xpBreakdown(40),
+          progressionAppliedAt: "2026-08-05T12:00:00.000Z",
+          appliedFinalisationVersion: 1
+        }
+      ];
+    })
+  );
+  const currentCrown = createCrownedMonthlyBeasts({
+    matches,
+    monthKey: "2026-08",
+    crownedAt: "2026-08-31T20:00:00.000Z",
+    crownedBy: "local-admin"
+  });
+  const storage = {
+    [MATCH_HISTORY_STORAGE_KEY]: matches,
+    [CAREER_PROGRESS_STORAGE_KEY]: {
+      playerCareers,
+      appliedProgressions
+    },
+    [MONTHLY_BEASTS_STORAGE_KEY]: [currentCrown],
+    ...overrides
+  };
+  const writes: string[] = [];
+
+  return {
+    writes,
+    reader: {
+      getItem(key: string) {
+        return key in storage
+          ? JSON.stringify(storage[key as keyof typeof storage])
+          : null;
+      },
+      setItem(key: string) {
+        writes.push(key);
+      }
+    }
+  };
+}
+
+test("admin local demo importer route is protected and uses normal RLS writes", () => {
+  const page = source("app/admin/import-local-data/page.tsx");
+  const component = source("components/admin/LocalDemoImportTool.tsx");
+  const planner = source("lib/admin/local-demo-import.ts");
+
+  assert.match(page, /await requireAdmin\(\)/);
+  assert.match(component, /createSupabaseBrowserClient/);
+  assert.match(component, /VALIDATE DATA/);
+  assert.match(component, /IMPORT TO SUPABASE/);
+  assert.match(component, /staleCrownAcknowledged/);
+  assert.match(component, /will NOT be\s+imported/);
+  assert.match(component, /IMPORT_DEMO_CONFIRMATION_PHRASE/);
+  assert.match(planner, new RegExp(IMPORT_DEMO_CONFIRMATION_PHRASE));
+  assert.match(component, /runStage\("players"[\s\S]*"id"\)/);
+  assert.match(component, /runStage\("matches"[\s\S]*"id"\)/);
+  assert.match(component, /runStage\("careerStats"[\s\S]*"player_id"\)/);
+  assert.match(component, /runStage\([\s\S]*"matchStatApplications"[\s\S]*"idempotency_key"/);
+  assert.match(planner, /is_demo:\s*true/);
+
+  for (const text of [page, component, planner]) {
+    assert.doesNotMatch(text, /SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE|service-role/i);
+    assert.doesNotMatch(text, /indexedDB|galleryPhotoBlobs|GALLERY_BLOB_STORE/);
+  }
+});
+
+test("local demo import preview rebuilds clean IDs totals demo flags and local storage", () => {
+  const storage = localDemoStorage();
+  const plan = buildLocalDemoImportPlan(storage.reader);
+
+  assert.deepEqual(plan.errors, []);
+  assert.equal(plan.preview.players, 21);
+  assert.equal(plan.preview.demoMatches, 6);
+  assert.equal(plan.preview.careerRecords, 21);
+  assert.equal(plan.preview.progressionRecords, 12);
+  assert.equal(plan.preview.monthlyBeastCrowns, 1);
+  assert.equal(plan.statuses.careerRecords, "REBUILT / VALID");
+  assert.equal(plan.statuses.progressionRecords, "REBUILT / VALID");
+  assert.ok(plan.payload);
+  assert.equal(plan.payload.players[0].id, activePlayers[0].id);
+  assert.deepEqual(
+    plan.payload.matches.map((match) => match.id),
+    Array.from({ length: 6 }, (_, index) => `demo-match-${index + 1}`)
+  );
+  assert.ok(plan.payload.matches.every((match) => match.is_demo === true));
+  assert.ok(
+    plan.payload.matches.every(
+      (match) => match.stats_applied_at === "2026-08-05T12:00:00.000Z"
+    )
+  );
+  assert.equal(
+    plan.payload.careerStats.find((row) => row.player_id === activePlayers[0].id)?.runs,
+    141
+  );
+  assert.notEqual(
+    plan.payload.careerStats.find((row) => row.player_id === activePlayers[0].id)
+      ?.total_xp,
+    250
+  );
+  assert.equal(plan.payload.matchStatApplications[0].match_id, "demo-match-1");
+  assert.equal(plan.payload.matchStatApplications[0].player_id, activePlayers[0].id);
+  assert.ok(
+    plan.payload.monthlyBeastCrowns.every((crown) => crown.is_demo === true)
+  );
+  assert.equal(new Set(plan.payload.players.map((row) => row.id)).size, 21);
+  assert.equal(new Set(plan.payload.matches.map((row) => row.id)).size, 6);
+  assert.equal(
+    new Set(
+      plan.payload.matchStatApplications.map((row) => row.idempotency_key)
+    ).size,
+    12
+  );
+  assert.deepEqual(storage.writes, []);
+});
+
+test("local demo importer rebuilds missing careers and ignores eight stale progressions", () => {
+  const matches = Array.from(
+    { length: EXPECTED_LOCAL_DEMO_MATCH_COUNT },
+    (_, index) => demoMatch(index + 1)
+  );
+  const currentCrown = createCrownedMonthlyBeasts({
+    matches,
+    monthKey: "2026-08",
+    crownedAt: "2026-08-31T20:00:00.000Z",
+    crownedBy: "local-admin"
+  });
+  const missingCareerIds = ["amrit", "pritvi", "suprateem"];
+  const playerCareers = Object.fromEntries(
+    activePlayers
+      .filter((player) => !missingCareerIds.includes(player.id))
+      .map((player) => [player.id, career(player.id)])
+  );
+  const staleProgressions = Object.fromEntries(
+    Array.from({ length: 8 }, (_, index) => {
+      const playerId = activePlayers[index % 2].id;
+      const idempotencyKey = `old-missing-match-${index + 1}:${playerId}`;
+      const progression: AppliedPlayerMatchProgression = {
+        idempotencyKey,
+        matchId: `old-missing-match-${index + 1}`,
+        playerId,
+        xpBreakdown: xpBreakdown(80 + index),
+        progressionAppliedAt: "2026-07-20T12:00:00.000Z",
+        appliedFinalisationVersion: 1
+      };
+
+      return [idempotencyKey, progression];
+    })
+  );
+  const localCareerState: CareerProgressionState = {
+    playerCareers,
+    appliedProgressions: staleProgressions
+  };
+  const storage = localDemoStorage({
+    [MATCH_HISTORY_STORAGE_KEY]: matches,
+    [CAREER_PROGRESS_STORAGE_KEY]: localCareerState,
+    [MONTHLY_BEASTS_STORAGE_KEY]: [currentCrown]
+  });
+  const plan = buildLocalDemoImportPlan(storage.reader);
+
+  assert.deepEqual(plan.errors, []);
+  assert.ok(plan.payload);
+  assert.equal(plan.preview.careerRecords, 21);
+  assert.equal(plan.preview.progressionRecords, 12);
+  assert.deepEqual(
+    plan.audit.missingCanonicalCareerPlayerIds.sort(),
+    missingCareerIds.sort()
+  );
+  assert.equal(plan.audit.staleProgressionsIgnored, 8);
+  assert.equal(plan.audit.staleProgressionsWithExistingLocalMatches, 0);
+  assert.ok(plan.audit.staleProgressionsAffectLocalTotals);
+  assert.ok(
+    plan.payload.matchStatApplications.every((row) =>
+      matches.some((match) => match.id === row.match_id)
+    )
+  );
+  assert.ok(
+    plan.payload.matchStatApplications.every(
+      (row) => !row.match_id.includes("old-missing-match")
+    )
+  );
+  assert.equal(
+    plan.payload.careerStats.find((row) => row.player_id === "amrit")?.matches,
+    0
+  );
+  assert.equal(
+    plan.payload.careerStats.find((row) => row.player_id === "amrit")?.total_xp,
+    0
+  );
+  assert.deepEqual(storage.writes, []);
+});
+
+test("local demo importer excludes mismatched monthly beast crowns without blocking core data", () => {
+  const badCrown = createCrownedMonthlyBeasts({
+    matches: Array.from(
+      { length: EXPECTED_LOCAL_DEMO_MATCH_COUNT },
+      (_, index) => demoMatch(index + 1)
+    ),
+    monthKey: "2026-08",
+    crownedAt: "2026-08-31T20:00:00.000Z",
+    crownedBy: "local-admin"
+  });
+  const storage = localDemoStorage({
+    [MONTHLY_BEASTS_STORAGE_KEY]: [
+      {
+        ...badCrown,
+        batting: {
+          playerIds: [activePlayers[1].id],
+          xp: 1
+        }
+      }
+    ]
+  });
+  const plan = buildLocalDemoImportPlan(storage.reader);
+
+  assert.deepEqual(plan.errors, []);
+  assert.ok(plan.payload);
+  assert.equal(plan.preview.monthlyBeastCrowns, 0);
+  assert.equal(plan.payload.monthlyBeastCrowns.length, 0);
+  assert.equal(plan.statuses.monthlyBeastCrowns, "STALE CROWN EXCLUDED");
+  assert.ok(plan.audit.monthlyCrownMismatches.length > 0);
+  assert.equal(plan.audit.localMonthlyBeastCrowns, 1);
+  assert.equal(plan.audit.validMonthlyBeastCrownsForImport, 0);
+  assert.equal(plan.audit.staleCrownsExcluded, 1);
+  assert.match(plan.audit.staleCrownExclusionReasons.join("\n"), /Stale demo crown excluded/);
+  assert.deepEqual(storage.writes, []);
+});
+
+test("local demo importer rejects malformed local records before writing", () => {
+  const badMatch = demoMatch(1);
+  badMatch.teams.teamA.playerIds = ["ghost-player"];
+  const storage = localDemoStorage({
+    [MATCH_HISTORY_STORAGE_KEY]: [
+      badMatch,
+      ...Array.from({ length: 5 }, (_, index) => demoMatch(index + 2))
+    ]
+  });
+  const plan = buildLocalDemoImportPlan(storage.reader);
+
+  assert.equal(plan.payload, null);
+  assert.match(plan.errors.join("\n"), /unknown player ghost-player/);
+  assert.deepEqual(storage.writes, []);
 });

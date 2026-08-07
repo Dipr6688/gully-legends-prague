@@ -3344,6 +3344,18 @@ textarea {
     0 0 16px rgba(247, 199, 52, 0.22);
 }
 
+.import-action-button {
+  display: inline-flex;
+  width: fit-content;
+  min-width: max-content;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  padding-inline: 2rem;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
 .handwritten-accent {
   font-family: var(--font-permanent-marker), "Comic Sans MS", cursive;
 }
