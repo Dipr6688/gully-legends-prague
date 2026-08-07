@@ -138,7 +138,7 @@ export class SupabaseAdminMatchWriteRepository {
   }) {
     if (match.status === "finalised") {
       throw new SupabaseMatchWriteError(
-        "SUPABASE FINALISATION IS NOT ENABLED YET",
+        "USE MATCH FINALISATION WORKFLOW",
         "not_allowed"
       );
     }

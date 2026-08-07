@@ -754,6 +754,7 @@ function careerRow(playerId: string, overrides: Partial<SupabaseCareerStatsRow> 
     total_xp: 0,
     level: 0,
     stats_payload: {},
+    updated_at: "2026-08-05T12:00:00.000Z",
     ...overrides
   };
 }
@@ -950,25 +951,48 @@ test("Phase 2C2 Supabase public loader maps shared data and validates payloads",
   }
 });
 
-test("Phase 2C2 keeps Gallery local and Phase 2D1 moves match writes behind admin Supabase API", () => {
+test("Phase 2C2 keeps Gallery local and Phase 2D moves match writes behind admin Supabase APIs", () => {
   const gallery = source("components/gallery/GalleryFeature.tsx");
   const matchForm = source("components/matches/MockMatchEntryForm.tsx");
   const monthlyFeature = source("components/monthly-beasts/MonthlyBeastsFeature.tsx");
   const matchWriteRoute = source("app/api/admin/matches/route.ts");
+  const matchFinaliseRoute = source("app/api/admin/matches/finalize/route.ts");
   const matchWriteRepository = source("lib/supabase/match-write-repository.ts");
+  const matchFinalisationPlan = source("lib/supabase/match-finalisation-plan.ts");
+  const matchFinalisationRepository = source("lib/supabase/match-finalisation-repository.ts");
   const matchWriteClient = source("lib/admin-match-write-client.ts");
+  const atomicFinalisationSql = source("supabase/migrations/20260807103000_atomic_match_finalisation.sql");
 
   assert.match(gallery, /LocalGalleryRepository|useMatchRepository/);
   assert.doesNotMatch(gallery, /SupabaseGalleryPhotoRepository|loadPublicSupabaseReadData/);
   assert.match(matchForm, /saveSupabaseAdminMatch/);
-  assert.match(matchForm, /SUPABASE FINALISATION IS NOT ENABLED YET/);
+  assert.match(matchForm, /finalizeSupabaseAdminMatch/);
   assert.match(matchForm, /applyFinalisedMatchToLocalCareerStats/);
   assert.match(matchWriteClient, /\/api\/admin\/matches/);
+  assert.match(matchWriteClient, /\/api\/admin\/matches\/finalize/);
   assert.match(matchWriteRoute, /isAdminWithClient/);
   assert.match(matchWriteRoute, /validateMatchOnServer/);
+  assert.match(matchFinaliseRoute, /ADMIN LOGIN REQUIRED/);
+  assert.match(matchFinaliseRoute, /ADMIN ACCESS REQUIRED/);
+  assert.match(matchFinaliseRoute, /isAdminWithClient/);
+  assert.match(matchFinaliseRoute, /validateMatchOnServer/);
+  assert.match(matchFinaliseRoute, /hasActiveCrown/);
+  assert.match(matchFinaliseRoute, /buildFinalisationPlan/);
+  assert.match(matchFinaliseRoute, /finalizeAtomically/);
   assert.match(matchWriteRepository, /SupabaseAdminMatchWriteRepository/);
   assert.match(matchWriteRepository, /\.insert\(/);
   assert.match(matchWriteRepository, /\.update\(/);
+  assert.match(matchFinalisationPlan, /applyFinalisedMatchToCareerStats/);
+  assert.match(matchFinalisationPlan, /FINALISATION_VERSION/);
+  assert.match(matchFinalisationPlan, /existingApplications/);
+  assert.match(matchFinalisationRepository, /client\.rpc\("finalize_match_atomic"/);
+  assert.match(atomicFinalisationSql, /create or replace function public\.finalize_match_atomic/);
+  assert.match(atomicFinalisationSql, /security definer/);
+  assert.match(atomicFinalisationSql, /set search_path = ''/);
+  assert.match(atomicFinalisationSql, /for update/);
+  assert.match(atomicFinalisationSql, /stale_match/);
+  assert.match(atomicFinalisationSql, /stale_career/);
+  assert.match(atomicFinalisationSql, /match_stat_applications/);
   assert.match(monthlyFeature, /monthlyBeastCrownRepository\.crownMonth/);
   assert.match(monthlyFeature, /supabaseReadMode/);
   assert.match(monthlyFeature, /write phase is implemented/);
@@ -985,7 +1009,7 @@ test("Phase 2D1 admin match writes are protected and do not mutate finalisation 
   assert.match(matchWriteRoute, /operation: "save"/);
   assert.match(matchWriteRoute, /operation: "delete"/);
   assert.match(matchWriteRoute, /validationInputFromMatch/);
-  assert.match(matchWriteRepository, /SUPABASE FINALISATION IS NOT ENABLED YET/);
+  assert.match(matchWriteRepository, /USE MATCH FINALISATION WORKFLOW/);
   assert.match(matchWriteRepository, /live_match_conflict/);
   assert.match(matchWriteRepository, /stale_record/);
   assert.match(matchWriteRepository, /is_demo: existing\?\.is_demo \?\? false/);

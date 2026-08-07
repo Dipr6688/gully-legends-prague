@@ -490,16 +490,17 @@ test("Start Scoring works when required setup is complete", () => {
 
 test("Draft saving does not trigger finalisation side effects", () => {
   const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
-  const draftBranch = form.match(/if \(nextStatus === "finalised"\) \{[\s\S]*?\} else \{[\s\S]*?setFinalisedXPBreakdowns\(\{\}\);[\s\S]*?\}/)?.[0] ?? "";
+  const nonFinalisedSaveSection =
+    form.match(/async function persistNonFinalisedMatch[\s\S]*?async function validateAndSetStatus/)?.[0] ?? "";
 
   assert.match(form, /stage,\s*\n\s*scheduledOversPerInnings/);
   assert.match(form, /validateAndSetStatus\(\s*status,[\s\S]*?"draft"/);
-  assert.match(draftBranch, /applyFinalisedMatchToLocalCareerStats\(finalisedMatch\)/);
-  assert.match(draftBranch, /persistNonFinalisedMatch\(/);
-  assert.doesNotMatch(
-    draftBranch.match(/\} else \{[\s\S]*?setFinalisedXPBreakdowns\(\{\}\);/)?.[0] ?? "",
-    /applyFinalisedMatchToLocalCareerStats/
-  );
+  assert.match(form, /persistNonFinalisedMatch\(\s*buildCurrentMatchRecord/);
+  assert.match(nonFinalisedSaveSection, /saveSupabaseAdminMatch/);
+  assert.match(nonFinalisedSaveSection, /localMatchRepository\.saveMatch\(match\)/);
+  assert.doesNotMatch(nonFinalisedSaveSection, /applyFinalisedMatchToLocalCareerStats/);
+  assert.match(form, /if \(nextStatus === "finalised"\)[\s\S]*finalizeSupabaseAdminMatch/);
+  assert.match(form, /applyFinalisedMatchToLocalCareerStats\(finalisedMatch\)/);
 });
 
 test("Create Match form supports quick fixture creation fields", () => {
@@ -527,25 +528,60 @@ test("Create Match form rejects duplicate same-day game numbers and blocks secon
   assert.match(form, /Continue Current Match/);
 });
 
-test("Supabase mode sends non-finalised match writes to the admin API and blocks finalisation", () => {
+test("Supabase mode sends match writes and finalisation to protected admin APIs", () => {
   const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
   const apiClient = readFileSync("lib/admin-match-write-client.ts", "utf8");
   const apiRoute = readFileSync("app/api/admin/matches/route.ts", "utf8");
+  const finaliseRoute = readFileSync("app/api/admin/matches/finalize/route.ts", "utf8");
   const writeRepository = readFileSync("lib/supabase/match-write-repository.ts", "utf8");
+  const finalisationPlan = readFileSync("lib/supabase/match-finalisation-plan.ts", "utf8");
+  const finalisationRepository = readFileSync("lib/supabase/match-finalisation-repository.ts", "utf8");
+  const atomicFinalisationSql = readFileSync(
+    "supabase/migrations/20260807103000_atomic_match_finalisation.sql",
+    "utf8"
+  );
 
   assert.match(form, /const supabaseWriteMode = isSupabaseDataSource\(\)/);
   assert.match(form, /saveSupabaseAdminMatch\(\{/);
+  assert.match(form, /finalizeSupabaseAdminMatch\(\{/);
   assert.match(form, /expectedUpdatedAt: supabaseUpdatedAt/);
-  assert.match(form, /SUPABASE FINALISATION IS NOT ENABLED YET/);
+  assert.match(form, /active_crown/);
+  assert.match(form, /stale_match/);
+  assert.match(form, /stale_career/);
   assert.match(form, /localMatchRepository\.saveMatch\(finalisedMatch\)/);
+  assert.doesNotMatch(form, /setShowSupabaseFinaliseWarning/);
   assert.match(apiClient, /\/api\/admin\/matches/);
+  assert.match(apiClient, /\/api\/admin\/matches\/finalize/);
   assert.match(apiRoute, /isAdminWithClient/);
   assert.match(apiRoute, /validateMatchOnServer/);
   assert.match(apiRoute, /revalidatePath\("\/"\)/);
+  assert.match(finaliseRoute, /ADMIN LOGIN REQUIRED/);
+  assert.match(finaliseRoute, /ADMIN ACCESS REQUIRED/);
+  assert.match(finaliseRoute, /validateMatchOnServer/);
+  assert.match(finaliseRoute, /validateSupabaseMatchPayload/);
+  assert.match(finaliseRoute, /hasActiveCrown/);
+  assert.match(finaliseRoute, /getCareerRows/);
+  assert.match(finaliseRoute, /getMatchApplications/);
+  assert.match(finaliseRoute, /buildFinalisationPlan/);
+  assert.match(finaliseRoute, /finalizeAtomically/);
   assert.match(writeRepository, /is_demo: existing\?\.is_demo \?\? false/);
   assert.match(writeRepository, /assertNoOtherLiveMatch/);
   assert.match(writeRepository, /deleted_at: deletedAt/);
   assert.match(writeRepository, /expectedUpdatedAt/);
+  assert.match(finalisationPlan, /applyFinalisedMatchToCareerStats/);
+  assert.match(finalisationPlan, /createEmptyCareerProgressionState/);
+  assert.match(finalisationPlan, /existingApplications/);
+  assert.match(finalisationRepository, /client\.rpc\("finalize_match_atomic"/);
+  assert.match(finalisationRepository, /stale_match/);
+  assert.match(finalisationRepository, /stale_career/);
+  assert.match(atomicFinalisationSql, /create or replace function public\.finalize_match_atomic/);
+  assert.match(atomicFinalisationSql, /if not public\.is_admin\(\)/);
+  assert.match(atomicFinalisationSql, /set search_path = ''/);
+  assert.match(atomicFinalisationSql, /for update/);
+  assert.match(atomicFinalisationSql, /update public\.player_career_stats/);
+  assert.match(atomicFinalisationSql, /insert into public\.match_stat_applications/);
+  assert.match(atomicFinalisationSql, /update public\.matches/);
+  assert.match(atomicFinalisationSql, /already_applied/);
   assert.doesNotMatch(apiClient, /localStorage|MATCH_HISTORY_STORAGE_KEY/);
 });
 

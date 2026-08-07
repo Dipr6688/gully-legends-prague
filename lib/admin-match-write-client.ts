@@ -4,7 +4,10 @@ export type AdminMatchWriteResult =
   | {
       ok: true;
       matchId: string;
-      updatedAt: string;
+      updatedAt?: string;
+      alreadyApplied?: boolean;
+      finalisedAt?: string | null;
+      statsAppliedAt?: string | null;
     }
   | {
       ok: false;
@@ -55,5 +58,32 @@ export function deleteSupabaseAdminDraftMatch({
     operation: "delete",
     matchId,
     expectedUpdatedAt
+  });
+}
+
+export function finalizeSupabaseAdminMatch({
+  match,
+  expectedUpdatedAt
+}: {
+  match: MatchRecord;
+  expectedUpdatedAt?: string | null;
+}) {
+  return fetch("/api/admin/matches/finalize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      match,
+      expectedUpdatedAt
+    })
+  }).then(async (response): Promise<AdminMatchWriteResult> => {
+    const result = (await response.json().catch(() => null)) as AdminMatchWriteResult | null;
+
+    if (result && "ok" in result) return result;
+
+    return {
+      ok: false,
+      message: "COULD NOT FINALISE MATCH",
+      code: response.ok ? "invalid_response" : "finalisation_failed"
+    };
   });
 }

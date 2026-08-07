@@ -57,6 +57,7 @@ export type SupabaseCareerStatsRow = {
   total_xp: number;
   level: number;
   stats_payload: Record<string, unknown>;
+  updated_at: string;
 };
 
 export type SupabaseMatchStatApplicationRow = {
@@ -193,7 +194,8 @@ export class SupabaseCareerStatsRepository {
         "total_runs_conceded",
         "total_xp",
         "level",
-        "stats_payload"
+        "stats_payload",
+        "updated_at"
       ].join(", ")
     );
   }

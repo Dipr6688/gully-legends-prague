@@ -60,7 +60,10 @@ import {
 } from "@/lib/match-records";
 import type { LiveInningsScore, MatchValidationStage } from "@/lib/match-records";
 import { applyFinalisedMatchToLocalCareerStats } from "@/lib/career-store";
-import { saveSupabaseAdminMatch } from "@/lib/admin-match-write-client";
+import {
+  finalizeSupabaseAdminMatch,
+  saveSupabaseAdminMatch
+} from "@/lib/admin-match-write-client";
 import { isSupabaseDataSource } from "@/lib/data-source";
 import { localMatchRepository } from "@/lib/match-repository";
 import { useMatchRepository } from "@/components/matches/useMatchRepository";
@@ -283,7 +286,6 @@ export function MockMatchEntryForm({
   );
   const [isSavingMatch, setIsSavingMatch] = useState(false);
   const [liveConflictMatchId, setLiveConflictMatchId] = useState<string | null>(null);
-  const [showSupabaseFinaliseWarning, setShowSupabaseFinaliseWarning] = useState(false);
   const [blockedCrownMonthKey, setBlockedCrownMonthKey] = useState<string | null>(
     null
   );
@@ -1086,7 +1088,7 @@ export function MockMatchEntryForm({
       return false;
     }
 
-    setSupabaseUpdatedAt(result.updatedAt);
+    setSupabaseUpdatedAt(result.updatedAt ?? null);
     router.refresh();
     return true;
   }
@@ -1129,23 +1131,19 @@ export function MockMatchEntryForm({
       }
 
       if (nextStatus === "finalised" && !options.skipMonthlyCrownGuard) {
-        if (supabaseWriteMode) {
-          setShowSupabaseFinaliseWarning(true);
-          setMessage("SUPABASE FINALISATION IS NOT ENABLED YET");
-          return false;
-        }
+        if (!supabaseWriteMode) {
+          const matchMonthKey = getMatchMonthKey(values.matchDate);
+          const activeCrown = matchMonthKey
+            ? monthlyBeastCrownRepository.getActiveCrown(matchMonthKey)
+            : null;
 
-        const matchMonthKey = getMatchMonthKey(values.matchDate);
-        const activeCrown = matchMonthKey
-          ? monthlyBeastCrownRepository.getActiveCrown(matchMonthKey)
-          : null;
-
-        if (matchMonthKey && activeCrown) {
-          setBlockedCrownMonthKey(matchMonthKey);
-          setMessage(
-            `${formatMonthLabel(matchMonthKey)} has already been crowned. Reopen the month before finalising this match.`
-          );
-          return false;
+          if (matchMonthKey && activeCrown) {
+            setBlockedCrownMonthKey(matchMonthKey);
+            setMessage(
+              `${formatMonthLabel(matchMonthKey)} has already been crowned. Reopen the month before finalising this match.`
+            );
+            return false;
+          }
         }
       }
 
@@ -1191,8 +1189,36 @@ export function MockMatchEntryForm({
           appliedAt
         );
 
-        applyFinalisedMatchToLocalCareerStats(finalisedMatch);
-        localMatchRepository.saveMatch(finalisedMatch);
+        if (supabaseWriteMode) {
+          const finaliseResult = await finalizeSupabaseAdminMatch({
+            match: finalisedMatch,
+            expectedUpdatedAt: supabaseUpdatedAt
+          });
+
+          if (!finaliseResult.ok) {
+            if (finaliseResult.code === "active_crown") {
+              const matchMonthKey = getMatchMonthKey(values.matchDate);
+
+              setMessage(
+                `${matchMonthKey ? formatMonthLabel(matchMonthKey) : "This month"} HAS ALREADY BEEN CROWNED. Finalising this match could change the Monthly Beast results. Reopen the month before finalising this match.`
+              );
+            } else if (finaliseResult.code === "stale_match") {
+              setMessage("COULD NOT FINALISE MATCH. This match changed in another tab. Refresh and try again.");
+            } else if (finaliseResult.code === "stale_career") {
+              setMessage("COULD NOT FINALISE MATCH. Player career data changed. Refresh and try again.");
+            } else {
+              setMessage(`${finaliseResult.message}. Your changes were not saved. Please try again.`);
+            }
+
+            return false;
+          }
+
+          router.refresh();
+        } else {
+          applyFinalisedMatchToLocalCareerStats(finalisedMatch);
+          localMatchRepository.saveMatch(finalisedMatch);
+        }
+
         setFinalisedXPBreakdowns(
           Object.fromEntries(
             [
@@ -1215,6 +1241,9 @@ export function MockMatchEntryForm({
 
       setStatus(nextStatus);
       setMessage(getStatusMessage(nextStatus, result.result));
+      if (nextStatus === "finalised" && supabaseWriteMode) {
+        window.location.href = `/matches/${matchId}`;
+      }
       return true;
     } catch {
       setMessage("COULD NOT SAVE MATCH. Your changes were not saved. Please try again.");
@@ -1910,11 +1939,6 @@ export function MockMatchEntryForm({
         onReopen={() => openReopenCrownDialog(blockedCrownMonthKey)}
       />
     ) : null}
-    {showSupabaseFinaliseWarning ? (
-      <SupabaseFinalisationWarning
-        onClose={() => setShowSupabaseFinaliseWarning(false)}
-      />
-    ) : null}
     {reopenCrownMonthKey ? (
       <ReopenMonthlyBeastsDialog
         monthKey={reopenCrownMonthKey}
@@ -2004,33 +2028,6 @@ function MonthlyCrownFinalisationWarning({
           </Button>
           <Button type="button" variant="secondary" onClick={onReopen}>
             Reopen {formatMonthLabel(monthKey)}
-          </Button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function SupabaseFinalisationWarning({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="monthly-beasts-dialog-backdrop">
-      <section
-        className="monthly-beasts-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="supabase-finalisation-warning-title"
-      >
-        <p className="formula-eyebrow">Finalisation migration pending</p>
-        <h2 id="supabase-finalisation-warning-title">
-          SUPABASE FINALISATION IS NOT ENABLED YET
-        </h2>
-        <p className="monthly-beasts-dialog-summary">
-          This match is safely stored in Supabase, but career XP/stat
-          finalisation is being migrated separately.
-        </p>
-        <div className="monthly-beasts-dialog-actions">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Keep Editing Match
           </Button>
         </div>
       </section>
