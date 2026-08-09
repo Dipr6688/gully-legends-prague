@@ -611,11 +611,14 @@ export function calculatePlayerRatingSnapshots(
 
   return totals.map((total, index) => {
     const rawRatings = {
-      batting: clampRating(
-        0.6 * percentileRank(runsPerInnings, runsPerInnings[index]) +
-          0.25 * percentileRank(milestoneIndex, milestoneIndex[index]) +
-          0.15 * percentileRank(duckAvoidance, duckAvoidance[index])
-      ),
+      batting:
+        total.inningsBatted > 0
+          ? clampRating(
+              0.6 * percentileRank(runsPerInnings, runsPerInnings[index]) +
+                0.25 * percentileRank(milestoneIndex, milestoneIndex[index]) +
+                0.15 * percentileRank(duckAvoidance, duckAvoidance[index])
+            )
+          : 0,
       bowling:
         total.matchesBowled > 0 && total.completedOvers > 0
           ? clampRating(

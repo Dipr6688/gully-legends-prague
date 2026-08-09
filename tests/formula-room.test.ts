@@ -16,6 +16,8 @@ const formulaRoomSource = () =>
   readFileSync("components/stats/FormulaRoom.tsx", "utf8");
 const playerProfileSource = () =>
   readFileSync("components/players/PlayerProfile.tsx", "utf8");
+const playerCardSource = () =>
+  readFileSync("components/players/PlayerCard.tsx", "utf8");
 const playerPowerIconConfigSource = () =>
   readFileSync("lib/data/player-power-icons.ts", "utf8");
 const statsPageSource = () => readFileSync("app/stats/page.tsx", "utf8");
@@ -280,6 +282,7 @@ test("Formula Room uses approved assets and responsive overflow protections", ()
 test("Player Power surfaces use the approved shared icon configuration", () => {
   const formulaRoom = formulaRoomSource();
   const playerProfile = playerProfileSource();
+  const playerCard = playerCardSource();
   const iconConfig = playerPowerIconConfigSource();
   const css = cssSource();
 
@@ -301,6 +304,12 @@ test("Player Power surfaces use the approved shared icon configuration", () => {
   assert.match(playerProfile, /PLAYER_POWER_ICONS\.batting/);
   assert.match(playerProfile, /PLAYER_POWER_ICONS\.bowling/);
   assert.match(playerProfile, /PLAYER_POWER_ICONS\.fielding/);
+  assert.match(playerProfile, /value: player\.ratings\.batting/);
+  assert.match(playerProfile, /value: player\.ratings\.bowling/);
+  assert.match(playerProfile, /value: player\.ratings\.fielding/);
+  assert.match(playerCard, /value=\{player\.ratings\.batting\}/);
+  assert.match(playerCard, /value=\{player\.ratings\.bowling\}/);
+  assert.match(playerCard, /value=\{player\.ratings\.fielding\}/);
   assert.doesNotMatch(playerProfile, /\/ui\/most-runs-bat\.png/);
   assert.doesNotMatch(playerProfile, /\/ui\/most-wickets-wicket-smash\.png/);
   assert.doesNotMatch(playerProfile, /\/ui\/most-catches-gloves-ball\.png/);

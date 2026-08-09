@@ -34,6 +34,7 @@ import type {
   TeamInnings
 } from "../lib/types/match";
 import type { Player } from "../lib/types/player";
+import { activePlayers } from "../lib/data/players";
 
 function performance(
   overrides: Partial<PlayerMatchPerformance> & {
@@ -665,6 +666,71 @@ test("zero completed matches are unrated with no numeric rating", () => {
     status: "UNRATED",
     value: null
   });
+});
+
+test("zero-career Player Power remains zero after clean reset state", () => {
+  const snapshots = calculatePlayerRatingSnapshots([
+    {
+      playerId: "clean-player",
+      finalisedMatches: 0,
+      inningsBatted: 0,
+      totalRuns: 0,
+      fifties: 0,
+      centuries: 0,
+      dismissedDucks: 0,
+      matchesBowled: 0,
+      totalWickets: 0,
+      completedOvers: 0,
+      totalRunsConceded: 0,
+      hatTricks: 0,
+      threeWicketHauls: 0,
+      catches: 0,
+      runOuts: 0,
+      stumpings: 0
+    }
+  ]);
+
+  assert.deepEqual(snapshots[0].rawRatings, {
+    batting: 0,
+    bowling: 0,
+    fielding: 0
+  });
+  assert.deepEqual(snapshots[0].displayedRatings.batting, {
+    status: "UNRATED",
+    value: null
+  });
+});
+
+test("clean player after Demo Reset maps to 0/100 for all Player Power displays", () => {
+  const resetState = createEmptyCareerProgressionState();
+  const mergedPlayers = mergePlayersWithCareerState(activePlayers, resetState);
+
+  for (const player of mergedPlayers) {
+    assert.equal(player.stats.matches, 0);
+    assert.equal(player.xp, 0);
+    assert.deepEqual(player.ratings, {
+      batting: 0,
+      bowling: 0,
+      fielding: 0
+    });
+  }
+});
+
+test("real non-zero batting Player Power still calculates from batting data", () => {
+  const snapshots = calculatePlayerRatingSnapshots([
+    aggregatePlayerPerformances("steady", [
+      performance({ playerId: "steady", didBat: true, runs: 10 })
+    ]),
+    aggregatePlayerPerformances("striker", [
+      performance({ playerId: "striker", didBat: true, runs: 30 })
+    ])
+  ]);
+  const byPlayerId = new Map(
+    snapshots.map((snapshot) => [snapshot.playerId, snapshot.rawRatings.batting])
+  );
+
+  assert.equal(byPlayerId.get("steady"), 20);
+  assert.equal(byPlayerId.get("striker"), 80);
 });
 
 test("no bowling data produces no invalid delivery rating", () => {
