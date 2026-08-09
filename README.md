@@ -3,31 +3,53 @@
 Gaming/comic-style cricket website for the Gully Legends Prague group at
 CZU Gully Arena.
 
-The app is built with real responsive Next.js components, typed local data, and
-local browser persistence. It is currently local-first: Supabase, production
-authentication, and hosted database storage are intentionally not connected yet.
+The app is built with real responsive Next.js components. It now uses Supabase
+for shared public data, secure Admin authentication, match management,
+progression, Monthly Beasts, Demo Reset, and Gallery persistence.
 
 ## Tech Stack
 
 - Next.js App Router
 - TypeScript
 - Tailwind CSS plus custom CSS in `app/globals.css`
-- Local TypeScript roster data
-- Browser `localStorage` for local match history and career progress
-- Browser IndexedDB for local Gallery photo blobs and metadata
-- Server routes for team balancing and match validation
+- Supabase Auth
+- Supabase Postgres with Row Level Security
+- Supabase Storage public `gallery` bucket
+- Local fallback mode for development when `NEXT_PUBLIC_DATA_SOURCE=local`
 - Node test runner for project logic and source-level UI checks
+
+## Current Status
+
+Implemented:
+
+- Public Supabase-backed website reads
+- Secure Admin login with password reset
+- Admin-only Create Match, match scoring, and atomic finalisation
+- Career statistics, XP, Levels, Player Power, and progression ledger
+- Hall of Legends rankings
+- Monthly Beasts Crown/Reopen
+- Reset Demo Data
+- Admin-only demo test match helper
+- Supabase-backed Gallery using Storage plus `public.gallery_photos`
+- Local fallback mode for match/gallery development data
+
+Not done in this repository:
+
+- Automatic deployment
+- Manual Supabase data changes from code
+- Seeding fabricated Gallery photos
 
 ## Main Pages
 
 - `/` - Dashboard with approved Prague hero image, next match, player browser,
-  Monthly Beasts preview, Gully Rules, recent match preview, and Top Performers.
+  Monthly Beasts preview, Gully Rules, recent match preview, and Legend
+  Spotlight.
 - `/players` - Full roster browser with search, play-style filtering, and
   sorting.
 - `/players/[playerId]` - Comic-style player dossier with complete approved
   player-card artwork, Player Power, Player File, stats, and special move.
 - `/matches` - Today fixtures, scheduled matches, and finalised match archive.
-- `/matches/new` - Create Match workflow.
+- `/matches/new` - Admin Create Match workflow.
 - `/matches/[matchId]` - Draft editor, live match-entry workflow, or finalised
   scorecard depending on match status.
 - `/leaderboard` - Hall of Legends rankings.
@@ -35,7 +57,10 @@ authentication, and hosted database storage are intentionally not connected yet.
   and fielding XP.
 - `/stats` - Formula Room explaining the real XP, Level, Player Power, and
   match-result calculations.
-- `/gallery` - Local-first Gully photo memory wall.
+- `/gallery` - Shared Gully photo memory wall backed by Supabase Storage.
+- `/admin` - Admin Control Room.
+- `/admin/supabase-data-check` - Admin-only Supabase data diagnostics.
+- `/admin/import-local-data` - Admin-only local demo import utility.
 
 ## Current Roster
 
@@ -70,22 +95,21 @@ Every player starts with:
 
 - Level `0`
 - XP `0`
-- Batting, bowling, and fielding ratings at `0/100`
-- All-time matches, runs, wickets, catches, run-outs, stumpings, wins, and
-  Player of the Match awards at `0`
+- Blade Power, Delivery Threat, and Field Reflex at `0/100`
+- All-time statistics at `0`
 
 ## Approved Visual Assets
 
-The dashboard hero uses:
+Dashboard hero:
 
 ```text
 public/backgrounds/prague-gully-arena.png
 ```
 
-Use this image directly. Do not regenerate, repaint, replace, blur heavily, or
-remove the signboards and wall text baked into the image.
+Use this approved image directly. Do not regenerate, repaint, replace, blur
+heavily, or remove the signboards and wall text baked into the image.
 
-The navbar brand uses:
+Navbar brand:
 
 ```text
 public/branding/gully-legends-emblem-tight.png
@@ -95,27 +119,80 @@ The emblem already includes the `No Rules. Only Fun!` tagline, so the app must
 not render a duplicate tagline beside it.
 
 Player cards use approved 2:3 PNG artwork. The comic card title is already
-printed inside each PNG. The app renders the full image with `object-fit:
-contain` and renders only dynamic values such as player name, role, Level, XP,
-ratings, and statistics in HTML.
+printed inside each PNG. The app renders the complete artwork and keeps dynamic
+values such as name, role, Level, XP, ratings, and statistics in HTML.
+
+## Supabase Architecture
+
+Core schema lives in `supabase/migrations`.
+
+Main tables:
+
+- `public.admin_users`
+- `public.players`
+- `public.matches`
+- `public.player_career_stats`
+- `public.match_stat_applications`
+- `public.monthly_beast_crowns`
+- `public.gallery_photos`
+
+Key security rules:
+
+- Public visitors can read approved public data.
+- Only authenticated Admin users can write protected data.
+- Admin authorization is checked by `public.is_admin()`.
+- Security-definer RPCs use `set search_path = ''`.
+- Normal visitors cannot upload, edit, delete, feature photos, or modify match
+  data.
+
+Important RPCs:
+
+- `public.finalize_match_atomic(finalisation_plan jsonb)`
+- `public.crown_monthly_beasts_atomic(crown_plan jsonb)`
+- `public.reopen_monthly_beast_crown(month_key text)`
+- `public.reset_demo_data_atomic(reset_plan jsonb)`
+
+The match finalisation RPC applies career stats and progression atomically and
+preserves idempotency through `match_stat_applications`.
+
+## Admin Authentication
+
+Admin login uses:
+
+- Supabase Auth user
+- `public.admin_users`
+- `ADMIN_LOGIN_ID`
+- `ADMIN_LOGIN_EMAIL`
+
+Password recovery flow:
+
+```text
+Admin Login
+Forgot password?
+Supabase email link
+/admin/reset-password
+New password + confirmation
+Back to Admin Login
+```
+
+The public UI does not expose signup or private admin email addresses.
 
 ## Match Workflow
 
-The match workflow is local-first but no longer a mock placeholder in the UI.
-It supports:
+The match workflow supports:
 
 - Scheduled draft fixtures
 - Available Today selection
 - Manual team selection with cross-team mutual exclusion
 - Server-side auto-balancing from available player IDs
-- Odd-player support through a single Shared Player
+- Odd-player support through one Shared Player
 - Draft saving without requiring complete scorecard data
 - Live match entry
 - Team Bowling over entry
 - Player Match Records under each team
-- Dismissal details for wickets that have actually occurred
+- Dismissal details only for wickets that have actually occurred
 - Automatic innings stop rules
-- Final result calculation on finalisation
+- Atomic Supabase finalisation
 - Read-only finalised scorecard view
 - Scheduled fixture deletion before play starts
 
@@ -126,11 +203,23 @@ Result rules:
 - Equal final totals mean a tie.
 - No Result is only for abandoned or cancelled matches.
 
-## XP, Levels, Ratings, and Awards
+## Demo Data Tools
 
-The real calculation source is `lib/progression.ts`. Formula Room displays
-values from the same constants and utilities used by the app; it does not keep
-separate display-only formulas.
+The Admin Control Room includes:
+
+- Reset Demo Data
+- Create Demo Test Match
+
+Demo test matches are created server-side with `is_demo = true`. They use the
+same normal match workflow and atomic finalisation path as real matches, then
+Reset Demo Data can remove them later.
+
+Normal Create Match remains `is_demo = false`; there is no public demo checkbox.
+
+## XP, Levels, Player Power, and Awards
+
+The calculation source is `lib/progression.ts`. Formula Room displays values
+from the same constants and utilities used by the app.
 
 Core XP rules include:
 
@@ -139,7 +228,7 @@ Core XP rules include:
 - Player of the Match: `15 XP`
 - Batting runs: `floor(runs / 2)`, capped at `30 XP`
 - Fifty: `15 XP`
-- Century: `25 XP`
+- Century additional bonus: `25 XP`
 - Dismissed duck: `-8 XP`
 - Wicket: `10 XP`
 - Hat-trick: `25 XP`
@@ -149,15 +238,23 @@ Core XP rules include:
 - Run-out: `8 XP`
 - Stumping: `8 XP`
 - Fielding XP capped at `24 XP`
-- Match XP clamped to a minimum of `-15 XP`
+- Match XP clamped to a minimum of `-15 XP` and maximum of `120 XP`
 
 Level progression uses:
 
 ```ts
-100 + 50 * currentLevel + 20 * currentLevel * currentLevel
+150 + 50 * currentLevel + 10 * currentLevel * currentLevel
 ```
 
 Once achieved, a player's Level cannot be reduced by later penalties.
+
+Player Power:
+
+- Blade Power: batting performance
+- Delivery Threat: bowling performance
+- Field Reflex: fielding performance
+
+A clean zero-career player shows `0/100` for all three Player Power values.
 
 Monthly Beasts are discipline awards:
 
@@ -170,25 +267,59 @@ career leaders such as runs, bowler wickets, catches, XP, and Level.
 
 ## Gallery
 
-The Gallery at `/gallery` is a local-first Gully memory wall for group photos,
-match days, celebrations, awards, Prague outings, and off-field moments.
+The Gallery at `/gallery` is backed by:
 
-Normal viewers can browse photos. Admin controls are hidden unless local admin
-mode is active. For local development, open:
+- Supabase Storage public bucket: `gallery`
+- Metadata table: `public.gallery_photos`
+- Repository: `lib/gallery-repository.ts`
+- Browser image optimisation: `lib/gallery-image.ts`
+
+Admin upload flow:
+
+1. Select one or more images.
+2. Review previews and metadata.
+3. Optimise image in the browser.
+4. Upload directly to Supabase Storage with authenticated Admin JWT.
+5. Insert `gallery_photos` metadata.
+6. If metadata insert fails, attempt Storage cleanup.
+
+Storage paths use:
 
 ```text
-http://localhost:3001/gallery?admin=1
+gallery/YYYY/MM/<uuid>-<sanitised-file-name>.<jpg|png|webp>
 ```
 
-Gallery storage uses:
+Uploads use `upsert: false`.
 
-- `lib/gallery.ts` for the typed `GalleryRepository` interface
-- `lib/gallery-repository.ts` for the local IndexedDB implementation
-- `lib/gallery-image.ts` for browser canvas image optimisation
+Public visitors can browse photos, use filters, open the lightbox, and follow
+related match scorecard links. They cannot upload, edit, delete, or feature
+photos.
 
-Local Gallery uploads are stored only in the browser/device where they are
-added. A future Supabase adapter can use a `gallery` storage bucket and
-`gallery_photos` metadata table without redesigning the UI.
+When `NEXT_PUBLIC_DATA_SOURCE=local`, the Gallery can still use the existing
+IndexedDB implementation. In Supabase mode, it does not silently fall back to
+IndexedDB.
+
+## Environment Variables
+
+Create `.env.local` in the project root.
+
+```powershell
+NEXT_PUBLIC_SITE_URL=http://localhost:3001
+NEXT_PUBLIC_DATA_SOURCE=supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+ADMIN_LOGIN_ID=your-admin-id
+ADMIN_LOGIN_EMAIL=your-admin-email@example.com
+```
+
+For local fallback mode:
+
+```powershell
+NEXT_PUBLIC_DATA_SOURCE=local
+```
+
+Use the publishable Supabase key only. Do not put service-role credentials in
+the browser or `.env.local`.
 
 ## Local Development
 
@@ -224,24 +355,10 @@ npm.cmd run test
 npm.cmd run build
 ```
 
-The current test suite covers progression, ratings, team balancing, match
-records, scorecard validation, Hall of Legends, Monthly Beasts, Formula Room,
-Dashboard behavior, and Gallery source/workflow checks.
-
-## Data and Persistence Status
-
-Current local persistence:
-
-- Career progress: browser `localStorage`
-- Match history: browser `localStorage`
-- Gallery photos: browser IndexedDB
-
-Not connected yet:
-
-- Supabase
-- Production authentication
-- Production photo storage
-- Shared multi-device database state
+The current test suite covers progression, Player Power reset behavior, team
+balancing, match records, scorecard validation, Hall of Legends, Monthly
+Beasts, Formula Room, Dashboard behavior, Gallery persistence, and Admin
+security checks.
 
 ## Agent Handoff
 
