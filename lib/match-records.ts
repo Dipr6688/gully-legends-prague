@@ -235,6 +235,62 @@ export function normalizeStoredRuns(value: unknown): number | "" {
   return Number.isFinite(parsed) ? Math.max(0, parsed) : "";
 }
 
+export function normalizeBattingPosition(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+
+  const parsed = Number.parseInt(String(value), 10);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function getNextBattingPosition(
+  performances: PlayerMatchPerformance[],
+  teamId: TeamId
+): number {
+  const currentMaximum = performances
+    .filter(
+      (performance) =>
+        (performance.representingTeamId ?? performance.teamId) === teamId &&
+        performance.didBat
+    )
+    .reduce(
+      (maximum, performance) =>
+        Math.max(maximum, normalizeBattingPosition(performance.battingPosition) ?? 0),
+      0
+    );
+
+  return currentMaximum + 1;
+}
+
+export function sortBattingPerformances(
+  performances: PlayerMatchPerformance[]
+): PlayerMatchPerformance[] {
+  return performances
+    .map((performance, index) => ({ performance, index }))
+    .sort((left, right) => {
+      const leftPosition = left.performance.didBat
+        ? normalizeBattingPosition(left.performance.battingPosition)
+        : null;
+      const rightPosition = right.performance.didBat
+        ? normalizeBattingPosition(right.performance.battingPosition)
+        : null;
+
+      if (leftPosition !== null && rightPosition !== null) {
+        return leftPosition - rightPosition || left.index - right.index;
+      }
+
+      if (leftPosition !== null) return -1;
+      if (rightPosition !== null) return 1;
+
+      if (left.performance.didBat !== right.performance.didBat) {
+        return left.performance.didBat ? -1 : 1;
+      }
+
+      return left.index - right.index;
+    })
+    .map(({ performance }) => performance);
+}
+
 export function calculateTeamTotal(
   teamId: TeamId,
   performances: PlayerMatchPerformance[]

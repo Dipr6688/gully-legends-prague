@@ -1,6 +1,7 @@
 import {
   calculateBattingAllocation,
   getChasingTeamId,
+  sortBattingPerformances,
   sanitizeRuns
 } from "./match-records";
 import type {
@@ -138,7 +139,7 @@ export function buildBattingRows(
 ): ScorecardBattingRow[] {
   const dismissals = innings.bowlingOvers.flatMap((over) => over.dismissals);
 
-  return innings.battingPerformances.map((performance) => ({
+  return sortBattingPerformances(innings.battingPerformances).map((performance) => ({
     key: `${performance.playerId}:${performance.representingTeamId ?? performance.teamId}`,
     playerId: performance.playerId,
     teamId: performance.representingTeamId ?? performance.teamId,

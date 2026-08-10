@@ -45,12 +45,15 @@ import {
   getChasingTeamId,
   getLiveInningsScore,
   getMaximumRunsForPlayer,
+  getNextBattingPosition,
   isDismissalComplete,
   isBowlingOverComplete,
+  normalizeBattingPosition,
   normalizeNonNegativeIntegerInput,
   normalizeStoredRuns,
   sanitizeRuns,
   setPlayerAvailability,
+  sortBattingPerformances,
   getOrdinaryCrossTeamPlayerIds,
   getPerformanceKey,
   getPerformanceRecordKey,
@@ -152,6 +155,7 @@ function createPerformance(
     played: true,
     playerOfMatch: false,
     didBat: false,
+    battingPosition: null,
     runs: "",
     wasOut: false,
     wickets: 0,
@@ -216,6 +220,7 @@ function getPerformanceStateFromMatch(
       getPerformanceRecordKey(performance),
       {
         ...performance,
+        battingPosition: normalizeBattingPosition(performance.battingPosition),
         runs: normalizeStoredRuns(performance.runs)
       }
     ])
@@ -811,9 +816,62 @@ export function MockMatchEntryForm({
 
     updatePerformance(playerId, representingTeamId, {
       didBat,
+      battingPosition: didBat
+        ? normalizeBattingPosition(current.battingPosition) ??
+          getNextBattingPosition(Object.values(performances), representingTeamId)
+        : null,
       runs: didBat ? normalizeStoredRuns(current.runs) : "",
       wasOut: didBat ? current.wasOut : false
     });
+  }
+
+  function moveBattingPosition(
+    playerId: string,
+    representingTeamId: TeamId,
+    direction: "up" | "down"
+  ) {
+    if (isLocked) return;
+    const key = getPerformanceKey(playerId, representingTeamId);
+    const teamBatters = sortBattingPerformances(
+      Object.values(performances).filter(
+        (performance) =>
+          (performance.representingTeamId ?? performance.teamId) === representingTeamId &&
+          performance.didBat
+      )
+    );
+    const currentIndex = teamBatters.findIndex(
+      (performance) => getPerformanceRecordKey(performance) === key
+    );
+    const swapIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+
+    if (
+      currentIndex < 0 ||
+      swapIndex < 0 ||
+      swapIndex >= teamBatters.length
+    ) {
+      return;
+    }
+
+    const currentPerformance = teamBatters[currentIndex];
+    const swapPerformance = teamBatters[swapIndex];
+    const currentPosition =
+      normalizeBattingPosition(currentPerformance.battingPosition) ??
+      currentIndex + 1;
+    const swapPosition =
+      normalizeBattingPosition(swapPerformance.battingPosition) ?? swapIndex + 1;
+    const swapKey = getPerformanceRecordKey(swapPerformance);
+
+    setPerformances((current) => ({
+      ...current,
+      [key]: {
+        ...(current[key] ?? currentPerformance),
+        battingPosition: swapPosition
+      },
+      [swapKey]: {
+        ...(current[swapKey] ?? swapPerformance),
+        battingPosition: currentPosition
+      }
+    }));
   }
 
   function updateBowlingOver(
@@ -876,6 +934,8 @@ export function MockMatchEntryForm({
     updates: Partial<DismissalEvent>
   ) {
     if (isLocked) return;
+    const dismissedBatterId = updates.dismissedBatterId;
+
     setBowlingOvers((current) => ({
       ...current,
       [teamId]: current[teamId].map((over) =>
@@ -910,6 +970,35 @@ export function MockMatchEntryForm({
           : over
       )
     }));
+
+    if (dismissedBatterId) {
+      const currentOver = bowlingOvers[teamId].find((over) => over.id === overId);
+      const battingTeamId = currentOver?.battingTeamId;
+
+      if (battingTeamId) {
+        const key = getPerformanceKey(dismissedBatterId, battingTeamId);
+
+        setPerformances((current) => {
+          const existing = current[key] ?? createPerformance(dismissedBatterId, battingTeamId);
+          const battingPosition =
+            normalizeBattingPosition(existing.battingPosition) ??
+            getNextBattingPosition(Object.values(current), battingTeamId);
+
+          return {
+            ...current,
+            [key]: {
+              ...existing,
+              teamId: battingTeamId,
+              representingTeamId: battingTeamId,
+              didBat: true,
+              battingPosition,
+              runs: normalizeStoredRuns(existing.runs),
+              wasOut: true
+            }
+          };
+        });
+      }
+    }
   }
 
   function removeDismissal(teamId: TeamId, overId: string, dismissalId: string) {
@@ -1791,6 +1880,7 @@ export function MockMatchEntryForm({
                 isFinalised={isFinalised}
                 finalisedXPBreakdowns={finalisedXPBreakdowns}
                 onDidBatChange={handleDidBatChange}
+                onMoveBattingPosition={moveBattingPosition}
                 onUpdatePerformance={updatePerformance}
               />
             </MatchDetailsDisclosure>
@@ -1811,6 +1901,7 @@ export function MockMatchEntryForm({
             isFinalised={isFinalised}
             finalisedXPBreakdowns={finalisedXPBreakdowns}
             onDidBatChange={handleDidBatChange}
+            onMoveBattingPosition={moveBattingPosition}
             onUpdatePerformance={updatePerformance}
           />
           )}
@@ -1837,6 +1928,7 @@ export function MockMatchEntryForm({
                 isFinalised={isFinalised}
                 finalisedXPBreakdowns={finalisedXPBreakdowns}
                 onDidBatChange={handleDidBatChange}
+                onMoveBattingPosition={moveBattingPosition}
                 onUpdatePerformance={updatePerformance}
               />
             </MatchDetailsDisclosure>
@@ -1857,6 +1949,7 @@ export function MockMatchEntryForm({
             isFinalised={isFinalised}
             finalisedXPBreakdowns={finalisedXPBreakdowns}
             onDidBatChange={handleDidBatChange}
+            onMoveBattingPosition={moveBattingPosition}
             onUpdatePerformance={updatePerformance}
           />
           )}
@@ -2877,6 +2970,7 @@ function TeamPlayerRecordsSection({
   isFinalised,
   finalisedXPBreakdowns,
   onDidBatChange,
+  onMoveBattingPosition,
   onUpdatePerformance
 }: {
   title: string;
@@ -2898,6 +2992,11 @@ function TeamPlayerRecordsSection({
     representingTeamId: TeamId,
     didBat: boolean
   ) => void;
+  onMoveBattingPosition: (
+    playerId: string,
+    representingTeamId: TeamId,
+    direction: "up" | "down"
+  ) => void;
   onUpdatePerformance: (
     playerId: string,
     representingTeamId: TeamId,
@@ -2913,6 +3012,10 @@ function TeamPlayerRecordsSection({
     inningsScore.runs,
     performances
   );
+  const orderedPerformances = sortBattingPerformances(performances);
+  const orderedBattingKeys = orderedPerformances
+    .filter((performance) => performance.didBat)
+    .map(getPerformanceRecordKey);
 
   return (
     <section
@@ -2969,9 +3072,11 @@ function TeamPlayerRecordsSection({
           </p>
         ) : null}
 
-        {performances.map((performance) => {
+        {orderedPerformances.map((performance) => {
           const player = teamPlayers.find((candidate) => candidate.id === performance.playerId);
           const performanceTeamId = performance.representingTeamId ?? performance.teamId;
+          const performanceKey = getPerformanceRecordKey(performance);
+          const battingOrderIndex = orderedBattingKeys.indexOf(performanceKey);
           const playerOvers = bowlingOvers.filter(
             (over) => over.bowlerId === performance.playerId
           );
@@ -3000,7 +3105,7 @@ function TeamPlayerRecordsSection({
 
           return (
             <div
-              key={getPerformanceRecordKey(performance)}
+              key={performanceKey}
               className="player-match-record grid gap-4 rounded-lg border border-white/10 bg-white/5 p-4"
             >
               <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
@@ -3058,7 +3163,7 @@ function TeamPlayerRecordsSection({
                 </div>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-4">
                 <label className="flex items-center gap-2 rounded-md border border-white/10 bg-black/25 px-3 py-2 text-sm font-bold text-stone-200">
                   <input
                     type="checkbox"
@@ -3075,6 +3180,52 @@ function TeamPlayerRecordsSection({
                   />
                   Did bat
                 </label>
+                <div className="player-batting-field grid gap-1 rounded-md border border-white/10 bg-black/25 px-3 py-2 text-xs font-black uppercase text-stone-300">
+                  Batting order
+                  {performance.didBat ? (
+                    <div className="flex items-center gap-2">
+                      <span className="rounded border border-neon-cyan/35 bg-neon-cyan/10 px-2 py-1 text-sm text-neon-cyan">
+                        #{normalizeBattingPosition(performance.battingPosition) ?? battingOrderIndex + 1}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={isLocked || battingOrderIndex <= 0}
+                        onClick={() =>
+                          onMoveBattingPosition(
+                            performance.playerId,
+                            performanceTeamId,
+                            "up"
+                          )
+                        }
+                        className="rounded border border-white/15 bg-white/10 px-2 py-1 text-xs text-stone-100 disabled:opacity-40"
+                        aria-label={`Move ${player.name} up in batting order`}
+                      >
+                        Up
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          isLocked ||
+                          battingOrderIndex < 0 ||
+                          battingOrderIndex >= orderedBattingKeys.length - 1
+                        }
+                        onClick={() =>
+                          onMoveBattingPosition(
+                            performance.playerId,
+                            performanceTeamId,
+                            "down"
+                          )
+                        }
+                        className="rounded border border-white/15 bg-white/10 px-2 py-1 text-xs text-stone-100 disabled:opacity-40"
+                        aria-label={`Move ${player.name} down in batting order`}
+                      >
+                        Down
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="py-1 text-sm text-stone-500">Did not bat</span>
+                  )}
+                </div>
                 <label className="player-batting-field grid gap-1 text-xs font-black uppercase text-stone-300">
                   Runs
                   <input

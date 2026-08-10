@@ -24,18 +24,23 @@ import {
   getLiveInningsScore,
   getLiveResultPreview,
   getMaximumRunsForPlayer,
+  getNextBattingPosition,
   getOrdinaryCrossTeamPlayerIds,
   getPerformanceKey,
   isBowlingOverComplete,
   migrateLegacyBowlingOvers,
+  normalizeBattingPosition,
   normalizeNonNegativeIntegerInput,
   normalizeStoredRuns,
   sanitizeRuns,
   setPlayerAvailability,
+  sortBattingPerformances,
   syncDismissalRows,
   toggleTeamSelection,
   validateMatchRecordInput
 } from "../lib/match-records";
+import { buildBattingRows } from "../lib/match-scorecard";
+import { calculateMatchXP } from "../lib/progression";
 import type { BowlingOver, DismissalEvent, MatchStatus, PlayerMatchPerformance, TeamId, TeamInnings } from "../lib/types/match";
 
 test("manual Team A selection disables Team B selection by moving membership", () => {
@@ -163,6 +168,147 @@ test("Team B players appear only in Team B records", () => {
   });
 
   assert.deepEqual(teamData.playerPerformances.map((record) => record.playerId), ["biplab"]);
+});
+
+test("batting position metadata normalizes and assigns the next team position", () => {
+  const records = [
+    { ...performance("naim", "teamB", 70), battingPosition: 1 },
+    { ...performance("saurav", "teamB", 3), battingPosition: 2 },
+    { ...performance("soman", "teamB", 33), battingPosition: 3 },
+    { ...performance("aninda", "teamA", 44), battingPosition: 1 }
+  ];
+
+  assert.equal(normalizeBattingPosition("04"), 4);
+  assert.equal(normalizeBattingPosition(0), null);
+  assert.equal(getNextBattingPosition(records, "teamB"), 4);
+  assert.equal(getNextBattingPosition(records, "teamA"), 2);
+});
+
+test("scorecard batting rows sort by batting position and keep did-not-bat players last", () => {
+  const performances: PlayerMatchPerformance[] = [
+    { ...performance("rohit", "teamB", 7), battingPosition: 4, wasOut: false },
+    { ...performance("soman", "teamB", 33), battingPosition: 3, wasOut: true },
+    { ...performance("saurav", "teamB", 3), battingPosition: 2, wasOut: true },
+    { ...performance("naim", "teamB", 70), battingPosition: 1, wasOut: false },
+    {
+      ...performance("amrit", "teamB", 0),
+      didBat: false,
+      battingPosition: null,
+      runs: "",
+      wasOut: false
+    },
+    {
+      ...performance("suprateem", "teamB", 0),
+      didBat: false,
+      battingPosition: null,
+      runs: "",
+      wasOut: false
+    }
+  ];
+  const rows = buildBattingRows(
+    {
+      battingTeamId: "teamB",
+      bowlingTeamId: "teamA",
+      runs: 113,
+      wicketsLost: 2,
+      extras: 0,
+      playerCount: 6,
+      completedOvers: 4,
+      battingPerformances: performances,
+      bowlingOvers: [
+        over("teamA", "aninda", 1, {
+          dismissals: [
+            dismissal({
+              id: "saurav-dismissal",
+              overId: "teamA-1",
+              battingTeamId: "teamB",
+              bowlingTeamId: "teamA",
+              dismissedBatterId: "saurav",
+              creditedBowlerId: "aninda"
+            })
+          ]
+        }),
+        over("teamA", "utpal", 2, {
+          dismissals: [
+            dismissal({
+              id: "soman-dismissal",
+              overId: "teamA-2",
+              battingTeamId: "teamB",
+              bowlingTeamId: "teamA",
+              dismissedBatterId: "soman",
+              creditedBowlerId: "utpal"
+            })
+          ]
+        })
+      ]
+    },
+    (playerId) =>
+      ({
+        naim: "Naim",
+        saurav: "Saurav",
+        soman: "Soman",
+        rohit: "Rohit",
+        amrit: "Amrit",
+        suprateem: "Suprateem",
+        aninda: "Aninda",
+        utpal: "Utpal"
+      })[playerId] ?? playerId
+  );
+
+  assert.deepEqual(
+    rows.map((row) => row.batter),
+    ["Naim", "Saurav", "Soman", "Rohit", "Amrit", "Suprateem"]
+  );
+  assert.equal(rows[3]?.dismissal, "not out");
+  assert.equal(rows[4]?.dismissal, "did not bat");
+  assert.equal(rows[4]?.runs, "-");
+});
+
+test("legacy batting rows without batting positions keep existing deterministic order", () => {
+  const performances: PlayerMatchPerformance[] = [
+    performance("rohit", "teamB", 7),
+    performance("soman", "teamB", 33),
+    performance("saurav", "teamB", 3),
+    {
+      ...performance("amrit", "teamB", 0),
+      didBat: false,
+      runs: "",
+      wasOut: false
+    }
+  ];
+
+  assert.deepEqual(
+    sortBattingPerformances(performances).map((record) => record.playerId),
+    ["rohit", "soman", "saurav", "amrit"]
+  );
+});
+
+test("batting order metadata does not affect XP totals", () => {
+  const withoutPosition = performance("rohit", "teamB", 7);
+  const withPosition = { ...withoutPosition, battingPosition: 4 };
+
+  assert.deepEqual(
+    calculateMatchXP(withPosition, {
+      result: {
+        type: "win_by_wickets",
+        winnerTeamId: "teamB",
+        loserTeamId: "teamA",
+        wicketsRemaining: 2
+      },
+      teamWon: true,
+      overs: []
+    }),
+    calculateMatchXP(withoutPosition, {
+      result: {
+        type: "win_by_wickets",
+        winnerTeamId: "teamB",
+        loserTeamId: "teamA",
+        wicketsRemaining: 2
+      },
+      teamWon: true,
+      overs: []
+    })
+  );
 });
 
 test("unselected players do not appear in team data", () => {
@@ -729,7 +875,8 @@ test("bowler selectors and player record sections use selected team players only
   assert.match(form, /players=\{teamAPlayers\}/);
   assert.match(form, /players=\{teamBPlayers\}/);
   assert.match(form, /teamPlayers\.map\(\(player\) =>\s*\(\s*<option/);
-  assert.match(form, /performances\.map\(\(performance\) =>/);
+  assert.match(form, /const orderedPerformances = sortBattingPerformances\(performances\)/);
+  assert.match(form, /orderedPerformances\.map\(\(performance\) =>/);
 });
 
 test("availability and roster controls lock once the match leaves Draft", () => {

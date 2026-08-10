@@ -51,6 +51,7 @@ export type PlayerMatchPerformance = {
   played: boolean;
   playerOfMatch: boolean;
   didBat: boolean;
+  battingPosition?: number | null;
   runs: number | "";
   wasOut: boolean;
   wickets: number;
