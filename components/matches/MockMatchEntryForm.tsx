@@ -13,6 +13,8 @@ import {
 import {
   Ban,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Plus,
   RotateCcw,
   Save,
@@ -3163,7 +3165,7 @@ function TeamPlayerRecordsSection({
                 </div>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-4">
+              <div className="player-batting-grid grid gap-3">
                 <label className="flex items-center gap-2 rounded-md border border-white/10 bg-black/25 px-3 py-2 text-sm font-bold text-stone-200">
                   <input
                     type="checkbox"
@@ -3180,11 +3182,11 @@ function TeamPlayerRecordsSection({
                   />
                   Did bat
                 </label>
-                <div className="player-batting-field grid gap-1 rounded-md border border-white/10 bg-black/25 px-3 py-2 text-xs font-black uppercase text-stone-300">
+                <div className="player-batting-field player-batting-order-field grid gap-1 rounded-md border border-white/10 bg-black/25 px-3 py-2 text-xs font-black uppercase text-stone-300">
                   Batting order
                   {performance.didBat ? (
-                    <div className="flex items-center gap-2">
-                      <span className="rounded border border-neon-cyan/35 bg-neon-cyan/10 px-2 py-1 text-sm text-neon-cyan">
+                    <div className="batting-order-controls">
+                      <span className="batting-order-position">
                         #{normalizeBattingPosition(performance.battingPosition) ?? battingOrderIndex + 1}
                       </span>
                       <button
@@ -3197,10 +3199,11 @@ function TeamPlayerRecordsSection({
                             "up"
                           )
                         }
-                        className="rounded border border-white/15 bg-white/10 px-2 py-1 text-xs text-stone-100 disabled:opacity-40"
-                        aria-label={`Move ${player.name} up in batting order`}
+                        className="batting-order-button"
+                        aria-label="Move batter up"
+                        title="Move batter up"
                       >
-                        Up
+                        <ChevronUp className="h-4 w-4" aria-hidden="true" />
                       </button>
                       <button
                         type="button"
@@ -3216,10 +3219,11 @@ function TeamPlayerRecordsSection({
                             "down"
                           )
                         }
-                        className="rounded border border-white/15 bg-white/10 px-2 py-1 text-xs text-stone-100 disabled:opacity-40"
-                        aria-label={`Move ${player.name} down in batting order`}
+                        className="batting-order-button"
+                        aria-label="Move batter down"
+                        title="Move batter down"
                       >
-                        Down
+                        <ChevronDown className="h-4 w-4" aria-hidden="true" />
                       </button>
                     </div>
                   ) : (

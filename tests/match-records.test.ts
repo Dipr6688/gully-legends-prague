@@ -487,6 +487,26 @@ test("player stat inputs stay contained and wrap responsively", () => {
   assert.match(form, /Run-outs/);
 });
 
+test("batting order controls stay compact inside player record cards", () => {
+  const css = readFileSync("app/globals.css", "utf8");
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+
+  assert.match(form, /className="player-batting-grid grid gap-3"/);
+  assert.match(form, /className="batting-order-controls"/);
+  assert.match(form, /className="batting-order-position"/);
+  assert.match(form, /className="batting-order-button"/);
+  assert.match(form, /aria-label="Move batter up"/);
+  assert.match(form, /aria-label="Move batter down"/);
+  assert.doesNotMatch(form, />Up<\/button>/);
+  assert.doesNotMatch(form, />Down<\/button>/);
+  assert.match(css, /\.player-batting-grid\s*{[\s\S]*?minmax\(148px,\s*1\.1fr\)/);
+  assert.match(css, /\.batting-order-controls\s*{[\s\S]*?display:\s*flex/);
+  assert.match(css, /\.batting-order-position,\s*\n\.batting-order-button\s*{[\s\S]*?flex:\s*0 0 auto/);
+  assert.match(css, /\.batting-order-button\s*{[\s\S]*?width:\s*30px/);
+  assert.match(css, /@media \(max-width:\s*700px\)[\s\S]*?\.player-batting-grid\s*{[\s\S]*?repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(css, /@media \(max-width:\s*430px\)[\s\S]*?\.player-batting-grid\s*{[\s\S]*?grid-template-columns:\s*1fr/);
+});
+
 test("bowling over UI uses WKTS TAKEN and dismissal editors", () => {
   const css = readFileSync("app/globals.css", "utf8");
   const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");

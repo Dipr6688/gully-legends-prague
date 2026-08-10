@@ -5657,6 +5657,59 @@ textarea {
   min-width: 0;
 }
 
+.player-batting-grid {
+  grid-template-columns:
+    minmax(92px, 0.85fr)
+    minmax(148px, 1.1fr)
+    minmax(120px, 1fr)
+    minmax(84px, 0.75fr);
+  align-items: stretch;
+}
+
+.player-batting-order-field {
+  min-width: 0;
+}
+
+.batting-order-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.batting-order-position,
+.batting-order-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid rgba(83, 220, 255, 0.35);
+  background: rgba(83, 220, 255, 0.1);
+  color: #53dcff;
+  line-height: 1;
+}
+
+.batting-order-position {
+  min-width: 38px;
+  height: 30px;
+  padding-inline: 8px;
+  font-size: 0.875rem;
+}
+
+.batting-order-button {
+  width: 30px;
+  height: 30px;
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.1);
+  color: #f5f0df;
+}
+
+.batting-order-button:disabled {
+  opacity: 0.4;
+}
+
 .derived-player-stat {
   width: 100%;
   min-width: 0;
@@ -5719,6 +5772,10 @@ textarea {
 }
 
 @media (max-width: 700px) {
+  .player-batting-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .player-stat-inputs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -5860,6 +5917,10 @@ textarea {
 }
 
 @media (max-width: 430px) {
+  .player-batting-grid {
+    grid-template-columns: 1fr;
+  }
+
   .player-stat-inputs {
     grid-template-columns: 1fr;
   }
