@@ -21,6 +21,49 @@ export type DismissalType =
   | "run_out"
   | "other_bowler_wicket";
 
+export type QuickScoringInningsKey = "inningsAEvents" | "inningsBEvents";
+
+export type QuickScoringExtraType = "wide" | "no_ball" | null;
+
+export type QuickScoringDismissalType =
+  | "bowled"
+  | "caught"
+  | "run_out"
+  | "other_bowler_wicket";
+
+export type QuickScoringWicket = {
+  type: QuickScoringDismissalType;
+  dismissedPlayerId: string;
+  fielderId: string | null;
+  assistingFielderId?: string | null;
+  newBatterId: string | null;
+  completedRuns: number;
+  nextStrikerId?: string | null;
+  nextNonStrikerId?: string | null;
+};
+
+export type QuickScoringEvent = {
+  id: string;
+  sequence: number;
+  battingTeamId: TeamId;
+  bowlingTeamId: TeamId;
+  strikerId: string;
+  nonStrikerId: string;
+  bowlerId: string;
+  batterRuns: number;
+  extraType: QuickScoringExtraType;
+  extras: number;
+  legalDelivery: boolean;
+  wicket: QuickScoringWicket | null;
+  timestamp: string;
+};
+
+export type QuickScoringMetadata = {
+  version: 1;
+  inningsAEvents: QuickScoringEvent[];
+  inningsBEvents: QuickScoringEvent[];
+};
+
 export type DismissalEvent = {
   id: string;
   overId: string;
@@ -38,6 +81,7 @@ export type BowlingOver = {
   battingTeamId: TeamId;
   bowlerId: string;
   overNumber: number;
+  legalBalls?: number;
   runsConceded: number | "";
   wicketsTaken: number | "";
   dismissals: DismissalEvent[];
@@ -182,6 +226,7 @@ export type MatchRecord = {
   finalisedPlayerRecords?: FinalisedPlayerMatchRecord[];
   progressionAppliedAt?: string;
   appliedFinalisationVersion?: number;
+  quickScoring?: QuickScoringMetadata;
 };
 
 export type MockMatchFormValues = {

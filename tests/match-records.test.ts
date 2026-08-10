@@ -41,7 +41,18 @@ import {
 } from "../lib/match-records";
 import { buildBattingRows } from "../lib/match-scorecard";
 import { calculateMatchXP } from "../lib/progression";
-import type { BowlingOver, DismissalEvent, MatchStatus, PlayerMatchPerformance, TeamId, TeamInnings } from "../lib/types/match";
+import {
+  createEmptyQuickScoringMetadata,
+  createQuickScoringEvent,
+  deriveQuickScoringInnings,
+  replaceQuickScoringEvent,
+  undoLastQuickScoringEvent
+} from "../lib/quick-scoring";
+import {
+  applyFinalisedMatchToCareerStats,
+  createEmptyCareerProgressionState
+} from "../lib/career-store";
+import type { BowlingOver, DismissalEvent, MatchRecord, MatchStatus, PlayerMatchPerformance, TeamId, TeamInnings } from "../lib/types/match";
 
 test("manual Team A selection disables Team B selection by moving membership", () => {
   const state = toggleTeamSelection(baseState(), "teamA", "aninda");
@@ -168,6 +179,179 @@ test("Team B players appear only in Team B records", () => {
   });
 
   assert.deepEqual(teamData.playerPerformances.map((record) => record.playerId), ["biplab"]);
+});
+
+test("selected team player automatically has Played true", () => {
+  const teamData = buildTeamMatchData({
+    teamId: "teamA",
+    teamName: "Team A",
+    playerIds: ["aninda"],
+    performances: [
+      {
+        ...performance("aninda", "teamA", 0),
+        played: false,
+        didBat: false,
+        runs: ""
+      }
+    ],
+    bowlingOvers: []
+  });
+
+  assert.equal(teamData.playerPerformances[0]?.played, true);
+});
+
+test("selected player with Did Bat false is still Played", () => {
+  const teamData = buildTeamMatchData({
+    teamId: "teamA",
+    teamName: "Team A",
+    playerIds: ["aninda"],
+    performances: [
+      {
+        ...performance("aninda", "teamA", 0),
+        played: false,
+        didBat: false,
+        runs: ""
+      }
+    ],
+    bowlingOvers: []
+  });
+  const record = teamData.playerPerformances[0];
+
+  assert.equal(record?.played, true);
+  assert.equal(record?.didBat, false);
+});
+
+test("Did Not Bat player still receives normal Played career treatment", () => {
+  const teamAData = buildTeamMatchData({
+    teamId: "teamA",
+    teamName: "Team A",
+    playerIds: ["aninda"],
+    performances: [
+      {
+        ...performance("aninda", "teamA", 0),
+        played: false,
+        didBat: false,
+        runs: "",
+        wasOut: false
+      }
+    ],
+    bowlingOvers: []
+  });
+  const teamBData = buildTeamMatchData({
+    teamId: "teamB",
+    teamName: "Team B",
+    playerIds: ["biplab"],
+    performances: [
+      {
+        ...performance("biplab", "teamB", 0),
+        didBat: false,
+        runs: ""
+      }
+    ],
+    bowlingOvers: []
+  });
+  const match: MatchRecord = {
+    id: "dnb-played-match",
+    matchDate: "2026-08-04",
+    matchName: "DNB Participation Check",
+    venue: "CZU Gully Arena",
+    status: "finalised",
+    scheduledOversPerInnings: 4,
+    battingFirstTeamId: "teamA",
+    chasingTeamId: "teamB",
+    teams: {
+      teamA: teamAData,
+      teamB: teamBData
+    },
+    innings: {
+      first: innings("teamA", 0, 0, 1),
+      second: innings("teamB", 0, 0, 1)
+    },
+    result: { type: "tie" }
+  };
+  const state = applyFinalisedMatchToCareerStats(
+    match,
+    createEmptyCareerProgressionState(),
+    "2026-08-10T10:00:00.000Z"
+  );
+
+  assert.equal(state.playerCareers.aninda.matches, 1);
+  assert.equal(state.playerCareers.aninda.inningsBatted, 0);
+  assert.equal(state.playerCareers.aninda.totalXP, 20);
+});
+
+test("player removed from team is not treated as Played", () => {
+  const teamData = buildTeamMatchData({
+    teamId: "teamA",
+    teamName: "Team A",
+    playerIds: ["aninda"],
+    performances: [
+      performance("aninda", "teamA", 10),
+      performance("biplab", "teamA", 99)
+    ],
+    bowlingOvers: []
+  });
+
+  assert.deepEqual(
+    teamData.playerPerformances.map((record) => record.playerId),
+    ["aninda"]
+  );
+});
+
+test("Shared Player still receives Played exactly once", () => {
+  const performances: PlayerMatchPerformance[] = [
+    { ...performance("aninda", "teamA", 0), played: false, didBat: false, runs: "" },
+    { ...performance("aninda", "teamB", 0), played: false, didBat: false, runs: "" },
+    { ...performance("biplab", "teamA", 0), didBat: false, runs: "" },
+    { ...performance("atripan", "teamB", 0), didBat: false, runs: "" }
+  ];
+  const teamAData = buildTeamMatchData({
+    teamId: "teamA",
+    teamName: "Team A",
+    playerIds: ["aninda", "biplab"],
+    performances,
+    bowlingOvers: []
+  });
+  const teamBData = buildTeamMatchData({
+    teamId: "teamB",
+    teamName: "Team B",
+    playerIds: ["aninda", "atripan"],
+    performances,
+    bowlingOvers: []
+  });
+  const match: MatchRecord = {
+    id: "shared-played-match",
+    matchDate: "2026-08-04",
+    matchName: "Shared Participation Check",
+    venue: "CZU Gully Arena",
+    status: "finalised",
+    scheduledOversPerInnings: 4,
+    battingFirstTeamId: "teamA",
+    chasingTeamId: "teamB",
+    sharedPlayerId: "aninda",
+    teams: {
+      teamA: teamAData,
+      teamB: teamBData
+    },
+    innings: {
+      first: innings("teamA", 0, 0, 2),
+      second: innings("teamB", 0, 0, 2)
+    },
+    result: { type: "tie" }
+  };
+  const state = applyFinalisedMatchToCareerStats(
+    match,
+    createEmptyCareerProgressionState(),
+    "2026-08-10T10:00:00.000Z"
+  );
+
+  assert.equal(teamAData.playerPerformances[0]?.played, true);
+  assert.equal(teamBData.playerPerformances[0]?.played, true);
+  assert.equal(state.playerCareers.aninda.matches, 1);
+  assert.equal(state.playerCareers.aninda.totalXP, 20);
+  assert.deepEqual(Object.keys(state.appliedProgressions).filter((key) => key.endsWith(":aninda")), [
+    "shared-played-match:aninda"
+  ]);
 });
 
 test("batting position metadata normalizes and assigns the next team position", () => {
@@ -309,6 +493,507 @@ test("batting order metadata does not affect XP totals", () => {
       overs: []
     })
   );
+});
+
+test("Quick Scoring derives normal runs strike rotation and over completion", () => {
+  const events = [
+    quickEvent(1, { batterRuns: 0 }),
+    quickEvent(2, { strikerId: "naim", nonStrikerId: "saurav", batterRuns: 1 }),
+    quickEvent(3, { strikerId: "saurav", nonStrikerId: "naim", batterRuns: 2 }),
+    quickEvent(4, { strikerId: "saurav", nonStrikerId: "naim", batterRuns: 3 }),
+    quickEvent(5, { strikerId: "naim", nonStrikerId: "saurav", batterRuns: 4 }),
+    quickEvent(6, { strikerId: "naim", nonStrikerId: "saurav", batterRuns: 6 })
+  ];
+  const derived = deriveQuickScoringInnings(quickInput(events));
+
+  assert.equal(derived.runs, 16);
+  assert.equal(derived.legalBalls, 6);
+  assert.equal(derived.completedOvers, 1);
+  assert.equal(derived.currentBowlerId, null);
+  assert.equal(derived.currentStrikerId, "saurav");
+  assert.deepEqual(
+    batterRunsById(derived.battingPerformances),
+    { naim: 11, saurav: 5 }
+  );
+  assert.deepEqual(derived.bowlingOvers.map((over) => over.runsConceded), [16]);
+});
+
+test("Quick Scoring wides and no-balls add extras without legal deliveries", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      quickEvent(1, { extraType: "wide", extras: 1 }),
+      quickEvent(2, { extraType: "no_ball", extras: 1 }),
+      quickEvent(3, { batterRuns: 4 })
+    ])
+  );
+
+  assert.equal(derived.runs, 6);
+  assert.equal(derived.extras, 2);
+  assert.equal(derived.legalBalls, 1);
+  assert.equal(derived.bowlingOvers[0]?.runsConceded, 6);
+  assert.equal(derived.battingPerformances.find((row) => row.playerId === "naim")?.runs, 4);
+});
+
+test("Quick Scoring derives bowled caught and run-out wickets with correct credits", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      quickEvent(1, {
+        wicket: {
+          type: "bowled",
+          dismissedPlayerId: "naim",
+          fielderId: null,
+          newBatterId: "soman",
+          completedRuns: 0
+        }
+      }),
+      quickEvent(2, {
+        strikerId: "soman",
+        nonStrikerId: "saurav",
+        wicket: {
+          type: "caught",
+          dismissedPlayerId: "soman",
+          fielderId: "aninda",
+          newBatterId: "rohit",
+          completedRuns: 0
+        }
+      }),
+      quickEvent(3, {
+        strikerId: "rohit",
+        nonStrikerId: "saurav",
+        batterRuns: 1,
+        wicket: {
+          type: "run_out",
+          dismissedPlayerId: "saurav",
+          fielderId: "dipanjan",
+          newBatterId: "amrit",
+          completedRuns: 1
+        }
+      })
+    ])
+  );
+  const dismissals = derived.bowlingOvers.flatMap((over) => over.dismissals);
+
+  assert.equal(derived.wicketsLost, 3);
+  assert.deepEqual(derived.battingOrder, ["naim", "saurav", "soman", "rohit", "amrit"]);
+  assert.equal(dismissals[0]?.creditedBowlerId, "aninda");
+  assert.equal(dismissals[1]?.fielderId, "aninda");
+  assert.equal(dismissals[2]?.type, "run_out");
+  assert.equal(dismissals[2]?.creditedBowlerId, null);
+  assert.equal(dismissals[2]?.fielderId, "dipanjan");
+});
+
+test("Quick Scoring undo and current-over correction replay event history", () => {
+  const quickScoring = createEmptyQuickScoringMetadata();
+  const first = quickEvent(1, { batterRuns: 4 });
+  const second = quickEvent(2, { strikerId: "naim", nonStrikerId: "saurav", batterRuns: 6 });
+  const withEvents = {
+    ...quickScoring,
+    inningsBEvents: [first, second]
+  };
+  const corrected = replaceQuickScoringEvent(withEvents, "teamB", {
+    ...second,
+    batterRuns: 0
+  });
+  const afterCorrection = deriveQuickScoringInnings(
+    quickInput(corrected.inningsBEvents)
+  );
+  const undone = undoLastQuickScoringEvent(corrected, "teamB");
+  const afterUndo = deriveQuickScoringInnings(quickInput(undone.inningsBEvents));
+
+  assert.equal(afterCorrection.runs, 4);
+  assert.equal(afterUndo.runs, 4);
+  assert.equal(afterUndo.legalBalls, 1);
+});
+
+test("Quick Scoring output remains compatible with validation and XP calculation", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      quickEvent(1, { batterRuns: 4 }),
+      quickEvent(2, { strikerId: "naim", nonStrikerId: "saurav", batterRuns: 1 }),
+      quickEvent(3, { strikerId: "saurav", nonStrikerId: "naim", batterRuns: 0 })
+    ])
+  );
+  const errors = validateMatchRecordInput(
+    validationInput({
+      status: "finalised",
+      availablePlayerIds: [
+        "naim",
+        "saurav",
+        "soman",
+        "rohit",
+        "amrit",
+        "suprateem",
+        "aninda",
+        "dipanjan",
+        "utpal",
+        "dheeraj",
+        "chaitanya",
+        "biplab"
+      ],
+      battingFirstTeamId: "teamB",
+      teamAPlayerIds: ["aninda", "dipanjan", "utpal", "dheeraj", "chaitanya", "biplab"],
+      teamBPlayerIds: ["naim", "saurav", "soman", "rohit", "amrit", "suprateem"],
+      performances: [
+        ...derived.battingPerformances,
+        performance("aninda", "teamA", 0),
+        performance("dipanjan", "teamA", 0),
+        performance("utpal", "teamA", 0),
+        performance("dheeraj", "teamA", 0),
+        performance("chaitanya", "teamA", 0),
+        performance("biplab", "teamA", 0)
+      ],
+      bowlingOvers: {
+        teamA: derived.bowlingOvers,
+        teamB: []
+      }
+    })
+  );
+  const xp = calculateMatchXP(derived.battingPerformances[0], {
+    result: {
+      type: "win_by_runs",
+      winnerTeamId: "teamB",
+      loserTeamId: "teamA",
+      marginRuns: 5
+    },
+    teamWon: true,
+    overs: []
+  });
+
+  assert.equal(errors.length, 0);
+  assert.ok(xp > 0);
+});
+
+test("Quick Scoring rejects identical striker and non-striker pairs", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      quickEvent(1, {
+        strikerId: "naim",
+        nonStrikerId: "naim",
+        batterRuns: 4
+      })
+    ])
+  );
+
+  assert.equal(derived.runs, 0);
+  assert.match(derived.missingInformation.join(" "), /same striker and non-striker/);
+});
+
+test("Quick Scoring keeps DNB players false until they enter the innings", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([quickEvent(1, { batterRuns: 1 })])
+  );
+
+  assert.equal(
+    derived.battingPerformances.find((row) => row.playerId === "soman")?.didBat,
+    false
+  );
+  assert.equal(
+    derived.battingPerformances.find((row) => row.playerId === "naim")?.didBat,
+    true
+  );
+  assert.equal(
+    derived.battingPerformances.find((row) => row.playerId === "saurav")?.didBat,
+    true
+  );
+});
+
+test("Quick Scoring rejects a dismissed batter returning as active batter", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      quickEvent(1, {
+        wicket: {
+          type: "bowled",
+          dismissedPlayerId: "naim",
+          fielderId: null,
+          newBatterId: "soman",
+          completedRuns: 0
+        }
+      }),
+      quickEvent(2, {
+        strikerId: "naim",
+        nonStrikerId: "saurav",
+        batterRuns: 4
+      })
+    ])
+  );
+
+  assert.equal(derived.runs, 0);
+  assert.match(derived.missingInformation.join(" "), /already out/);
+});
+
+test("Quick Scoring excludes only the immediately previous over bowler", () => {
+  const events = [
+    ...quickLegalOver(1, "aninda"),
+    ...quickLegalOver(7, "dipanjan", {
+      strikerId: "saurav",
+      nonStrikerId: "naim"
+    }),
+    quickEvent(13, {
+      strikerId: "naim",
+      nonStrikerId: "saurav",
+      bowlerId: "aninda",
+      batterRuns: 2
+    })
+  ];
+  const derived = deriveQuickScoringInnings(quickInput(events));
+
+  assert.equal(derived.bowlingOvers[0]?.bowlerId, "aninda");
+  assert.equal(derived.bowlingOvers[1]?.bowlerId, "dipanjan");
+  assert.equal(derived.bowlingOvers[2]?.bowlerId, "aninda");
+  assert.deepEqual(derived.missingInformation, []);
+});
+
+test("Quick Scoring rejects the same bowler for consecutive overs", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      ...quickLegalOver(1, "aninda"),
+      quickEvent(7, {
+        strikerId: "saurav",
+        nonStrikerId: "naim",
+        bowlerId: "aninda",
+        batterRuns: 1
+      })
+    ])
+  );
+
+  assert.equal(derived.legalBalls, 6);
+  assert.match(derived.missingInformation.join(" "), /previous over bowler/);
+});
+
+test("Quick Scoring sixth-ball undo reopens the over", () => {
+  const quickScoring = {
+    ...createEmptyQuickScoringMetadata(),
+    inningsBEvents: quickLegalOver(1, "aninda")
+  };
+  const undone = undoLastQuickScoringEvent(quickScoring, "teamB");
+  const derived = deriveQuickScoringInnings(quickInput(undone.inningsBEvents));
+
+  assert.equal(derived.legalBalls, 5);
+  assert.equal(formatInningsScore(derived.runs, derived.wicketsLost), "0/0");
+  assert.equal(derived.currentOverEvents.length, 5);
+  assert.equal(derived.previousOverBowlerId, null);
+  assert.equal(derived.currentBowlerId, "aninda");
+});
+
+test("Quick Scoring final-over sixth-ball undo restores editable over state", () => {
+  const quickScoring = {
+    ...createEmptyQuickScoringMetadata(),
+    inningsBEvents: quickLegalOver(1, "aninda", { batterRuns: 1 })
+  };
+  const complete = deriveQuickScoringInnings(quickInput(quickScoring.inningsBEvents));
+  const undone = undoLastQuickScoringEvent(quickScoring, "teamB");
+  const reopened = deriveQuickScoringInnings(quickInput(undone.inningsBEvents));
+
+  assert.equal(complete.legalBalls, 6);
+  assert.equal(reopened.legalBalls, 5);
+  assert.equal(reopened.runs, 5);
+  assert.equal(reopened.currentOverEvents.length, 5);
+});
+
+test("Quick Scoring run-out of striker confirms next pair and gives no bowler wicket", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      quickEvent(1, {
+        batterRuns: 1,
+        wicket: {
+          type: "run_out",
+          dismissedPlayerId: "naim",
+          fielderId: "aninda",
+          newBatterId: "soman",
+          completedRuns: 1,
+          nextStrikerId: "soman",
+          nextNonStrikerId: "saurav"
+        }
+      })
+    ])
+  );
+  const dismissal = derived.bowlingOvers[0]?.dismissals[0];
+
+  assert.equal(derived.runs, 1);
+  assert.equal(dismissal?.type, "run_out");
+  assert.equal(dismissal?.creditedBowlerId, null);
+  assert.equal(derived.currentStrikerId, "soman");
+  assert.equal(derived.currentNonStrikerId, "saurav");
+  assert.equal(
+    derived.battingPerformances.find((row) => row.playerId === "soman")?.battingPosition,
+    3
+  );
+});
+
+test("Quick Scoring run-out of non-striker marks exactly that batter out", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      quickEvent(1, {
+        batterRuns: 0,
+        wicket: {
+          type: "run_out",
+          dismissedPlayerId: "saurav",
+          fielderId: "dipanjan",
+          newBatterId: "soman",
+          completedRuns: 0,
+          nextStrikerId: "naim",
+          nextNonStrikerId: "soman"
+        }
+      })
+    ])
+  );
+
+  assert.equal(
+    derived.battingPerformances.find((row) => row.playerId === "saurav")?.wasOut,
+    true
+  );
+  assert.equal(
+    derived.battingPerformances.find((row) => row.playerId === "naim")?.wasOut,
+    false
+  );
+});
+
+test("Quick Scoring no-ball supports batter runs without legal delivery", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      quickEvent(1, {
+        batterRuns: 4,
+        extraType: "no_ball",
+        extras: 1
+      })
+    ])
+  );
+
+  assert.equal(derived.runs, 5);
+  assert.equal(derived.extras, 1);
+  assert.equal(derived.legalBalls, 0);
+  assert.equal(derived.bowlingOvers[0]?.runsConceded, 5);
+  assert.equal(
+    derived.battingPerformances.find((row) => row.playerId === "naim")?.runs,
+    4
+  );
+});
+
+test("Quick Scoring reducer rejects an opposite-team bowler", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      quickEvent(1, {
+        bowlerId: "naim",
+        batterRuns: 4
+      })
+    ])
+  );
+
+  assert.equal(derived.runs, 0);
+  assert.match(derived.missingInformation.join(" "), /ineligible bowler/);
+});
+
+test("Quick Scoring reducer reports an opposite-team run-out fielder", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      quickEvent(1, {
+        wicket: {
+          type: "run_out",
+          dismissedPlayerId: "naim",
+          fielderId: "saurav",
+          newBatterId: "soman",
+          completedRuns: 0,
+          nextStrikerId: "soman",
+          nextNonStrikerId: "saurav"
+        }
+      })
+    ])
+  );
+
+  assert.match(derived.missingInformation.join(" "), /ineligible fielder/);
+});
+
+test("Quick Scoring reducer requires a new batter before all-out", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      quickEvent(1, {
+        wicket: {
+          type: "bowled",
+          dismissedPlayerId: "naim",
+          fielderId: null,
+          newBatterId: null,
+          completedRuns: 0
+        }
+      })
+    ])
+  );
+
+  assert.match(derived.missingInformation.join(" "), /Missing new batter/);
+});
+
+test("Quick Scoring reducer rejects invalid run-out next-ball pair", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      quickEvent(1, {
+        wicket: {
+          type: "run_out",
+          dismissedPlayerId: "naim",
+          fielderId: "aninda",
+          newBatterId: "soman",
+          completedRuns: 0,
+          nextStrikerId: "naim",
+          nextNonStrikerId: "soman"
+        }
+      })
+    ])
+  );
+
+  assert.match(derived.missingInformation.join(" "), /ineligible next-ball batter/);
+});
+
+test("Quick Scoring active UI keeps one POM selector and removes LBW and assisting fielder", () => {
+  const source = readFileSync(
+    "components/matches/MockMatchEntryForm.tsx",
+    "utf8"
+  );
+
+  assert.equal(source.match(/value=\{playerOfMatchId\}/g)?.length, 1);
+  assert.doesNotMatch(source, /type="checkbox"[\s\S]{0,500}playerOfMatch/);
+  assert.doesNotMatch(source, /value="lbw"/);
+  assert.doesNotMatch(source, /Assisting fielder/);
+  assert.doesNotMatch(source, /assistingFielderId: quickWicketDraft/);
+  assert.match(source, /Scoring flow/);
+  assert.match(source, /Suggested using match XP before the POM bonus/);
+});
+
+test("Team Player Records UI has no Played checkbox", () => {
+  const source = readFileSync(
+    "components/matches/MockMatchEntryForm.tsx",
+    "utf8"
+  );
+  const teamPlayerRecordsSection =
+    source.match(/function TeamPlayerRecordsSection[\s\S]+function ResultBanner/)?.[0] ?? "";
+
+  assert.doesNotMatch(teamPlayerRecordsSection, /checked=\{performance\.played\}/);
+  assert.doesNotMatch(teamPlayerRecordsSection, />\s*Played\s*</);
+  assert.doesNotMatch(teamPlayerRecordsSection, /played:\s*event\.target\.checked/);
+});
+
+test("POM correction migration is admin-only atomic preparation", () => {
+  const sql = readFileSync(
+    "supabase/migrations/20260807113000_player_of_match_correction.sql",
+    "utf8"
+  );
+
+  assert.match(sql, /create or replace function public\.correct_player_of_match_atomic/);
+  assert.match(sql, /security definer/);
+  assert.match(sql, /set search_path = ''/);
+  assert.match(sql, /if not public\.is_admin\(\) then/);
+  assert.match(sql, /from public\.matches[\s\S]+for update/);
+  assert.match(sql, /from public\.player_career_stats[\s\S]+for update/);
+  assert.match(sql, /expectedPlayerOfMatchId/);
+  assert.match(sql, /stale_player_of_match/);
+  assert.match(sql, /from public\.match_stat_applications[\s\S]+for update/);
+  assert.match(sql, /expectedXpBreakdown/);
+  assert.match(sql, /stale_application/);
+  assert.match(sql, /invalid_xp_component_change/);
+  assert.match(sql, /invalid_player_of_match_xp_delta/);
+  assert.match(sql, /invalid_awarded_xp_delta/);
+  assert.match(sql, /update public\.match_stat_applications[\s\S]+xp_breakdown/);
+  assert.match(sql, /revoke all on function public\.correct_player_of_match_atomic\(jsonb\) from anon/);
+  assert.match(sql, /grant execute on function public\.correct_player_of_match_atomic\(jsonb\) to authenticated/);
+  assert.doesNotMatch(sql, /delete from|truncate|drop table/i);
+  assert.doesNotMatch(sql, /runs =|wickets =|catches =|run_outs =/);
 });
 
 test("unselected players do not appear in team data", () => {
@@ -2303,6 +2988,55 @@ function performance(
     runOuts: 0,
     stumpings: 0
   };
+}
+
+function quickEvent(
+  sequence: number,
+  overrides: Partial<Parameters<typeof createQuickScoringEvent>[0]> = {}
+) {
+  return createQuickScoringEvent({
+    sequence,
+    battingTeamId: "teamB",
+    strikerId: "naim",
+    nonStrikerId: "saurav",
+    bowlerId: "aninda",
+    batterRuns: 0,
+    extraType: null,
+    wicket: null,
+    timestamp: `2026-08-10T10:00:${String(sequence).padStart(2, "0")}.000Z`,
+    ...overrides
+  });
+}
+
+function quickLegalOver(
+  firstSequence: number,
+  bowlerId: string,
+  overrides: Partial<Parameters<typeof createQuickScoringEvent>[0]> = {}
+) {
+  return Array.from({ length: 6 }, (_, index) =>
+    quickEvent(firstSequence + index, {
+      bowlerId,
+      ...overrides
+    })
+  );
+}
+
+function quickInput(events: ReturnType<typeof quickEvent>[]) {
+  return {
+    battingTeamId: "teamB" as const,
+    bowlingTeamId: "teamA" as const,
+    battingPlayerIds: ["naim", "saurav", "soman", "rohit", "amrit", "suprateem"],
+    bowlingPlayerIds: ["aninda", "dipanjan", "utpal", "dheeraj", "chaitanya", "biplab"],
+    events
+  };
+}
+
+function batterRunsById(performances: PlayerMatchPerformance[]) {
+  return Object.fromEntries(
+    performances
+      .filter((performance) => performance.didBat)
+      .map((performance) => [performance.playerId, sanitizeRuns(performance.runs)])
+  );
 }
 
 function innings(

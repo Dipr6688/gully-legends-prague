@@ -5644,6 +5644,263 @@ textarea {
   overflow: hidden;
 }
 
+.quick-scoring-panel {
+  box-shadow: 0 0 22px rgba(83, 220, 255, 0.13);
+}
+
+.quick-scoring-header,
+.quick-score-strip,
+.quick-player-selectors,
+.quick-correction-row,
+.quick-wicket-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.quick-scoring-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.quick-save-status {
+  border: 1px solid rgba(125, 255, 89, 0.35);
+  border-radius: 8px;
+  background: rgba(125, 255, 89, 0.12);
+  padding: 8px 10px;
+  color: #7dff59;
+  font-size: 0.75rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.quick-score-strip {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.quick-score-strip div {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 10px;
+}
+
+.quick-score-strip span,
+.quick-player-selectors label,
+.quick-wicket-panel label {
+  color: #b9b3a1;
+  font-size: 0.75rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.quick-score-strip strong {
+  display: block;
+  color: #ffd719;
+  font-size: 1.75rem;
+  line-height: 1;
+}
+
+.quick-player-selectors {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.quick-player-selectors label,
+.quick-wicket-panel label {
+  display: grid;
+  gap: 6px;
+}
+
+.quick-player-selectors select,
+.quick-wicket-panel select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 10px 12px;
+  color: #f5f0df;
+  outline: none;
+}
+
+.quick-scoring-buttons,
+.quick-special-buttons {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.quick-scoring-buttons {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quick-special-buttons {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quick-scoring-buttons button,
+.quick-special-buttons button,
+.quick-correction-row button,
+.quick-wicket-actions button,
+.quick-over-strip button,
+.quick-no-ball-panel button,
+.quick-run-out-guide button {
+  min-height: 48px;
+  border: 1px solid rgba(255, 215, 25, 0.35);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 215, 25, 0.18), rgba(0, 0, 0, 0.35));
+  color: #fff7bd;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.quick-scoring-buttons button {
+  min-height: 64px;
+  font-size: 1.6rem;
+}
+
+.quick-special-buttons button:last-child {
+  border-color: rgba(255, 64, 64, 0.45);
+  color: #ffd0d0;
+}
+
+.quick-wicket-panel,
+.quick-missing-info,
+.quick-no-ball-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  border: 1px solid rgba(255, 64, 64, 0.35);
+  border-radius: 10px;
+  background: rgba(80, 0, 0, 0.18);
+  padding: 12px;
+}
+
+.quick-no-ball-panel {
+  border-color: rgba(83, 220, 255, 0.35);
+  background: rgba(83, 220, 255, 0.1);
+}
+
+.quick-no-ball-panel p,
+.quick-run-out-guide p,
+.quick-next-pair p {
+  color: #ffd152;
+  font-size: 0.8rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.quick-no-ball-panel div,
+.quick-run-out-guide div {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.quick-run-out-guide,
+.quick-next-pair {
+  display: grid;
+  gap: 10px;
+}
+
+.quick-run-out-guide button.is-selected {
+  border-color: rgba(125, 255, 89, 0.65);
+  background: rgba(125, 255, 89, 0.18);
+  color: #d9ffcf;
+}
+
+.quick-next-pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.quick-next-pair p {
+  grid-column: 1 / -1;
+}
+
+.quick-wicket-actions,
+.quick-correction-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.quick-over-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  border: 1px solid rgba(83, 220, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 10px;
+}
+
+.quick-over-strip button,
+.quick-over-strip span {
+  min-width: 42px;
+  min-height: 42px;
+}
+
+.quick-over-strip span {
+  display: grid;
+  place-items: center;
+  color: #b9b3a1;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.quick-missing-info p {
+  color: #ffd0d0;
+  font-size: 0.85rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.quick-end-over-note {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  border: 1px solid rgba(255, 209, 82, 0.35);
+  border-radius: 10px;
+  background: rgba(255, 209, 82, 0.1);
+  padding: 14px 16px;
+  color: #ffd152;
+  font-size: 0.85rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.quick-end-over-note strong {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.pom-review-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.pom-suggestion {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  border: 1px solid rgba(255, 209, 82, 0.25);
+  border-radius: 10px;
+  background: rgba(255, 209, 82, 0.08);
+  padding: 10px 12px;
+  color: #f5f0df;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.pom-suggestion strong {
+  color: #ffd152;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
 .player-stat-inputs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -5772,6 +6029,20 @@ textarea {
 }
 
 @media (max-width: 700px) {
+  .quick-scoring-header,
+  .quick-score-strip,
+  .quick-player-selectors,
+  .quick-correction-row,
+  .quick-wicket-actions,
+  .quick-next-pair {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-no-ball-panel div,
+  .quick-run-out-guide div {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .player-batting-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

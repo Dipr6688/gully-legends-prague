@@ -321,7 +321,13 @@ export function calculateTeamTotals(
 }
 
 export function calculateCompletedBowlingOvers(overs: BowlingOver[]): number {
-  return overs.filter(isBowlingOverComplete).length;
+  return overs.reduce((total, over) => {
+    if (typeof over.legalBalls === "number") {
+      return total + sanitizeRuns(over.legalBalls) / 6;
+    }
+
+    return total + (isBowlingOverComplete(over) ? 1 : 0);
+  }, 0);
 }
 
 export function getChasingTeamId(battingFirstTeamId: TeamId): TeamId {
@@ -360,13 +366,18 @@ export function isBowlingOverComplete(over: BowlingOver): boolean {
   const hasDismissalDetails = over.dismissals.every(isDismissalComplete);
   const maidenIsValid = !over.maiden || Number(over.runsConceded) === 0;
 
+  const hasQuickScoringBallCount =
+    over.legalBalls === undefined ||
+    (Number.isInteger(Number(over.legalBalls)) && Number(over.legalBalls) >= 0);
+
   return (
     hasBowler &&
     hasRuns &&
     hasWicketsTaken &&
     hasCorrectDismissalCount &&
     hasDismissalDetails &&
-    maidenIsValid
+    maidenIsValid &&
+    hasQuickScoringBallCount
   );
 }
 
@@ -386,13 +397,18 @@ export function isDismissalComplete(dismissal: DismissalEvent): boolean {
 export function calculateScoreFromBowlingFeed(
   bowlingOvers: BowlingOver[]
 ): BowlingFeedScore {
-  return bowlingOvers
-    .filter(isBowlingOverComplete)
+  const scorableOvers = bowlingOvers.filter(isBowlingOverComplete);
+
+  return scorableOvers
     .reduce<BowlingFeedScore>(
       (score, over) => ({
         runs: score.runs + sanitizeRuns(over.runsConceded),
         wicketsLost: score.wicketsLost + over.dismissals.length,
-        completedOvers: score.completedOvers + 1
+        completedOvers:
+          score.completedOvers +
+          (typeof over.legalBalls === "number"
+            ? sanitizeRuns(over.legalBalls) / 6
+            : 1)
       }),
       {
         runs: 0,
@@ -926,9 +942,14 @@ export function getTeamPerformances(
   teamId: TeamId,
   playerIds: string[]
 ): PlayerMatchPerformance[] {
-  return performances.filter(
-    (record) => record.teamId === teamId && playerIds.includes(record.playerId)
-  );
+  return performances
+    .filter(
+      (record) => record.teamId === teamId && playerIds.includes(record.playerId)
+    )
+    .map((record) => ({
+      ...record,
+      played: true
+    }));
 }
 
 export function buildTeamMatchData({

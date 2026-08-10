@@ -32,11 +32,51 @@ export function compareMatchDatesDescending(
   return rightDate - leftDate;
 }
 
+function compareMatchNumbersDescending(
+  left: Pick<MatchRecord, "matchNumber">,
+  right: Pick<MatchRecord, "matchNumber">
+): number {
+  const leftNumber = left.matchNumber ?? Number.NEGATIVE_INFINITY;
+  const rightNumber = right.matchNumber ?? Number.NEGATIVE_INFINITY;
+
+  return rightNumber - leftNumber;
+}
+
+function getFinalisedFallbackTime(match: MatchRecord): number {
+  const fallbackDate =
+    match.progressionAppliedAt ?? match.supabaseUpdatedAt ?? "";
+  const parsedTime = Date.parse(fallbackDate);
+
+  return Number.isFinite(parsedTime) ? parsedTime : 0;
+}
+
+export function compareFinalisedMatchesDescending(
+  left: MatchRecord,
+  right: MatchRecord
+): number {
+  const dateOrder = compareMatchDatesDescending(left, right);
+
+  if (dateOrder !== 0) return dateOrder;
+
+  const matchNumberOrder = compareMatchNumbersDescending(left, right);
+
+  if (matchNumberOrder !== 0) return matchNumberOrder;
+
+  const leftFallbackTime = getFinalisedFallbackTime(left);
+  const rightFallbackTime = getFinalisedFallbackTime(right);
+
+  if (leftFallbackTime !== rightFallbackTime) {
+    return rightFallbackTime - leftFallbackTime;
+  }
+
+  return right.id.localeCompare(left.id);
+}
+
 export function getFinalisedMatches(matches: MatchRecord[]): MatchRecord[] {
   return matches
     .filter((match) => !isDeletedFixture(match))
     .filter(isSuccessfullyFinalisedMatch)
-    .sort(compareMatchDatesDescending);
+    .sort(compareFinalisedMatchesDescending);
 }
 
 export class LocalMatchRepository implements MatchRepository {

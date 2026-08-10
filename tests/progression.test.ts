@@ -16,6 +16,7 @@ import {
   formatPercentage,
   getLevelProgress,
   getOverPenalty,
+  XP_RULES,
   xpNeededToAdvance
 } from "../lib/progression";
 import {
@@ -25,6 +26,11 @@ import {
   mergeCareerStateWithRoster,
   mergePlayersWithCareerState
 } from "../lib/career-store";
+import {
+  applyPlayerOfMatchCorrectionToFinalisedMatch,
+  calculatePrePomPlayerMatchXP,
+  getPlayerOfMatchRecommendation
+} from "../lib/player-of-match";
 import type {
   BowlingOver,
   MatchRecord,
@@ -186,6 +192,477 @@ test("player of the match gives 15 XP only when the player played", () => {
     calculateMatchXP(performance({ played: false, playerOfMatch: true })),
     0
   );
+});
+
+test("unique highest pre-POM XP becomes recommended Player of the Match", () => {
+  const performances = [
+    performance({ playerId: "naim", runs: 74, didBat: true, teamId: "teamA" }),
+    performance({ playerId: "dipanjan", runs: 42, didBat: true, teamId: "teamB" })
+  ];
+  const recommendation = getPlayerOfMatchRecommendation({
+    performances,
+    allBowlingOvers: [],
+    result: result(),
+    sharedPlayerId: null
+  });
+
+  assert.equal(recommendation.recommendedPlayerId, "naim");
+  assert.equal(recommendation.isTie, false);
+});
+
+test("POM recommendation excludes POM bonus and avoids circular selection", () => {
+  const naim = performance({
+    playerId: "naim",
+    runs: 10,
+    didBat: true,
+    playerOfMatch: true
+  });
+  const dipanjan = performance({
+    playerId: "dipanjan",
+    runs: 60,
+    didBat: true,
+    teamId: "teamB"
+  });
+  const recommendation = getPlayerOfMatchRecommendation({
+    performances: [naim, dipanjan],
+    allBowlingOvers: [],
+    result: result(),
+    sharedPlayerId: null
+  });
+
+  assert.equal(calculatePrePomPlayerMatchXP(naim).playerOfMatchXP, 0);
+  assert.equal(recommendation.recommendedPlayerId, "dipanjan");
+});
+
+test("manual POM override receives +15 instead of the recommendation", () => {
+  const recommendationWinner = performance({
+    playerId: "naim",
+    runs: 60,
+    didBat: true
+  });
+  const manualOverride = performance({
+    playerId: "rohit",
+    runs: 10,
+    didBat: true,
+    teamId: "teamB",
+    playerOfMatch: true
+  });
+  const recommendation = getPlayerOfMatchRecommendation({
+    performances: [recommendationWinner, manualOverride],
+    allBowlingOvers: [],
+    result: result(),
+    sharedPlayerId: null
+  });
+
+  assert.equal(recommendation.recommendedPlayerId, "naim");
+  assert.equal(
+    calculatePlayerMatchXP(recommendationWinner, { result: result() }).playerOfMatchXP,
+    0
+  );
+  assert.equal(
+    calculatePlayerMatchXP(manualOverride, { result: result() }).playerOfMatchXP,
+    15
+  );
+});
+
+test("None Player of the Match adds no POM XP", () => {
+  assert.equal(
+    calculatePlayerMatchXP(
+      performance({ playerId: "naim", playerOfMatch: false }),
+      { result: result() }
+    ).playerOfMatchXP,
+    0
+  );
+});
+
+test("exact pre-POM XP tie exposes joint leaders and selects nobody", () => {
+  const performances = [
+    performance({ playerId: "naim", runs: 40, didBat: true }),
+    performance({ playerId: "dipanjan", runs: 40, didBat: true, teamId: "teamB" })
+  ];
+  const recommendation = getPlayerOfMatchRecommendation({
+    performances,
+    allBowlingOvers: [],
+    result: result({ type: "tie" }),
+    sharedPlayerId: null
+  });
+
+  assert.equal(recommendation.recommendedPlayerId, null);
+  assert.equal(recommendation.isTie, true);
+  assert.deepEqual(
+    recommendation.leaders.map((leader) => leader.playerId).sort(),
+    ["dipanjan", "naim"]
+  );
+});
+
+test("POM correction transfers only POM XP from one player to another", () => {
+  const match = finalisedMatch([
+    performance({
+      playerId: "rohit",
+      teamId: "teamA",
+      playerOfMatch: true,
+      didBat: true,
+      runs: 20,
+      wickets: 1
+    }),
+    performance({
+      playerId: "naim",
+      teamId: "teamB",
+      didBat: true,
+      runs: 22,
+      catches: 1
+    })
+  ]);
+  const initialState = applyFinalisedMatchToCareerStats(
+    match,
+    createEmptyCareerProgressionState(),
+    "2026-08-10T10:00:00.000Z"
+  );
+  const corrected = applyPlayerOfMatchCorrectionToFinalisedMatch({
+    match,
+    currentState: initialState,
+    nextPlayerOfMatchId: "naim",
+    correctedAt: "2026-08-10T11:00:00.000Z"
+  });
+
+  assert.equal(
+    corrected.state.appliedProgressions["match-1:rohit"].xpBreakdown.playerOfMatchXP,
+    0
+  );
+  assert.equal(
+    corrected.state.appliedProgressions["match-1:naim"].xpBreakdown.playerOfMatchXP,
+    XP_RULES.playerOfMatch
+  );
+  assert.equal(
+    initialState.appliedProgressions["match-1:rohit"].xpBreakdown.playerOfMatchXP -
+      corrected.state.appliedProgressions["match-1:rohit"].xpBreakdown
+        .playerOfMatchXP,
+    XP_RULES.playerOfMatch
+  );
+  assert.equal(
+    corrected.state.appliedProgressions["match-1:naim"].xpBreakdown.playerOfMatchXP -
+      initialState.appliedProgressions["match-1:naim"].xpBreakdown.playerOfMatchXP,
+    XP_RULES.playerOfMatch
+  );
+  assert.equal(corrected.state.playerCareers.rohit.wickets, 1);
+  assert.equal(corrected.state.playerCareers.naim.catches, 1);
+  assert.equal(
+    corrected.match.finalisedPlayerRecords?.find((record) => record.playerId === "naim")
+      ?.playerOfMatch,
+    true
+  );
+});
+
+test("POM correction preserves non-POM XP components and cricket statistics", () => {
+  const match = finalisedMatch([
+    performance({
+      playerId: "rohit",
+      teamId: "teamA",
+      playerOfMatch: true,
+      didBat: true,
+      runs: 20,
+      wickets: 1
+    }),
+    performance({
+      playerId: "naim",
+      teamId: "teamB",
+      didBat: true,
+      runs: 22,
+      catches: 1
+    })
+  ]);
+  const initialState = applyFinalisedMatchToCareerStats(
+    match,
+    createEmptyCareerProgressionState(),
+    "2026-08-10T10:00:00.000Z"
+  );
+  const corrected = applyPlayerOfMatchCorrectionToFinalisedMatch({
+    match,
+    currentState: initialState,
+    nextPlayerOfMatchId: "naim"
+  });
+  const omitPomSpecificFields = (
+    breakdown: ReturnType<typeof calculatePlayerMatchXP>
+  ) =>
+    Object.fromEntries(
+      Object.entries(breakdown).filter(
+        ([key]) =>
+          !["playerOfMatchXP", "rawTotalXP", "awardedXP"].includes(key)
+      )
+    );
+
+  for (const playerId of ["rohit", "naim"]) {
+    assert.deepEqual(
+      omitPomSpecificFields(
+        corrected.state.appliedProgressions[`match-1:${playerId}`].xpBreakdown
+      ),
+      omitPomSpecificFields(
+        initialState.appliedProgressions[`match-1:${playerId}`].xpBreakdown
+      )
+    );
+  }
+
+  assert.equal(corrected.state.playerCareers.rohit.matches, 1);
+  assert.equal(corrected.state.playerCareers.rohit.runs, 20);
+  assert.equal(corrected.state.playerCareers.rohit.wickets, 1);
+  assert.equal(corrected.state.playerCareers.naim.matches, 1);
+  assert.equal(corrected.state.playerCareers.naim.runs, 22);
+  assert.equal(corrected.state.playerCareers.naim.catches, 1);
+});
+
+test("POM correction to none removes only the POM bonus", () => {
+  const match = finalisedMatch([
+    performance({
+      playerId: "rohit",
+      teamId: "teamA",
+      playerOfMatch: true,
+      didBat: true,
+      runs: 20
+    })
+  ]);
+  const initialState = applyFinalisedMatchToCareerStats(
+    match,
+    createEmptyCareerProgressionState(),
+    "2026-08-10T10:00:00.000Z"
+  );
+  const corrected = applyPlayerOfMatchCorrectionToFinalisedMatch({
+    match,
+    currentState: initialState,
+    nextPlayerOfMatchId: null
+  });
+
+  assert.equal(
+    corrected.state.appliedProgressions["match-1:rohit"].xpBreakdown.playerOfMatchXP,
+    0
+  );
+  assert.equal(corrected.state.playerCareers.rohit.runs, 20);
+});
+
+test("POM correction from none adds one POM bonus and repeated correction is idempotent", () => {
+  const match = finalisedMatch([
+    performance({
+      playerId: "naim",
+      teamId: "teamA",
+      didBat: true,
+      runs: 20
+    })
+  ]);
+  const initialState = applyFinalisedMatchToCareerStats(
+    match,
+    createEmptyCareerProgressionState(),
+    "2026-08-10T10:00:00.000Z"
+  );
+  const corrected = applyPlayerOfMatchCorrectionToFinalisedMatch({
+    match,
+    currentState: initialState,
+    nextPlayerOfMatchId: "naim"
+  });
+  const repeated = applyPlayerOfMatchCorrectionToFinalisedMatch({
+    match: corrected.match,
+    currentState: corrected.state,
+    nextPlayerOfMatchId: "naim"
+  });
+
+  assert.equal(
+    corrected.state.appliedProgressions["match-1:naim"].xpBreakdown.playerOfMatchXP,
+    XP_RULES.playerOfMatch
+  );
+  assert.equal(repeated.affectedPlayerIds.length, 0);
+  assert.deepEqual(repeated.state, corrected.state);
+});
+
+test("POM correction updates ledger so career rebuild from corrected match agrees", () => {
+  const match = finalisedMatch([
+    performance({
+      playerId: "rohit",
+      teamId: "teamA",
+      playerOfMatch: true,
+      didBat: true,
+      runs: 20
+    }),
+    performance({
+      playerId: "naim",
+      teamId: "teamB",
+      didBat: true,
+      runs: 22
+    })
+  ]);
+  const initialState = applyFinalisedMatchToCareerStats(
+    match,
+    createEmptyCareerProgressionState(),
+    "2026-08-10T10:00:00.000Z"
+  );
+  const corrected = applyPlayerOfMatchCorrectionToFinalisedMatch({
+    match,
+    currentState: initialState,
+    nextPlayerOfMatchId: "naim",
+    correctedAt: "2026-08-10T11:00:00.000Z"
+  });
+  const rebuilt = applyFinalisedMatchToCareerStats(
+    corrected.match,
+    createEmptyCareerProgressionState(),
+    "2026-08-10T11:30:00.000Z"
+  );
+
+  for (const playerId of ["rohit", "naim"]) {
+    assert.equal(
+      rebuilt.appliedProgressions[`match-1:${playerId}`].xpBreakdown
+        .playerOfMatchXP,
+      corrected.state.appliedProgressions[`match-1:${playerId}`].xpBreakdown
+        .playerOfMatchXP
+    );
+    assert.equal(
+      rebuilt.appliedProgressions[`match-1:${playerId}`].xpBreakdown.awardedXP,
+      corrected.state.appliedProgressions[`match-1:${playerId}`].xpBreakdown
+        .awardedXP
+    );
+    assert.deepEqual(
+      rebuilt.playerCareers[playerId],
+      {
+        ...corrected.state.playerCareers[playerId],
+        totalXP: rebuilt.playerCareers[playerId].totalXP,
+        level: rebuilt.playerCareers[playerId].level
+      }
+    );
+    assert.equal(
+      rebuilt.playerCareers[playerId].totalXP,
+      corrected.state.playerCareers[playerId].totalXP
+    );
+    assert.equal(
+      rebuilt.playerCareers[playerId].level,
+      corrected.state.playerCareers[playerId].level
+    );
+  }
+});
+
+test("POM correction level handling follows protected XP application rules", () => {
+  const match = finalisedMatch([
+    performance({
+      playerId: "rohit",
+      teamId: "teamA",
+      playerOfMatch: true,
+      didBat: true,
+      runs: 20
+    })
+  ]);
+  const threshold = cumulativeXPForLevel(1);
+  const initialState = applyFinalisedMatchToCareerStats(
+    match,
+    createEmptyCareerProgressionState(),
+    "2026-08-10T10:00:00.000Z"
+  );
+  const currentState = {
+    ...initialState,
+    playerCareers: {
+      rohit: {
+        ...createEmptyPlayerCareerStats("rohit"),
+        matches: 1,
+        inningsBatted: 1,
+        runs: 20,
+        totalXP: threshold + 10,
+        level: 1
+      }
+    }
+  };
+  const corrected = applyPlayerOfMatchCorrectionToFinalisedMatch({
+    match,
+    currentState,
+    nextPlayerOfMatchId: null
+  });
+
+  assert.equal(corrected.state.playerCareers.rohit.totalXP, threshold);
+  assert.equal(corrected.state.playerCareers.rohit.level, 1);
+});
+
+test("POM correction removes XP normally when the level floor is not crossed", () => {
+  const match = finalisedMatch([
+    performance({
+      playerId: "rohit",
+      teamId: "teamA",
+      playerOfMatch: true,
+      didBat: true,
+      runs: 20
+    }),
+    performance({
+      playerId: "naim",
+      teamId: "teamB",
+      didBat: true,
+      runs: 10
+    })
+  ]);
+  const currentState = applyFinalisedMatchToCareerStats(
+    match,
+    {
+      playerCareers: {
+        rohit: {
+          ...createEmptyPlayerCareerStats("rohit"),
+          totalXP: 200,
+          level: 1
+        }
+      },
+      appliedProgressions: {}
+    },
+    "2026-08-10T10:00:00.000Z"
+  );
+  const corrected = applyPlayerOfMatchCorrectionToFinalisedMatch({
+    match,
+    currentState,
+    nextPlayerOfMatchId: null
+  });
+
+  assert.equal(corrected.state.playerCareers.rohit.totalXP, 235);
+  assert.equal(corrected.state.playerCareers.rohit.level, 1);
+});
+
+test("POM correction for a Shared Player keeps one ledger application", () => {
+  const sharedTeamA = performance({
+    playerId: "aninda",
+    teamId: "teamA",
+    representingTeamId: "teamA" as const,
+    playerOfMatch: true,
+    didBat: true,
+    runs: 12
+  });
+  const sharedTeamB = performance({
+    playerId: "aninda",
+    teamId: "teamB",
+    representingTeamId: "teamB" as const,
+    playerOfMatch: true,
+    didBat: true,
+    runs: 8
+  });
+  const aggregateSharedRecord = {
+    ...sharedTeamA,
+    runs: 20,
+    xpBreakdown: calculateSharedPlayerMatchXP([sharedTeamA, sharedTeamB], {
+      result: result()
+    })
+  };
+  const match: MatchRecord = {
+    ...finalisedMatch([sharedTeamA, sharedTeamB]),
+    sharedPlayerId: "aninda",
+    finalisedPlayerRecords: [aggregateSharedRecord]
+  };
+  const initialState = applyFinalisedMatchToCareerStats(
+    match,
+    createEmptyCareerProgressionState(),
+    "2026-08-10T10:00:00.000Z"
+  );
+  const corrected = applyPlayerOfMatchCorrectionToFinalisedMatch({
+    match,
+    currentState: initialState,
+    nextPlayerOfMatchId: null
+  });
+
+  assert.deepEqual(Object.keys(corrected.state.appliedProgressions), [
+    "match-1:aninda"
+  ]);
+  assert.equal(
+    corrected.state.appliedProgressions["match-1:aninda"].xpBreakdown
+      .playerOfMatchXP,
+    0
+  );
+  assert.equal(corrected.state.playerCareers.aninda.matches, 1);
 });
 
 test("batting runs XP is capped and milestone bonuses are cumulative", () => {

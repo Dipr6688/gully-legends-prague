@@ -64,6 +64,17 @@ import {
   toggleTeamSelection
 } from "@/lib/match-records";
 import type { LiveInningsScore, MatchValidationStage } from "@/lib/match-records";
+import {
+  createEmptyQuickScoringMetadata,
+  createQuickScoringEvent,
+  deriveQuickScoringInnings,
+  getQuickScoringEventsForTeam,
+  getQuickScoringInningsKey,
+  nextQuickScoringSequence,
+  replaceQuickScoringEvent,
+  undoLastQuickScoringEvent,
+  type QuickScoringDerivedInnings
+} from "@/lib/quick-scoring";
 import { applyFinalisedMatchToLocalCareerStats } from "@/lib/career-store";
 import {
   finalizeSupabaseAdminMatch,
@@ -83,6 +94,7 @@ import {
   calculatePlayerMatchXP,
   calculateSharedPlayerMatchXP
 } from "@/lib/progression";
+import { getPlayerOfMatchRecommendation } from "@/lib/player-of-match";
 import type {
   BowlingOver,
   DismissalEvent,
@@ -95,6 +107,7 @@ import type {
   MockMatchFormValues,
   PlayerMatchPerformance,
   PlayerMatchXPBreakdown,
+  QuickScoringDismissalType,
   TeamInnings,
   TeamId
 } from "@/lib/types/match";
@@ -271,6 +284,38 @@ export function MockMatchEntryForm({
   const [battingFirstTeamId, setBattingFirstTeamId] = useState<TeamId | "">(
     () => initialMatch?.battingFirstTeamId ?? ""
   );
+  const [quickScoring, setQuickScoring] = useState(
+    () => initialMatch?.quickScoring ?? createEmptyQuickScoringMetadata()
+  );
+  const [quickSelection, setQuickSelection] = useState({
+    strikerId: "",
+    nonStrikerId: "",
+    bowlerId: ""
+  });
+  const [quickWicketDraft, setQuickWicketDraft] = useState<{
+    open: boolean;
+    type: QuickScoringDismissalType;
+    dismissedPlayerId: string;
+    fielderId: string;
+    newBatterId: string;
+    completedRuns: number;
+    nextStrikerId: string;
+    nextNonStrikerId: string;
+  }>({
+    open: false,
+    type: "bowled",
+    dismissedPlayerId: "",
+    fielderId: "",
+    newBatterId: "",
+    completedRuns: 0,
+    nextStrikerId: "",
+    nextNonStrikerId: ""
+  });
+  const [quickNoBallOpen, setQuickNoBallOpen] = useState(false);
+  const [playerOfMatchSelectionMode, setPlayerOfMatchSelectionMode] = useState<
+    "auto" | "manual"
+  >(() => (initialMatch?.finalisedPlayerRecords?.some((record) => record.playerOfMatch) ? "manual" : "auto"));
+  const [quickSaveStatus, setQuickSaveStatus] = useState("Saved");
   const [performances, setPerformances] = useState<
     Record<string, PlayerMatchPerformance>
   >(() => (initialMatch ? getPerformanceStateFromMatch(initialMatch) : {}));
@@ -338,7 +383,13 @@ export function MockMatchEntryForm({
     setTeamB(initialMatch.teams.teamB.playerIds);
     setSharedPlayerId(initialMatch.sharedPlayerId ?? null);
     setBattingFirstTeamId(initialMatch.battingFirstTeamId ?? "");
+    setQuickScoring(initialMatch.quickScoring ?? createEmptyQuickScoringMetadata());
     setPerformances(getPerformanceStateFromMatch(initialMatch));
+    setPlayerOfMatchSelectionMode(
+      initialMatch.finalisedPlayerRecords?.some((record) => record.playerOfMatch)
+        ? "manual"
+        : "auto"
+    );
     setBowlingOvers({
       teamA: initialMatch.teams.teamA.bowlingOvers,
       teamB: initialMatch.teams.teamB.bowlingOvers
@@ -363,6 +414,77 @@ export function MockMatchEntryForm({
     () => activePlayers.filter((player) => teamB.includes(player.id)),
     [teamB]
   );
+  const quickTeamADerived = useMemo(
+    () =>
+      deriveQuickScoringInnings({
+        battingTeamId: "teamA",
+        bowlingTeamId: "teamB",
+        battingPlayerIds: teamA,
+        bowlingPlayerIds: teamB,
+        events: quickScoring.inningsAEvents
+      }),
+    [quickScoring.inningsAEvents, teamA, teamB]
+  );
+  const quickTeamBDerived = useMemo(
+    () =>
+      deriveQuickScoringInnings({
+        battingTeamId: "teamB",
+        bowlingTeamId: "teamA",
+        battingPlayerIds: teamB,
+        bowlingPlayerIds: teamA,
+        events: quickScoring.inningsBEvents
+      }),
+    [quickScoring.inningsBEvents, teamA, teamB]
+  );
+  const hasQuickScoringEvents =
+    quickScoring.inningsAEvents.length + quickScoring.inningsBEvents.length > 0;
+
+  useEffect(() => {
+    if (!hasQuickScoringEvents || isLocked) return;
+
+    let isCurrent = true;
+
+    queueMicrotask(() => {
+      if (!isCurrent) return;
+
+      setPerformances((current) => {
+        const next = { ...current };
+
+        for (const performance of [
+          ...quickTeamADerived.battingPerformances,
+          ...quickTeamBDerived.battingPerformances
+        ]) {
+          const key = getPerformanceRecordKey(performance);
+          const existing = next[key];
+
+          next[key] = {
+            ...(existing ?? performance),
+            ...performance,
+            playerOfMatch: existing?.playerOfMatch ?? false
+          };
+        }
+
+        return next;
+      });
+
+      setBowlingOvers({
+        teamA: quickTeamBDerived.bowlingOvers,
+        teamB: quickTeamADerived.bowlingOvers
+      });
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [
+    hasQuickScoringEvents,
+    isLocked,
+    quickTeamADerived.battingPerformances,
+    quickTeamADerived.bowlingOvers,
+    quickTeamBDerived.battingPerformances,
+    quickTeamBDerived.bowlingOvers
+  ]);
+
   const hasOddAttendance = hasOddAvailablePlayers(availablePlayerIds);
   const ordinaryDuplicatePlayers = useMemo(
     () =>
@@ -407,6 +529,13 @@ export function MockMatchEntryForm({
   const performanceList = useMemo(
     () => [...teamAPerformances, ...teamBPerformances],
     [teamAPerformances, teamBPerformances]
+  );
+  const playerOfMatchId =
+    performanceList.find((performance) => performance.playerOfMatch)?.playerId ?? "";
+  const playedPlayers = activePlayers.filter((player) =>
+    performanceList.some(
+      (performance) => performance.playerId === player.id && performance.played
+    )
   );
   const teamAInningsScore = useMemo(
     () =>
@@ -477,6 +606,20 @@ export function MockMatchEntryForm({
       ),
     [effectiveBattingFirstTeamId, firstInnings, secondInnings, status]
   );
+  const allBowlingOvers = useMemo(
+    () => [...bowlingOvers.teamA, ...bowlingOvers.teamB],
+    [bowlingOvers.teamA, bowlingOvers.teamB]
+  );
+  const playerOfMatchRecommendation = useMemo(
+    () =>
+      getPlayerOfMatchRecommendation({
+        performances: performanceList,
+        allBowlingOvers,
+        result: liveResult,
+        sharedPlayerId
+      }),
+    [allBowlingOvers, liveResult, performanceList, sharedPlayerId]
+  );
   const target = firstInnings.runs + 1;
   const teamABowlingInningsState = useMemo(
     () =>
@@ -526,6 +669,84 @@ export function MockMatchEntryForm({
     effectiveBattingFirstTeamId === "teamA"
       ? teamBBowlingInningsState.isComplete
       : teamABowlingInningsState.isComplete;
+  const quickActiveBattingTeamId: TeamId = firstInningsIsComplete
+    ? chasingTeamId
+    : effectiveBattingFirstTeamId;
+  const quickActiveBowlingTeamId = getChasingTeamId(quickActiveBattingTeamId);
+  const quickActiveBattingPlayers =
+    quickActiveBattingTeamId === "teamA" ? teamAPlayers : teamBPlayers;
+  const quickActiveBowlingPlayers =
+    quickActiveBowlingTeamId === "teamA" ? teamAPlayers : teamBPlayers;
+  const quickActiveDerived =
+    quickActiveBattingTeamId === "teamA" ? quickTeamADerived : quickTeamBDerived;
+
+  useEffect(() => {
+    if (!hasQuickScoringEvents) return;
+
+    let isCurrent = true;
+
+    queueMicrotask(() => {
+      if (!isCurrent) return;
+
+      setQuickSelection((current) => ({
+        strikerId: quickActiveDerived.currentStrikerId ?? current.strikerId,
+        nonStrikerId:
+          quickActiveDerived.currentNonStrikerId ?? current.nonStrikerId,
+        bowlerId: quickActiveDerived.currentBowlerId ?? ""
+      }));
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [
+    hasQuickScoringEvents,
+    quickActiveDerived.currentBowlerId,
+    quickActiveDerived.currentNonStrikerId,
+    quickActiveDerived.currentStrikerId
+  ]);
+
+  useEffect(() => {
+    if (isLocked || playerOfMatchSelectionMode !== "auto") return;
+
+    let isCurrent = true;
+
+    queueMicrotask(() => {
+      if (!isCurrent) return;
+
+      setPerformances((current) => {
+        const recommendedPlayerId =
+          playerOfMatchRecommendation.recommendedPlayerId;
+        const alreadyMatches = Object.values(current).every((performance) =>
+          Boolean(recommendedPlayerId) && performance.playerId === recommendedPlayerId
+            ? performance.playerOfMatch
+            : !performance.playerOfMatch
+        );
+
+        if (alreadyMatches) return current;
+
+        return Object.fromEntries(
+          Object.entries(current).map(([key, performance]) => [
+            key,
+            {
+              ...performance,
+              playerOfMatch:
+                Boolean(recommendedPlayerId) &&
+                performance.playerId === recommendedPlayerId
+            }
+          ])
+        );
+      });
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [
+    isLocked,
+    playerOfMatchRecommendation.recommendedPlayerId,
+    playerOfMatchSelectionMode
+  ]);
 
   function applyRosters(
     nextAvailable: string[],
@@ -746,7 +967,9 @@ export function MockMatchEntryForm({
           const key = getPerformanceKey(playerId, "teamA");
           next[key] = {
             ...(next[key] ?? createPerformance(playerId, "teamA")),
-            teamId: "teamA"
+            teamId: "teamA",
+            representingTeamId: "teamA",
+            played: true
           };
         }
 
@@ -754,7 +977,9 @@ export function MockMatchEntryForm({
           const key = getPerformanceKey(playerId, "teamB");
           next[key] = {
             ...(next[key] ?? createPerformance(playerId, "teamB")),
-            teamId: "teamB"
+            teamId: "teamB",
+            representingTeamId: "teamB",
+            played: true
           };
         }
 
@@ -1056,6 +1281,275 @@ export function MockMatchEntryForm({
     }));
   }
 
+  async function autosaveQuickScoring(nextQuickScoring = quickScoring) {
+    if (isLocked) return;
+
+    setQuickSaveStatus("Saving...");
+
+    const saved = await persistNonFinalisedMatch({
+      ...buildCurrentMatchRecord(status, liveResult, new Date().toISOString()),
+      quickScoring: nextQuickScoring
+    });
+
+    setQuickSaveStatus(saved ? "Saved" : "Save needed");
+  }
+
+  function updateQuickScoring(nextQuickScoring: typeof quickScoring) {
+    setQuickScoring(nextQuickScoring);
+    void autosaveQuickScoring(nextQuickScoring);
+  }
+
+  function getQuickDismissedPlayerIds(derived: QuickScoringDerivedInnings) {
+    return new Set(
+      derived.battingPerformances
+        .filter((performance) => performance.wasOut)
+        .map((performance) => performance.playerId)
+    );
+  }
+
+  function validateQuickScoringAction() {
+    const dismissedPlayerIds = getQuickDismissedPlayerIds(quickActiveDerived);
+    const battingPlayerIds = new Set(
+      quickActiveBattingPlayers.map((player) => player.id)
+    );
+    const bowlingPlayerIds = new Set(
+      quickActiveBowlingPlayers.map((player) => player.id)
+    );
+
+    if (
+      isLocked ||
+      !quickSelection.strikerId ||
+      !quickSelection.nonStrikerId ||
+      !quickSelection.bowlerId
+    ) {
+      setMessage("Select striker, non-striker and bowler before quick scoring.");
+      return false;
+    }
+
+    if (quickSelection.strikerId === quickSelection.nonStrikerId) {
+      setMessage("Striker and non-striker must be different players.");
+      return false;
+    }
+
+    if (
+      !battingPlayerIds.has(quickSelection.strikerId) ||
+      !battingPlayerIds.has(quickSelection.nonStrikerId)
+    ) {
+      setMessage("Select batters from the batting team.");
+      return false;
+    }
+
+    if (
+      dismissedPlayerIds.has(quickSelection.strikerId) ||
+      dismissedPlayerIds.has(quickSelection.nonStrikerId)
+    ) {
+      setMessage("A dismissed batter cannot face the next ball.");
+      return false;
+    }
+
+    if (!bowlingPlayerIds.has(quickSelection.bowlerId)) {
+      setMessage("Select a bowler from the bowling team.");
+      return false;
+    }
+
+    if (
+      quickActiveDerived.legalBalls > 0 &&
+      quickActiveDerived.legalBalls % 6 === 0 &&
+      quickActiveDerived.previousOverBowlerId === quickSelection.bowlerId
+    ) {
+      setMessage("Select a different bowler for the next over.");
+      return false;
+    }
+
+    return true;
+  }
+
+  function appendQuickScoringEvent({
+    batterRuns,
+    extraType = null,
+    extras,
+    wicket = null
+  }: {
+    batterRuns: number;
+    extraType?: Parameters<typeof createQuickScoringEvent>[0]["extraType"];
+    extras?: number;
+    wicket?: Parameters<typeof createQuickScoringEvent>[0]["wicket"];
+  }) {
+    if (!validateQuickScoringAction()) return;
+
+    const key = getQuickScoringInningsKey(quickActiveBattingTeamId);
+    const events = getQuickScoringEventsForTeam(quickScoring, quickActiveBattingTeamId);
+    const event = createQuickScoringEvent({
+      battingTeamId: quickActiveBattingTeamId,
+      strikerId: quickSelection.strikerId,
+      nonStrikerId: quickSelection.nonStrikerId,
+      bowlerId: quickSelection.bowlerId,
+      batterRuns,
+      extraType,
+      extras,
+      wicket,
+      sequence: nextQuickScoringSequence(events)
+    });
+
+    updateQuickScoring({
+      ...quickScoring,
+      [key]: [...events, event]
+    });
+    setMessage("Quick scoring event recorded.");
+  }
+
+  function undoQuickScoringEvent() {
+    if (isLocked) return;
+
+    updateQuickScoring(
+      undoLastQuickScoringEvent(quickScoring, quickActiveBattingTeamId)
+    );
+    setMessage("Last quick scoring event undone.");
+  }
+
+  function correctQuickScoringEventToDot(eventId: string) {
+    if (isLocked) return;
+
+    const event = getQuickScoringEventsForTeam(
+      quickScoring,
+      quickActiveBattingTeamId
+    ).find((candidate) => candidate.id === eventId);
+
+    if (!event) return;
+
+    updateQuickScoring(
+      replaceQuickScoringEvent(quickScoring, quickActiveBattingTeamId, {
+        ...event,
+        batterRuns: 0,
+        extras: 0,
+        extraType: null,
+        legalDelivery: true,
+        wicket: null
+      })
+    );
+    setMessage("Current-over event corrected to dot ball.");
+  }
+
+  function submitQuickWicket() {
+    const dismissedPlayerId =
+      quickWicketDraft.dismissedPlayerId || quickSelection.strikerId;
+    const survivorId =
+      dismissedPlayerId === quickSelection.strikerId
+        ? quickSelection.nonStrikerId
+        : quickSelection.strikerId;
+    const dismissedPlayerIds = getQuickDismissedPlayerIds(quickActiveDerived);
+    const battingPlayerIds = new Set(
+      quickActiveBattingPlayers.map((player) => player.id)
+    );
+    const wicketWouldLeaveAvailableBatter =
+      dismissedPlayerIds.size + 1 < quickActiveBattingPlayers.length;
+
+    if (!dismissedPlayerId) {
+      setMessage("Select who was dismissed.");
+      return;
+    }
+
+    if (
+      dismissedPlayerId !== quickSelection.strikerId &&
+      dismissedPlayerId !== quickSelection.nonStrikerId
+    ) {
+      setMessage("The dismissed batter must be one of the active batters.");
+      return;
+    }
+
+    if (
+      (quickWicketDraft.type === "caught" || quickWicketDraft.type === "run_out") &&
+      !quickWicketDraft.fielderId
+    ) {
+      setMessage(
+        quickWicketDraft.type === "caught"
+          ? "Select the catcher."
+          : "Select the run-out fielder."
+      );
+      return;
+    }
+
+    if (
+      quickWicketDraft.type === "run_out" &&
+      (!quickWicketDraft.nextStrikerId ||
+        !quickWicketDraft.nextNonStrikerId ||
+        quickWicketDraft.nextStrikerId === quickWicketDraft.nextNonStrikerId)
+    ) {
+      setMessage("Confirm distinct next-ball striker and non-striker for the run-out.");
+      return;
+    }
+
+    if (
+      quickWicketDraft.newBatterId &&
+      (quickWicketDraft.newBatterId === survivorId ||
+        quickWicketDraft.newBatterId === dismissedPlayerId ||
+        !battingPlayerIds.has(quickWicketDraft.newBatterId) ||
+        dismissedPlayerIds.has(quickWicketDraft.newBatterId))
+    ) {
+      setMessage("Select an eligible new batter.");
+      return;
+    }
+
+    if (wicketWouldLeaveAvailableBatter && !quickWicketDraft.newBatterId) {
+      setMessage("Select the new batter before recording this wicket.");
+      return;
+    }
+
+    if (
+      quickWicketDraft.type === "run_out" &&
+      (!battingPlayerIds.has(quickWicketDraft.nextStrikerId) ||
+        !battingPlayerIds.has(quickWicketDraft.nextNonStrikerId) ||
+        quickWicketDraft.nextStrikerId === dismissedPlayerId ||
+        quickWicketDraft.nextNonStrikerId === dismissedPlayerId ||
+        dismissedPlayerIds.has(quickWicketDraft.nextStrikerId) ||
+        dismissedPlayerIds.has(quickWicketDraft.nextNonStrikerId))
+    ) {
+      setMessage("Confirm eligible next-ball batters for the run-out.");
+      return;
+    }
+
+    appendQuickScoringEvent({
+      batterRuns: quickWicketDraft.completedRuns,
+      extraType: null,
+      wicket: {
+        type: quickWicketDraft.type,
+        dismissedPlayerId,
+        fielderId: quickWicketDraft.fielderId || null,
+        newBatterId: quickWicketDraft.newBatterId || null,
+        completedRuns: quickWicketDraft.completedRuns,
+        nextStrikerId: quickWicketDraft.nextStrikerId || null,
+        nextNonStrikerId: quickWicketDraft.nextNonStrikerId || null
+      }
+    });
+    setQuickWicketDraft({
+      open: false,
+      type: "bowled",
+      dismissedPlayerId: "",
+      fielderId: "",
+      newBatterId: "",
+      completedRuns: 0,
+      nextStrikerId: "",
+      nextNonStrikerId: ""
+    });
+  }
+
+  function selectPlayerOfMatch(playerId: string) {
+    if (isLocked) return;
+
+    setPlayerOfMatchSelectionMode("manual");
+    setPerformances((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([key, performance]) => [
+          key,
+          {
+            ...performance,
+            playerOfMatch: Boolean(playerId) && performance.playerId === playerId
+          }
+        ])
+      )
+    );
+  }
+
   function buildCurrentMatchRecord(
     finalStatus: MatchStatus,
     result: MatchResult,
@@ -1131,6 +1625,7 @@ export function MockMatchEntryForm({
             : null
           : chasingTeamId,
       sharedPlayerId,
+      quickScoring,
       teams: {
         teamA: {
           ...teamAMatchData,
@@ -1226,6 +1721,23 @@ export function MockMatchEntryForm({
         }
       }
 
+      if (nextStatus === "finalised" && hasQuickScoringEvents) {
+        const quickIssues = [
+          ...quickTeamADerived.missingInformation,
+          ...quickTeamBDerived.missingInformation
+        ];
+
+        if (quickIssues.length > 0) {
+          setMessage(quickIssues[0] ?? "Resolve quick scoring details before finalising.");
+          return false;
+        }
+
+        if (!secondInningsIsComplete) {
+          setMessage("Finish the match or innings review before finalising.");
+          return false;
+        }
+      }
+
       if (nextStatus === "finalised" && !options.skipMonthlyCrownGuard) {
         if (!supabaseWriteMode) {
           const matchMonthKey = getMatchMonthKey(values.matchDate);
@@ -1278,6 +1790,27 @@ export function MockMatchEntryForm({
       }
 
       if (nextStatus === "finalised") {
+        const finalScore = `${values.teamAName} ${formatInningsScore(
+          result.totals.teamATotal,
+          teamAInningsScore.wicketsLost
+        )} vs ${values.teamBName} ${formatInningsScore(
+          result.totals.teamBTotal,
+          teamBInningsScore.wicketsLost
+        )}`;
+        const resultHeadline = getFinalResultHeadline(
+          result.result,
+          values.teamAName,
+          values.teamBName
+        );
+        const selectedPlayerOfMatchLabel = playerOfMatchId
+          ? getPlayerDisplayName(activePlayers, playerOfMatchId)
+          : "None";
+        const confirmed = window.confirm(
+          `FINALISE MATCH?\n\n${finalScore}\n${resultHeadline}\n\nPlayer of the Match: ${selectedPlayerOfMatchLabel}\n\nFinalisation updates career statistics, XP, Hall of Legends and Monthly Beasts.`
+        );
+
+        if (!confirmed) return false;
+
         const appliedAt = new Date().toISOString();
         const finalisedMatch = buildCurrentMatchRecord(
           nextStatus,
@@ -1357,33 +1890,6 @@ export function MockMatchEntryForm({
     }
   }
 
-  function handleStatusChange(nextStatus: MatchStatus) {
-    if (isLocked) return;
-
-    if (nextStatus === "abandoned" || nextStatus === "cancelled") {
-      const confirmed = window.confirm(
-        "This will mark the match as No Result. Continue?"
-      );
-
-      if (!confirmed) return;
-
-      void validateAndSetStatus(nextStatus, "schedule");
-      return;
-    }
-
-    if (nextStatus === "finalised") {
-      void validateAndSetStatus("finalised", "finalise");
-      return;
-    }
-
-    if (nextStatus === "in_progress") {
-      void validateAndSetStatus("in_progress", "start");
-      return;
-    }
-
-    setStatus(nextStatus);
-  }
-
   function openReopenCrownDialog(monthKey: string) {
     setBlockedCrownMonthKey(null);
     setReopenCrownMonthKey(monthKey);
@@ -1425,6 +1931,7 @@ export function MockMatchEntryForm({
     setBattingFirstTeamId("");
     setInningsExtras({ teamA: 0, teamB: 0 });
     setPerformances({});
+    setPlayerOfMatchSelectionMode("auto");
     setBowlingOvers({ teamA: [], teamB: [] });
     setStatus("draft");
     setFinalisedXPBreakdowns({});
@@ -1442,7 +1949,7 @@ export function MockMatchEntryForm({
           <h1 className="mt-1 text-3xl font-black uppercase">{matchPageTitle}</h1>
         </div>
         <span className="rounded-md border border-neon-yellow/40 bg-neon-yellow/10 px-3 py-2 text-xs font-black uppercase text-neon-yellow">
-          Status: {status.replace("_", " ")}
+          {getFriendlyWorkflowStatus(status, quickSaveStatus)}
         </span>
       </div>
       {isDemoTestMatch ? (
@@ -1566,20 +2073,12 @@ export function MockMatchEntryForm({
               className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
             />
           </label>
-          <label className="grid gap-2 text-sm font-bold text-stone-200">
-            Match status
-            <select
-              value={status}
-              disabled={isLocked}
-              onChange={(event) => handleStatusChange(event.target.value as MatchStatus)}
-              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
-            >
-              <option value="draft">Draft</option>
-              <option value="in_progress">In Progress</option>
-              <option value="abandoned">Abandoned</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </label>
+          <div className="grid gap-2 text-sm font-bold text-stone-200">
+            Scoring flow
+            <output className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100">
+              {getFriendlyWorkflowStatus(status, quickSaveStatus)}
+            </output>
+          </div>
           <label className="grid gap-2 text-sm font-bold text-stone-200">
             Scheduled overs per innings
             <input
@@ -1635,6 +2134,56 @@ export function MockMatchEntryForm({
             score={teamBInningsScore}
           />
         </div>
+
+          <QuickScoringPanel
+            battingTeamName={
+              quickActiveBattingTeamId === "teamA"
+                ? values.teamAName || "Team A"
+                : values.teamBName || "Team B"
+            }
+            bowlingTeamName={
+              quickActiveBowlingTeamId === "teamA"
+                ? values.teamAName || "Team A"
+                : values.teamBName || "Team B"
+            }
+            battingPlayers={quickActiveBattingPlayers}
+            bowlingPlayers={quickActiveBowlingPlayers}
+            derived={quickActiveDerived}
+            maximumOvers={scheduledOversForCalculations}
+            selection={quickSelection}
+            wicketDraft={quickWicketDraft}
+            noBallOpen={quickNoBallOpen}
+            saveStatus={quickSaveStatus}
+            disabled={isLocked || !battingFirstTeamId || !canUseTeamControls}
+            onSelectionChange={setQuickSelection}
+            onWicketDraftChange={setQuickWicketDraft}
+            onNoBallOpenChange={setQuickNoBallOpen}
+            onScoreRun={(runs) => appendQuickScoringEvent({ batterRuns: runs })}
+            onWide={() =>
+              appendQuickScoringEvent({
+                batterRuns: 0,
+                extraType: "wide",
+                extras: 1
+              })
+            }
+            onNoBall={(batterRuns) =>
+              appendQuickScoringEvent({
+                batterRuns,
+                extraType: "no_ball",
+                extras: 1
+              })
+            }
+            onUndo={undoQuickScoringEvent}
+            onSwapStrikers={() =>
+              setQuickSelection((current) => ({
+                ...current,
+                strikerId: current.nonStrikerId,
+                nonStrikerId: current.strikerId
+              }))
+            }
+            onCorrectEventToDot={correctQuickScoringEventToDot}
+            onSubmitWicket={submitQuickWicket}
+          />
 
           <section className="rounded-lg border border-neon-green/30 bg-black/25 p-4">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -1958,6 +2507,60 @@ export function MockMatchEntryForm({
         </div>
 
         {!isFinalised ? (
+          <section className="pom-review-panel rounded-lg border border-neon-yellow/30 bg-black/25 p-4">
+            <div>
+              <p className="text-xs font-black uppercase text-neon-yellow">
+                Player of the Match
+              </p>
+              {playerOfMatchRecommendation.leaders.length === 0 ? (
+                <p className="text-sm font-bold text-stone-400">
+                  No played players available yet.
+                </p>
+              ) : playerOfMatchRecommendation.isTie ? (
+                <div className="pom-suggestion">
+                  <strong>Joint highest match XP</strong>
+                  {playerOfMatchRecommendation.leaders.map((leader) => (
+                    <span key={`pom-leader-${leader.playerId}`}>
+                      {getPlayerDisplayName(activePlayers, leader.playerId)} - {leader.prePomXP} XP
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="pom-suggestion">
+                  <strong>Suggested by match performance</strong>
+                  <span>
+                    {getPlayerDisplayName(
+                      activePlayers,
+                      playerOfMatchRecommendation.recommendedPlayerId ?? ""
+                    )}{" "}
+                    - {playerOfMatchRecommendation.leaders[0]?.prePomXP ?? 0} XP
+                  </span>
+                </div>
+              )}
+              <p className="mt-2 text-xs font-bold text-stone-400">
+                Suggested using match XP before the POM bonus. You can change this selection.
+              </p>
+            </div>
+            <label className="grid gap-2 text-sm font-black uppercase text-stone-200">
+              Player of the Match
+              <select
+                value={playerOfMatchId}
+                disabled={isLocked}
+                onChange={(event) => selectPlayerOfMatch(event.target.value)}
+                className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+              >
+                <option value="">Select after review</option>
+                {playedPlayers.map((player) => (
+                  <option key={`pom-${player.id}`} value={player.id}>
+                    {player.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+        ) : null}
+
+        {!isFinalised ? (
         <label className="grid gap-2 text-sm font-bold text-stone-200">
           Notes
           <textarea
@@ -2030,6 +2633,17 @@ export function MockMatchEntryForm({
               disabled={isSavingMatch}
             >
               Continue to Team Setup
+            </Button>
+          ) : null}
+          {status === "draft" ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => validateAndSetStatus("in_progress", "start")}
+              disabled={isLocked || !canUseTeamControls || isSavingMatch}
+            >
+              <Swords className="h-4 w-4" aria-hidden="true" />
+              Start Quick Scoring
             </Button>
           ) : null}
           <Button
@@ -2173,6 +2787,7 @@ function buildPerformanceList(
       ...base,
       teamId,
       representingTeamId: teamId,
+      played: true,
       didBat: base.didBat || wasDismissed,
       runs: normalizeStoredRuns(base.runs),
       wasOut: wasDismissed,
@@ -2304,6 +2919,28 @@ function getPlayerRecordsDisclosureSummary(
   const allocation = calculateBattingAllocation(inningsScore.runs, performances);
 
   return `${formatInningsScore(inningsScore.runs, inningsScore.wicketsLost)} - Player runs ${allocation.playerRunsTotal} - Extras ${allocation.extras}`;
+}
+
+function formatQuickOvers(legalBalls: number): string {
+  const safeLegalBalls = sanitizeRuns(legalBalls);
+
+  return `${Math.floor(safeLegalBalls / 6)}.${safeLegalBalls % 6}`;
+}
+
+function formatQuickOverBalls(legalBalls: number): string {
+  return `${sanitizeRuns(legalBalls) % 6}/6`;
+}
+
+function getPlayerDisplayName(players: Player[], playerId: string): string {
+  return players.find((player) => player.id === playerId)?.name ?? "Select player";
+}
+
+function getFriendlyWorkflowStatus(status: MatchStatus, saveStatus: string): string {
+  if (status === "finalised") return "Match Scorecard";
+  if (status === "abandoned" || status === "cancelled") return "No Result";
+  if (status === "in_progress") return `Live - ${saveStatus}`;
+
+  return `Draft - ${saveStatus}`;
 }
 
 function getTeamAccentStyle(teamId: TeamId): CSSProperties {
@@ -2482,6 +3119,555 @@ function InningsAllocationPanel({
       >
         {reconciliationMessage}
       </p>
+    </section>
+  );
+}
+
+function QuickScoringPanel({
+  battingTeamName,
+  bowlingTeamName,
+  battingPlayers,
+  bowlingPlayers,
+  derived,
+  maximumOvers,
+  selection,
+  wicketDraft,
+  noBallOpen,
+  saveStatus,
+  disabled,
+  onSelectionChange,
+  onWicketDraftChange,
+  onNoBallOpenChange,
+  onScoreRun,
+  onWide,
+  onNoBall,
+  onUndo,
+  onSwapStrikers,
+  onCorrectEventToDot,
+  onSubmitWicket
+}: {
+  battingTeamName: string;
+  bowlingTeamName: string;
+  battingPlayers: Player[];
+  bowlingPlayers: Player[];
+  derived: QuickScoringDerivedInnings;
+  maximumOvers: number;
+  selection: { strikerId: string; nonStrikerId: string; bowlerId: string };
+  wicketDraft: {
+    open: boolean;
+    type: QuickScoringDismissalType;
+    dismissedPlayerId: string;
+    fielderId: string;
+    newBatterId: string;
+    completedRuns: number;
+    nextStrikerId: string;
+    nextNonStrikerId: string;
+  };
+  noBallOpen: boolean;
+  saveStatus: string;
+  disabled: boolean;
+  onSelectionChange: (selection: {
+    strikerId: string;
+    nonStrikerId: string;
+    bowlerId: string;
+  }) => void;
+  onWicketDraftChange: (draft: {
+    open: boolean;
+    type: QuickScoringDismissalType;
+    dismissedPlayerId: string;
+    fielderId: string;
+    newBatterId: string;
+    completedRuns: number;
+    nextStrikerId: string;
+    nextNonStrikerId: string;
+  }) => void;
+  onNoBallOpenChange: (open: boolean) => void;
+  onScoreRun: (runs: number) => void;
+  onWide: () => void;
+  onNoBall: (batterRuns: number) => void;
+  onUndo: () => void;
+  onSwapStrikers: () => void;
+  onCorrectEventToDot: (eventId: string) => void;
+  onSubmitWicket: () => void;
+}) {
+  const availableNewBatters = battingPlayers.filter(
+    (player) => player.id !== selection.strikerId &&
+      player.id !== selection.nonStrikerId &&
+      player.id !== wicketDraft.dismissedPlayerId &&
+      !derived.battingOrder.includes(player.id) &&
+      !derived.battingPerformances.some(
+        (performance) => performance.playerId === player.id && performance.wasOut
+      )
+  );
+  const maxOversLabel = maximumOvers > 0 ? maximumOvers : "-";
+  const overLimitReached =
+    maximumOvers > 0 && derived.legalBalls >= maximumOvers * 6;
+  const overJustEnded = derived.legalBalls > 0 && derived.legalBalls % 6 === 0;
+  const scoringDisabled = disabled || overLimitReached;
+  const dismissedPlayerIds = new Set(
+    derived.battingPerformances
+      .filter((performance) => performance.wasOut)
+      .map((performance) => performance.playerId)
+  );
+  const strikerOptions = battingPlayers.filter(
+    (player) =>
+      !dismissedPlayerIds.has(player.id) && player.id !== selection.nonStrikerId
+  );
+  const nonStrikerOptions = battingPlayers.filter(
+    (player) =>
+      !dismissedPlayerIds.has(player.id) && player.id !== selection.strikerId
+  );
+  const bowlerOptions = bowlingPlayers.filter(
+    (player) =>
+      !(overJustEnded && derived.previousOverBowlerId === player.id)
+  );
+  const previousBowler = bowlingPlayers.find(
+    (player) => player.id === derived.previousOverBowlerId
+  );
+  const correctionEvents =
+    derived.currentOverEvents.length > 0
+      ? derived.currentOverEvents
+      : overJustEnded
+        ? derived.lastCompletedOverEvents
+        : [];
+  const correctionLabels = correctionEvents.map((event) => {
+    if (event.wicket) return "W";
+    if (event.extraType === "wide") return "WD";
+    if (event.extraType === "no_ball") return `NB+${event.batterRuns}`;
+    return String(event.batterRuns);
+  });
+  const activeBatterOptions = [
+    {
+      id: selection.strikerId,
+      label: `Striker: ${getPlayerDisplayName(battingPlayers, selection.strikerId)}`
+    },
+    {
+      id: selection.nonStrikerId,
+      label: `Non-striker: ${getPlayerDisplayName(battingPlayers, selection.nonStrikerId)}`
+    }
+  ].filter((option) => option.id);
+  const nextBatterOptions = battingPlayers.filter(
+    (player) =>
+      !dismissedPlayerIds.has(player.id) &&
+      player.id !== wicketDraft.dismissedPlayerId
+  );
+
+  return (
+    <section className="quick-scoring-panel rounded-lg border border-neon-cyan/35 bg-black/30 p-4">
+      <div className="quick-scoring-header">
+        <div>
+          <p className="text-xs font-black uppercase text-neon-cyan">
+            Quick Scoring
+          </p>
+          <h2 className="text-2xl font-black uppercase text-stone-50">
+            {battingTeamName} Batting
+          </h2>
+          <span className="text-sm font-bold text-stone-400">
+            Bowling: {bowlingTeamName}
+          </span>
+        </div>
+        <div className="quick-save-status">{saveStatus}</div>
+      </div>
+
+      <div className="quick-score-strip">
+        <div>
+          <span>Score</span>
+          <strong>
+            {derived.runs}/{derived.wicketsLost}
+          </strong>
+        </div>
+        <div>
+          <span>Overs</span>
+          <strong>
+            {formatQuickOvers(derived.legalBalls)} / {maxOversLabel}
+          </strong>
+        </div>
+        <div>
+          <span>Current over</span>
+          <strong>{formatQuickOverBalls(derived.legalBalls)}</strong>
+        </div>
+      </div>
+
+      <div className="quick-player-selectors">
+        <label>
+          Striker
+          <select
+            value={selection.strikerId}
+            disabled={disabled}
+            onChange={(event) =>
+              onSelectionChange({
+                ...selection,
+                strikerId: event.target.value,
+                nonStrikerId:
+                  event.target.value === selection.nonStrikerId
+                    ? ""
+                    : selection.nonStrikerId
+              })
+            }
+          >
+            <option value="">Select striker</option>
+            {strikerOptions.map((player) => (
+              <option key={`quick-striker-${player.id}`} value={player.id}>
+                {player.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Non-striker
+          <select
+            value={selection.nonStrikerId}
+            disabled={disabled}
+            onChange={(event) =>
+              onSelectionChange({
+                ...selection,
+                nonStrikerId: event.target.value,
+                strikerId:
+                  event.target.value === selection.strikerId
+                    ? ""
+                    : selection.strikerId
+              })
+            }
+          >
+            <option value="">Select non-striker</option>
+            {nonStrikerOptions.map((player) => (
+              <option key={`quick-nonstriker-${player.id}`} value={player.id}>
+                {player.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Bowler
+          <select
+            value={selection.bowlerId}
+            disabled={disabled}
+            onChange={(event) =>
+              onSelectionChange({ ...selection, bowlerId: event.target.value })
+            }
+          >
+            <option value="">Select bowler</option>
+            {bowlerOptions.map((player) => (
+              <option key={`quick-bowler-${player.id}`} value={player.id}>
+                {player.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="quick-scoring-buttons" aria-label="Quick run buttons">
+        {[0, 1, 2, 3, 4, 6].map((runs) => (
+          <button
+            key={`quick-run-${runs}`}
+            type="button"
+            disabled={scoringDisabled}
+            onClick={() => onScoreRun(runs)}
+          >
+            {runs}
+          </button>
+        ))}
+      </div>
+
+      <div className="quick-special-buttons">
+        <button type="button" disabled={scoringDisabled} onClick={onWide}>
+          WD
+        </button>
+        <button
+          type="button"
+          disabled={scoringDisabled}
+          onClick={() => onNoBallOpenChange(!noBallOpen)}
+        >
+          NB
+        </button>
+        <button
+          type="button"
+          disabled={scoringDisabled}
+          onClick={() =>
+            onWicketDraftChange({
+              ...wicketDraft,
+              open: true,
+              dismissedPlayerId: selection.strikerId,
+              nextStrikerId: selection.strikerId,
+              nextNonStrikerId: selection.nonStrikerId
+            })
+          }
+        >
+          Wicket
+        </button>
+      </div>
+
+      {noBallOpen ? (
+        <div className="quick-no-ball-panel">
+          <p>No Ball - batter runs</p>
+          <div>
+            {[0, 1, 2, 3, 4, 6].map((runs) => (
+              <button
+                key={`quick-nb-${runs}`}
+                type="button"
+                disabled={scoringDisabled}
+                onClick={() => {
+                  onNoBall(runs);
+                  onNoBallOpenChange(false);
+                }}
+              >
+                {runs}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {wicketDraft.open ? (
+        <div className="quick-wicket-panel">
+          <label>
+            Dismissal
+            <select
+              value={wicketDraft.type}
+              onChange={(event) =>
+                onWicketDraftChange({
+                  ...wicketDraft,
+                  type: event.target.value as QuickScoringDismissalType,
+                  fielderId: "",
+                  dismissedPlayerId:
+                    event.target.value === "run_out"
+                      ? wicketDraft.dismissedPlayerId || selection.strikerId
+                      : selection.strikerId
+                })
+              }
+            >
+              <option value="bowled">Bowled</option>
+              <option value="caught">Caught</option>
+              <option value="run_out">Run Out</option>
+              <option value="other_bowler_wicket">Other</option>
+            </select>
+          </label>
+
+          {wicketDraft.type === "run_out" ? (
+            <div className="quick-run-out-guide">
+              <p>Step 1 - who was run out?</p>
+              <div>
+                {activeBatterOptions.map((option) => (
+                  <button
+                    key={`quick-runout-dismissed-${option.id}`}
+                    type="button"
+                    className={
+                      wicketDraft.dismissedPlayerId === option.id
+                        ? "is-selected"
+                        : ""
+                    }
+                    onClick={() =>
+                      onWicketDraftChange({
+                        ...wicketDraft,
+                        dismissedPlayerId: option.id,
+                        nextStrikerId:
+                          wicketDraft.nextStrikerId === option.id
+                            ? ""
+                            : wicketDraft.nextStrikerId,
+                        nextNonStrikerId:
+                          wicketDraft.nextNonStrikerId === option.id
+                            ? ""
+                            : wicketDraft.nextNonStrikerId
+                      })
+                    }
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <p>Step 2 - runs completed before the wicket</p>
+              <div>
+                {[0, 1, 2, 3].map((runs) => (
+                  <button
+                    key={`quick-runout-runs-${runs}`}
+                    type="button"
+                    className={
+                      wicketDraft.completedRuns === runs ? "is-selected" : ""
+                    }
+                    onClick={() =>
+                      onWicketDraftChange({
+                        ...wicketDraft,
+                        completedRuns: runs
+                      })
+                    }
+                  >
+                    {runs}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {wicketDraft.type === "caught" || wicketDraft.type === "run_out" ? (
+            <label>
+              {wicketDraft.type === "caught" ? "Catcher" : "Primary fielder"}
+              <select
+                value={wicketDraft.fielderId}
+                onChange={(event) =>
+                  onWicketDraftChange({
+                    ...wicketDraft,
+                    fielderId: event.target.value
+                  })
+                }
+              >
+                <option value="">Select fielder</option>
+                {bowlingPlayers.map((player) => (
+                  <option key={`quick-fielder-${player.id}`} value={player.id}>
+                    {player.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <label>
+            New batter
+            <select
+              value={wicketDraft.newBatterId}
+              onChange={(event) =>
+                onWicketDraftChange({
+                  ...wicketDraft,
+                  newBatterId: event.target.value
+                })
+              }
+            >
+              <option value="">Select new batter</option>
+              {availableNewBatters.map((player) => (
+                <option key={`quick-new-batter-${player.id}`} value={player.id}>
+                  {player.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {wicketDraft.type === "run_out" ? (
+            <div className="quick-next-pair">
+              <p>Step 5 - next ball batters</p>
+              <label>
+                Striker
+                <select
+                  value={wicketDraft.nextStrikerId}
+                  onChange={(event) =>
+                    onWicketDraftChange({
+                      ...wicketDraft,
+                      nextStrikerId: event.target.value,
+                      nextNonStrikerId:
+                        event.target.value === wicketDraft.nextNonStrikerId
+                          ? ""
+                          : wicketDraft.nextNonStrikerId
+                    })
+                  }
+                >
+                  <option value="">Select striker</option>
+                  {nextBatterOptions
+                    .filter((player) => player.id !== wicketDraft.nextNonStrikerId)
+                    .map((player) => (
+                    <option key={`quick-next-striker-${player.id}`} value={player.id}>
+                      {player.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Non-striker
+                <select
+                  value={wicketDraft.nextNonStrikerId}
+                  onChange={(event) =>
+                    onWicketDraftChange({
+                      ...wicketDraft,
+                      nextNonStrikerId: event.target.value,
+                      nextStrikerId:
+                        event.target.value === wicketDraft.nextStrikerId
+                          ? ""
+                          : wicketDraft.nextStrikerId
+                    })
+                  }
+                >
+                  <option value="">Select non-striker</option>
+                  {nextBatterOptions
+                    .filter((player) => player.id !== wicketDraft.nextStrikerId)
+                    .map((player) => (
+                    <option key={`quick-next-nonstriker-${player.id}`} value={player.id}>
+                      {player.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : null}
+          <div className="quick-wicket-actions">
+            <button type="button" onClick={onSubmitWicket}>
+              Record wicket
+            </button>
+            <button
+              type="button"
+              onClick={() => onWicketDraftChange({ ...wicketDraft, open: false })}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="quick-correction-row">
+        <button type="button" disabled={disabled} onClick={onSwapStrikers}>
+          Swap Strikers
+        </button>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onUndo}
+        >
+          Undo Last Ball
+        </button>
+      </div>
+
+      <div className="quick-over-strip" aria-label="Current over events">
+        {correctionLabels.length > 0 ? (
+          correctionEvents.map((event, index) => (
+            <button
+              key={event.id}
+              type="button"
+              disabled={disabled}
+              onClick={() => onCorrectEventToDot(event.id)}
+              title="Correct this current-over event to dot ball"
+            >
+              {correctionLabels[index]}
+            </button>
+          ))
+        ) : (
+          <span>No balls in current over yet</span>
+        )}
+      </div>
+
+      {overJustEnded && !overLimitReached ? (
+        <div className="quick-end-over-note">
+          <strong>End of Over</strong>
+          <span>
+            {derived.runs}/{derived.wicketsLost} after {formatQuickOvers(derived.legalBalls)}
+          </span>
+          <span>
+            Previous bowler: {previousBowler?.name ?? "Unknown"}
+          </span>
+          <span>
+            Over: {correctionLabels.join(" ") || "-"}
+          </span>
+          <b>Select next bowler before scoring again.</b>
+        </div>
+      ) : null}
+      {overLimitReached ? (
+        <div className="quick-end-over-note">
+          <strong>Scheduled Over Limit Reached</strong>
+          <span>Review and finalise when the innings is complete.</span>
+        </div>
+      ) : null}
+
+      {derived.missingInformation.length > 0 ? (
+        <div className="quick-missing-info">
+          {derived.missingInformation.map((item) => (
+            <p key={item}>{item}</p>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -2849,7 +4035,6 @@ function DismissalEditor({
           className="rounded-md border border-white/15 bg-black/35 px-3 py-2 text-sm text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
         >
           <option value="bowled">Bowled</option>
-          <option value="lbw">LBW</option>
           <option value="caught">Caught</option>
           <option value="stumped">Stumped</option>
           <option value="run_out">Run-out</option>
@@ -3124,44 +4309,6 @@ function TeamPlayerRecordsSection({
                     {teamName} - {isFinalised ? "XP Awarded" : "Projected match XP"}:{" "}
                     {playerMatchXP}
                   </p>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <label className="flex items-center gap-2 text-sm font-bold text-stone-200">
-                    <input
-                      type="checkbox"
-                      checked={performance.played}
-                      disabled={isLocked}
-                      onChange={(event) =>
-                        onUpdatePerformance(
-                          performance.playerId,
-                          performanceTeamId,
-                          {
-                            played: event.target.checked
-                          }
-                        )
-                      }
-                      className="h-4 w-4 accent-neon-yellow"
-                    />
-                    Played
-                  </label>
-                  <label className="flex items-center gap-2 text-sm font-bold text-stone-200">
-                    <input
-                      type="checkbox"
-                      checked={performance.playerOfMatch}
-                      disabled={isLocked}
-                      onChange={(event) =>
-                        onUpdatePerformance(
-                          performance.playerId,
-                          performanceTeamId,
-                          {
-                            playerOfMatch: event.target.checked
-                          }
-                        )
-                      }
-                      className="h-4 w-4 accent-neon-yellow"
-                    />
-                    Player of the Match
-                  </label>
                 </div>
               </div>
 

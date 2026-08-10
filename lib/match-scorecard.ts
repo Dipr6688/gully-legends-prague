@@ -64,7 +64,10 @@ export function formatOneDecimal(value: number): string {
 }
 
 export function formatCompletedOvers(overs: number): string {
-  return `${Math.max(0, Math.floor(overs))}.0`;
+  const safeOvers = Math.max(0, Number.isFinite(overs) ? overs : 0);
+  const totalBalls = Math.round(safeOvers * 6);
+
+  return `${Math.floor(totalBalls / 6)}.${totalBalls % 6}`;
 }
 
 function pluralise(value: number, singular: string, plural: string): string {

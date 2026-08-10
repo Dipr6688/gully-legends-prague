@@ -1,5 +1,5 @@
 import { parseLocalMatchDate, isSuccessfullyFinalisedMatch } from "./leaderboard";
-import { compareFixtureOrder } from "./next-match";
+import { compareFinalisedMatchesDescending } from "./match-repository";
 import { buildPlayerOfMatchSummary } from "./match-scorecard";
 import {
   formatMatchDisplayDate,
@@ -223,14 +223,9 @@ export function sortArchivedMatches(
   sort: MatchArchiveSortOrder
 ): MatchRecord[] {
   return [...matches].sort((left, right) => {
-    const leftDate = parseLocalMatchDate(left.matchDate)?.getTime() ?? 0;
-    const rightDate = parseLocalMatchDate(right.matchDate)?.getTime() ?? 0;
+    const newestOrder = compareFinalisedMatchesDescending(left, right);
 
-    if (leftDate !== rightDate) {
-      return sort === "newest" ? rightDate - leftDate : leftDate - rightDate;
-    }
-
-    return compareFixtureOrder(left, right);
+    return sort === "newest" ? newestOrder : -newestOrder;
   });
 }
 

@@ -131,6 +131,7 @@ function matchRecord({
   matchNumber,
   startTime,
   deletedAt,
+  progressionAppliedAt,
   status = "finalised",
   resultType = "win_by_runs"
 }: {
@@ -139,6 +140,7 @@ function matchRecord({
   matchNumber?: number | null;
   startTime?: string;
   deletedAt?: string | null;
+  progressionAppliedAt?: string;
   status?: MatchStatus;
   resultType?: "win_by_runs" | "no_result" | "tie";
 }): MatchRecord {
@@ -160,6 +162,7 @@ function matchRecord({
     matchNumber,
     startTime,
     deletedAt,
+    progressionAppliedAt,
     matchName: `Match ${id}`,
     venue: "CZU Gully Arena",
     status,
@@ -613,15 +616,30 @@ test("shared finalised-match selector sorts newest first and excludes unfinished
     matchRecord({ id: "draft", matchDate: "2026-08-06", status: "draft" }),
     matchRecord({ id: "live", matchDate: "2026-08-07", status: "in_progress" }),
     matchRecord({ id: "no-result", matchDate: "2026-08-08", resultType: "no_result" }),
-    matchRecord({ id: "older", matchDate: "2026-08-04" }),
-    matchRecord({ id: "newer", matchDate: "2026-08-09", resultType: "tie" })
+    matchRecord({
+      id: "recently-finalised-old-date",
+      matchDate: "2026-08-04",
+      progressionAppliedAt: "2026-08-11T20:00:00.000Z"
+    }),
+    matchRecord({ id: "newer-game-one", matchDate: "2026-08-09", matchNumber: 1 }),
+    matchRecord({
+      id: "newer-game-two",
+      matchDate: "2026-08-09",
+      matchNumber: 2,
+      resultType: "tie"
+    }),
+    matchRecord({
+      id: "deleted-newer",
+      matchDate: "2026-08-10",
+      deletedAt: "2026-08-11T08:00:00.000Z"
+    })
   ]);
 
   assert.deepEqual(
     finalisedMatches.map((match) => match.id),
-    ["newer", "older"]
+    ["newer-game-two", "newer-game-one", "recently-finalised-old-date"]
   );
-  assert.equal(finalisedMatches.length, 2);
+  assert.equal(finalisedMatches.length, 3);
 });
 
 test("Next Match selector prioritises live today and future draft matches", () => {
@@ -1478,6 +1496,40 @@ test("Dashboard Recent Matches is capped at the latest finalised archive match",
   );
 });
 
+test("Dashboard Recent Matches selects latest finalised match by date and game number", () => {
+  const summary = getDashboardSummary({
+    matches: [
+      matchRecord({
+        id: "older-but-finalised-last",
+        matchDate: "2026-08-01",
+        matchNumber: 3,
+        progressionAppliedAt: "2026-08-12T19:00:00.000Z"
+      }),
+      matchRecord({ id: "same-day-game-one", matchDate: "2026-08-10", matchNumber: 1 }),
+      matchRecord({ id: "same-day-game-two", matchDate: "2026-08-10", matchNumber: 2 }),
+      matchRecord({ id: "draft-newer", matchDate: "2026-08-11", matchNumber: 1, status: "draft" }),
+      matchRecord({
+        id: "live-newer",
+        matchDate: "2026-08-11",
+        matchNumber: 2,
+        status: "in_progress"
+      }),
+      matchRecord({
+        id: "deleted-newer",
+        matchDate: "2026-08-12",
+        matchNumber: 1,
+        deletedAt: "2026-08-12T08:00:00.000Z"
+      })
+    ],
+    players: activePlayers
+  });
+
+  assert.deepEqual(
+    summary.recentFinalisedMatches.map((match) => match.id),
+    ["same-day-game-two"]
+  );
+});
+
 test("Dashboard Recent Matches handles zero one and multiple finalised matches", () => {
   assert.equal(
     getDashboardSummary({ matches: [], players: activePlayers }).recentFinalisedMatches
@@ -1754,7 +1806,7 @@ test("Match archive filters search sorts and groups finalised matches", () => {
     sortArchivedMatches([sameDayGameThree, teamAWin], "newest").map(
       (match) => match.id
     ),
-    ["team-a", "same-day-game-three"]
+    ["same-day-game-three", "team-a"]
   );
   assert.deepEqual(
     groupArchiveMatchesByDate([teamAWin, teamBWin], [teamAWin, teamBWin]).map(
@@ -2288,7 +2340,60 @@ test("Player browser UI replaces All-Rounders with accessible controls", () => {
   assert.match(css, /@media \(max-width:\s*640px\)[\s\S]*?\.players-search-control\s*{[\s\S]*?grid-column:\s*1 \/ -1/);
 });
 
-test("the original sixteen player identities and card titles remain unchanged", () => {
+test("production player display names keep their stable ids slugs and zero career data", () => {
+  const jogindar = getPlayerById("jogindar");
+  const naim = getPlayerById("naim");
+
+  assert.ok(jogindar);
+  assert.ok(naim);
+  assert.equal(jogindar.name, "Jogindar");
+  assert.equal(jogindar.slug, "jogindar");
+  assert.equal(getPlayerBySlug("jogindar")?.id, "jogindar");
+  assert.equal(naim.name, "Naim");
+  assert.equal(naim.slug, "naim");
+  assert.equal(getPlayerBySlug("naim")?.id, "naim");
+
+  for (const player of [jogindar, naim]) {
+    assert.equal(player.level, 0);
+    assert.equal(player.xp, 0);
+    assert.deepEqual(player.ratings, { batting: 0, bowling: 0, fielding: 0 });
+    assert.deepEqual(player.stats, {
+      matches: 0,
+      runs: 0,
+      wickets: 0,
+      catches: 0,
+      runOuts: 0,
+      hatTricks: 0
+    });
+  }
+});
+
+test("Soman keeps his player identity and production Silent Sixer card artwork", () => {
+  const soman = getPlayerById("soman");
+
+  assert.ok(soman);
+  assert.equal(soman.name, "Soman");
+  assert.equal(soman.slug, "soman");
+  assert.equal(soman.cardTitle, "Silent Sixer");
+  assert.equal(soman.cardImage, "/images/player-cards/silent-sixer.png");
+  assert.equal(
+    existsSync(path.join(process.cwd(), "public", "images", "player-cards", "silent-sixer.png")),
+    true
+  );
+  assert.equal(soman.level, 0);
+  assert.equal(soman.xp, 0);
+  assert.deepEqual(soman.ratings, { batting: 0, bowling: 0, fielding: 0 });
+  assert.deepEqual(soman.stats, {
+    matches: 0,
+    runs: 0,
+    wickets: 0,
+    catches: 0,
+    runOuts: 0,
+    hatTricks: 0
+  });
+});
+
+test("the original sixteen player identities and approved card assets are canonical", () => {
   assert.deepEqual(
     activePlayers.slice(0, 16).map((player) => [
       player.id,
