@@ -790,7 +790,7 @@ test("Quick Scoring final-over sixth-ball undo restores editable over state", ()
   assert.equal(reopened.currentOverEvents.length, 5);
 });
 
-test("Quick Scoring run-out of striker confirms next pair and gives no bowler wicket", () => {
+test("Quick Scoring run-out of striker calculates next pair and gives no bowler wicket", () => {
   const derived = deriveQuickScoringInnings(
     quickInput([
       quickEvent(1, {
@@ -800,9 +800,7 @@ test("Quick Scoring run-out of striker confirms next pair and gives no bowler wi
           dismissedPlayerId: "naim",
           fielderId: "aninda",
           newBatterId: "soman",
-          completedRuns: 1,
-          nextStrikerId: "soman",
-          nextNonStrikerId: "saurav"
+          completedRuns: 1
         }
       })
     ])
@@ -812,12 +810,13 @@ test("Quick Scoring run-out of striker confirms next pair and gives no bowler wi
   assert.equal(derived.runs, 1);
   assert.equal(dismissal?.type, "run_out");
   assert.equal(dismissal?.creditedBowlerId, null);
-  assert.equal(derived.currentStrikerId, "soman");
-  assert.equal(derived.currentNonStrikerId, "saurav");
+  assert.equal(derived.currentStrikerId, "saurav");
+  assert.equal(derived.currentNonStrikerId, "soman");
   assert.equal(
     derived.battingPerformances.find((row) => row.playerId === "soman")?.battingPosition,
     3
   );
+  assert.deepEqual(derived.missingInformation, []);
 });
 
 test("Quick Scoring run-out of non-striker marks exactly that batter out", () => {
@@ -830,9 +829,7 @@ test("Quick Scoring run-out of non-striker marks exactly that batter out", () =>
           dismissedPlayerId: "saurav",
           fielderId: "dipanjan",
           newBatterId: "soman",
-          completedRuns: 0,
-          nextStrikerId: "naim",
-          nextNonStrikerId: "soman"
+          completedRuns: 0
         }
       })
     ])
@@ -846,6 +843,120 @@ test("Quick Scoring run-out of non-striker marks exactly that batter out", () =>
     derived.battingPerformances.find((row) => row.playerId === "naim")?.wasOut,
     false
   );
+  assert.equal(derived.currentStrikerId, "naim");
+  assert.equal(derived.currentNonStrikerId, "soman");
+});
+
+test("Quick Scoring run-out parity automatically resolves active batters", () => {
+  const cases = [
+    {
+      name: "striker 0",
+      dismissedPlayerId: "naim",
+      completedRuns: 0,
+      expectedStrikerId: "soman",
+      expectedNonStrikerId: "saurav"
+    },
+    {
+      name: "striker 1",
+      dismissedPlayerId: "naim",
+      completedRuns: 1,
+      expectedStrikerId: "saurav",
+      expectedNonStrikerId: "soman"
+    },
+    {
+      name: "striker 2",
+      dismissedPlayerId: "naim",
+      completedRuns: 2,
+      expectedStrikerId: "soman",
+      expectedNonStrikerId: "saurav"
+    },
+    {
+      name: "non-striker 0",
+      dismissedPlayerId: "saurav",
+      completedRuns: 0,
+      expectedStrikerId: "naim",
+      expectedNonStrikerId: "soman"
+    },
+    {
+      name: "non-striker 1",
+      dismissedPlayerId: "saurav",
+      completedRuns: 1,
+      expectedStrikerId: "soman",
+      expectedNonStrikerId: "naim"
+    },
+    {
+      name: "non-striker 2",
+      dismissedPlayerId: "saurav",
+      completedRuns: 2,
+      expectedStrikerId: "naim",
+      expectedNonStrikerId: "soman"
+    }
+  ];
+
+  for (const testCase of cases) {
+    const derived = deriveQuickScoringInnings(
+      quickInput([
+        quickEvent(1, {
+          batterRuns: testCase.completedRuns,
+          wicket: {
+            type: "run_out",
+            dismissedPlayerId: testCase.dismissedPlayerId,
+            fielderId: "aninda",
+            newBatterId: "soman",
+            completedRuns: testCase.completedRuns
+          }
+        })
+      ])
+    );
+
+    assert.equal(derived.currentStrikerId, testCase.expectedStrikerId, testCase.name);
+    assert.equal(derived.currentNonStrikerId, testCase.expectedNonStrikerId, testCase.name);
+    assert.deepEqual(derived.missingInformation, [], testCase.name);
+  }
+});
+
+test("Quick Scoring sixth-ball run-out applies end-of-over swap and undo replays cleanly", () => {
+  const runOutEvent = quickEvent(6, {
+    batterRuns: 1,
+    wicket: {
+      type: "run_out",
+      dismissedPlayerId: "naim",
+      fielderId: "dipanjan",
+      newBatterId: "soman",
+      completedRuns: 1
+    }
+  });
+  const quickScoring = {
+    ...createEmptyQuickScoringMetadata(),
+    inningsBEvents: [
+      ...quickLegalOver(1, "aninda").slice(0, 5),
+      runOutEvent
+    ]
+  };
+  const complete = deriveQuickScoringInnings(quickInput(quickScoring.inningsBEvents));
+  const undone = undoLastQuickScoringEvent(quickScoring, "teamB");
+  const replayed = deriveQuickScoringInnings(quickInput(quickScoring.inningsBEvents));
+  const reopened = deriveQuickScoringInnings(quickInput(undone.inningsBEvents));
+  const dismissal = complete.bowlingOvers[0]?.dismissals[0];
+
+  assert.equal(complete.legalBalls, 6);
+  assert.equal(complete.currentBowlerId, null);
+  assert.equal(complete.previousOverBowlerId, "aninda");
+  assert.equal(complete.currentStrikerId, "soman");
+  assert.equal(complete.currentNonStrikerId, "saurav");
+  assert.equal(complete.wicketsLost, 1);
+  assert.equal(dismissal?.creditedBowlerId, null);
+  assert.equal(dismissal?.fielderId, "dipanjan");
+  assert.equal(
+    complete.battingPerformances.find((row) => row.playerId === "soman")?.battingPosition,
+    3
+  );
+  assert.deepEqual(replayed, complete);
+  assert.equal(reopened.legalBalls, 5);
+  assert.equal(reopened.wicketsLost, 0);
+  assert.equal(reopened.currentOverEvents.length, 5);
+  assert.equal(reopened.currentStrikerId, "naim");
+  assert.equal(reopened.currentNonStrikerId, "saurav");
 });
 
 test("Quick Scoring no-ball supports batter runs without legal delivery", () => {
@@ -921,6 +1032,29 @@ test("Quick Scoring reducer requires a new batter before all-out", () => {
   assert.match(derived.missingInformation.join(" "), /Missing new batter/);
 });
 
+test("Quick Scoring reducer allows innings-ending wicket without a new batter", () => {
+  const derived = deriveQuickScoringInnings({
+    battingTeamId: "teamB",
+    bowlingTeamId: "teamA",
+    battingPlayerIds: ["naim", "saurav"],
+    bowlingPlayerIds: ["aninda"],
+    events: [
+      quickEvent(1, {
+        wicket: {
+          type: "bowled",
+          dismissedPlayerId: "naim",
+          fielderId: null,
+          newBatterId: null,
+          completedRuns: 0
+        }
+      })
+    ]
+  });
+
+  assert.equal(derived.wicketsLost, 1);
+  assert.deepEqual(derived.missingInformation, []);
+});
+
 test("Quick Scoring reducer rejects invalid run-out next-ball pair", () => {
   const derived = deriveQuickScoringInnings(
     quickInput([
@@ -952,6 +1086,10 @@ test("Quick Scoring active UI keeps one POM selector and removes LBW and assisti
   assert.doesNotMatch(source, /value="lbw"/);
   assert.doesNotMatch(source, /Assisting fielder/);
   assert.doesNotMatch(source, /assistingFielderId: quickWicketDraft/);
+  assert.doesNotMatch(source, /Step 5 - next ball batters/);
+  assert.doesNotMatch(source, /quick-next-pair/);
+  assert.match(source, /Please select the new batter\./);
+  assert.match(source, /Please select the completed runs before the run out\./);
   assert.match(source, /Scoring flow/);
   assert.match(source, /Suggested using match XP before the POM bonus/);
 });
@@ -1362,8 +1500,9 @@ test("Create Match form supports quick fixture creation fields", () => {
   assert.match(form, /Game number/);
   assert.match(form, /Start time/);
   assert.match(form, /getNextAvailableMatchNumber\(savedMatches, event\.target\.value\)/);
-  assert.match(form, /Continue to Team Setup/);
-  assert.match(form, /window\.location\.href = `\/matches\/\$\{matchId\}`/);
+  assert.match(form, /Start Match/);
+  assert.match(form, /validateAndSetStatus\("in_progress", "start"\)/);
+  assert.doesNotMatch(form, /Continue to Team Setup/);
 });
 
 test("Create Match form rejects duplicate same-day game numbers and blocks second live match", () => {
@@ -1566,12 +1705,30 @@ test("one completed dismissal in over one permits the next over without remainin
   assert.equal(calculateScoreFromBowlingFeed([completedOver]).wicketsLost, 1);
 });
 
-test("team selectors render from Available Today players only", () => {
+test("team assignment renders Available Today players through one unassigned pool", () => {
   const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
 
   assert.match(form, /const availablePlayers = useMemo/);
-  assert.match(form, /availablePlayers\.map\(\(player\) =>/);
-  assert.doesNotMatch(form, /function renderTeamSelector[\s\S]*?players\.map\(\(player\) =>/);
+  assert.match(form, /const unassignedPlayers = useMemo/);
+  assert.match(form, /renderUnassignedPlayers\(\)/);
+  assert.match(form, /unassignedPlayers\.map\(\(player\) =>/);
+  assert.match(form, /renderAssignedTeam\("A", teamA\)/);
+  assert.match(form, /renderAssignedTeam\("B", teamB\)/);
+  assert.doesNotMatch(form, /function renderTeamSelector/);
+});
+
+test("manual team assignment avoids duplicated disabled player rows", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+
+  assert.match(form, /function getAssignmentPlayers\(source: string\[\]\)/);
+  assert.match(form, /player\.id !== sharedPlayerId/);
+  assert.match(form, /!teamA\.includes\(player\.id\)/);
+  assert.match(form, /!teamB\.includes\(player\.id\)/);
+  assert.match(form, />\s*Remove\s*</);
+  assert.match(form, />\s*Team A\s*</);
+  assert.match(form, />\s*Team B\s*</);
+  assert.doesNotMatch(form, /other\.includes\(player\.id\)/);
+  assert.doesNotMatch(form, /checked=\{selected\}/);
 });
 
 test("bowler selectors and player record sections use selected team players only", () => {
@@ -1584,14 +1741,137 @@ test("bowler selectors and player record sections use selected team players only
   assert.match(form, /orderedPerformances\.map\(\(performance\) =>/);
 });
 
-test("availability and roster controls lock once the match leaves Draft", () => {
+test("match setup uses fixed team names and appears before Quick Scoring", () => {
   const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
 
-  assert.match(form, /const isRosterLocked = status !== "draft"/);
+  assert.match(form, /const FIXED_TEAM_A_NAME = "Team A"/);
+  assert.match(form, /const FIXED_TEAM_B_NAME = "Team B"/);
+  assert.doesNotMatch(form, />\s*Team A name\s*</);
+  assert.doesNotMatch(form, />\s*Team B name\s*</);
+  assert.ok(form.indexOf("Available Today") < form.indexOf("<QuickScoringPanel"));
+  assert.ok(form.indexOf("Team Assignment") < form.indexOf("<QuickScoringPanel"));
+  assert.ok(form.indexOf("Match Settings") < form.indexOf("<QuickScoringPanel"));
+});
+
+test("setup lock is persisted in Quick Scoring metadata and collapses read-only", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const types = readFileSync("lib/types/match.ts", "utf8");
+  const quickScoring = readFileSync("lib/quick-scoring.ts", "utf8");
+
+  assert.match(types, /setupLocked\?\: boolean/);
+  assert.match(types, /setupLockedAt\?\: string/);
+  assert.match(quickScoring, /setupLocked:\s*false/);
+  assert.match(form, /setupLocked:\s*true/);
+  assert.match(form, /setupLockedAt/);
+  assert.match(form, /const setupIsLocked = status !== "draft" \|\| quickScoring\.setupLocked === true/);
+  assert.match(form, /const setupIsCollapsed = setupIsLocked && !setupExpanded/);
+  assert.match(form, /View Setup/);
+  assert.match(form, /Hide Setup/);
+  assert.match(form, /Team A: \{teamA\.length\} players/);
+});
+
+test("availability and roster controls lock once setup starts", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+
+  assert.match(form, /const isRosterLocked = setupIsLocked/);
   assert.match(form, /if \(isRosterLocked\) return/);
   assert.match(
     form,
     /isRosterLocked \|\|\s*isBalancing \|\|\s*availablePlayerIds\.length < 2 \|\|\s*!canUseTeamControls/
+  );
+});
+
+test("setup start action validates required setup before locking", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+
+  assert.match(form, /Start Match/);
+  assert.match(form, /validateAndSetStatus\("in_progress", "start"\)/);
+  assert.match(form, /Please select the number of overs\./);
+  assert.match(form, /Please select the match date\./);
+  assert.match(form, /Please enter the match name\./);
+  assert.match(form, /Please select the available players\./);
+  assert.match(form, /Please select which team will bat first\./);
+  assert.match(form, /Please assign all available players to Team A or Team B\./);
+  assert.match(form, /const visibleSetupErrors = setupValidationAttempted \? setupErrors : \{\}/);
+  assert.match(form, /disabled=\{isSavingMatch \|\| isRosterLocked\}/);
+  assert.doesNotMatch(form, /disabled=\{isSavingMatch \|\| isRosterLocked \|\| !canUseTeamControls\}/);
+});
+
+test("setup can be edited before first quick scoring event only", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+
+  assert.match(
+    form,
+    /const hasQuickScoringEvents =\s*quickScoring\.inningsAEvents\.length \+ quickScoring\.inningsBEvents\.length > 0/
+  );
+  assert.match(form, /const canEditLockedSetup =\s*setupIsLocked && !isFinalised && !hasQuickScoringEvents/);
+  assert.match(form, /function editLockedSetupBeforeScoring\(\)/);
+  assert.match(form, /setupLocked:\s*false/);
+  assert.match(form, /setStatus\("draft"\)/);
+  assert.match(form, /Edit Setup/);
+});
+
+test("detailed bowling and player records are collapsed by default but remain mounted", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+
+  assert.match(form, /const \[detailedRecordsExpanded, setDetailedRecordsExpanded\] = useState\(false\)/);
+  assert.match(form, /Detailed Records/);
+  assert.match(form, /Bowling and player records are automatically updated from Quick Scoring\./);
+  assert.match(form, /aria-expanded=\{detailedRecordsExpanded\}/);
+  assert.match(form, /hidden=\{!detailedRecordsExpanded\}/);
+  assert.match(form, /detailedRecordsExpanded \? "Hide Records" : "View Records"/);
+  assert.match(form, /<TeamBowlingSection/);
+  assert.match(form, /<TeamPlayerRecordsSection/);
+});
+
+test("mobile live scoring uses compact score and keeps detailed score cards secondary", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.match(form, /function CompactLiveScoreBanner/);
+  assert.match(form, /className=\{status === "in_progress" \? "live-result-full-preview" : ""\}/);
+  assert.match(form, /<CompactLiveScoreBanner/);
+  assert.match(form, /innings-allocation-primary/);
+  assert.match(form, /innings-allocation-mobile-details/);
+  assert.match(css, /@media \(max-width:\s*700px\)[\s\S]*?\.live-result-full-preview\s*{\s*display:\s*none;/);
+  assert.match(css, /@media \(max-width:\s*700px\)[\s\S]*?\.mobile-live-score\s*{\s*display:\s*grid;/);
+  assert.match(css, /@media \(max-width:\s*700px\)[\s\S]*?\.innings-allocation-primary\.is-live-scoring\s*{\s*display:\s*none;/);
+});
+
+test("mobile setup and team assignment use compact responsive markers", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.match(form, /available-today-grid/);
+  assert.match(form, /team-assignment-summary/);
+  assert.match(form, /team-assignment-column/);
+  assert.match(form, /locked-setup-summary/);
+  assert.match(form, /mobile-locked-setup-title/);
+  assert.match(css, /@media \(max-width:\s*700px\)[\s\S]*?\.available-today-grid\s*{\s*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(css, /@media \(max-width:\s*360px\)[\s\S]*?\.available-today-grid\s*{\s*grid-template-columns:\s*1fr;/);
+  assert.match(css, /@media \(max-width:\s*700px\)[\s\S]*?\.team-assignment-summary\s*{\s*display:\s*flex;/);
+  assert.match(css, /@media \(max-width:\s*700px\)[\s\S]*?\.quick-correction-row\s*{\s*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
+});
+
+test("quick scoring displays inline selection and wicket validation before appending events", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+
+  assert.match(form, /type QuickSelectionErrors/);
+  assert.match(form, /type QuickWicketErrors/);
+  assert.match(form, /Please select the striker\./);
+  assert.match(form, /Please select the non-striker\./);
+  assert.match(form, /Please select the bowler\./);
+  assert.match(form, /Please select who was run out\./);
+  assert.match(form, /Please select the catcher\./);
+  assert.match(form, /Please select the run-out fielder\./);
+  assert.match(form, /Please select the completed runs before the run out\./);
+  assert.match(form, /Please select the new batter\./);
+  assert.match(form, /const errorCount = Object\.keys\(quickSelectionErrors\)\.length/);
+  assert.match(form, /const wicketErrorCount = Object\.keys\(quickWicketErrors\)\.length/);
+  const submitBlock = form.slice(form.indexOf("function submitQuickWicket()"));
+  assert.ok(
+    submitBlock.indexOf("if (selectionErrorCount + wicketErrorCount > 0)") <
+      submitBlock.indexOf("appendQuickScoringEvent({")
   );
 });
 

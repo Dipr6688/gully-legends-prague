@@ -5467,6 +5467,32 @@ textarea {
   margin-top: 14px;
 }
 
+.detailed-records-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.detailed-records-content {
+  display: grid;
+  gap: 20px;
+  margin-top: 18px;
+}
+
+.detailed-records-content[hidden] {
+  display: none;
+}
+
+.innings-allocation-mobile-details {
+  display: none;
+}
+
+.mobile-live-score,
+.mobile-locked-setup-title {
+  display: none;
+}
+
 .finalised-match-overview {
   display: grid;
   gap: 18px;
@@ -5723,6 +5749,11 @@ textarea {
   padding: 10px 12px;
   color: #f5f0df;
   outline: none;
+}
+
+.quick-field-error select {
+  border-color: rgba(255, 64, 64, 0.78);
+  box-shadow: 0 0 0 2px rgba(255, 64, 64, 0.22);
 }
 
 .quick-scoring-buttons,
@@ -6029,13 +6060,203 @@ textarea {
 }
 
 @media (max-width: 700px) {
+  .match-management-form {
+    gap: 12px;
+  }
+
+  .live-result-full-preview {
+    display: none;
+  }
+
+  .mobile-live-score {
+    display: grid;
+    gap: 4px;
+    border: 1px solid rgba(83, 220, 255, 0.45);
+    border-radius: 10px;
+    background:
+      linear-gradient(110deg, rgba(83, 220, 255, 0.14), rgba(0, 0, 0, 0.36));
+    padding: 10px 12px;
+    color: #f5f0df;
+    box-shadow: 0 0 16px rgba(83, 220, 255, 0.12);
+  }
+
+  .mobile-live-score div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .mobile-live-score span,
+  .mobile-live-score p {
+    margin: 0;
+    font-size: 0.76rem;
+    font-weight: 950;
+    text-transform: uppercase;
+  }
+
+  .mobile-live-score strong {
+    color: #ffd719;
+    font-size: 1.8rem;
+    font-weight: 950;
+    line-height: 1;
+  }
+
+  .match-setup-panel {
+    padding: 12px;
+  }
+
+  .match-setup-panel h2 {
+    font-size: 1.25rem;
+  }
+
+  .match-setup-panel p {
+    font-size: 0.8rem;
+  }
+
+  .mobile-locked-setup-title {
+    display: block;
+    margin: 10px 0 0;
+    color: #9cff24;
+    font-size: 0.78rem;
+    font-weight: 950;
+    text-transform: uppercase;
+  }
+
+  .mobile-locked-setup-title::before {
+    content: "✓ ";
+  }
+
+  .locked-setup-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .locked-setup-item {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 7px 8px;
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .available-today-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .available-today-grid label {
+    min-height: 42px;
+    gap: 8px;
+    padding: 8px 9px;
+    font-size: 0.82rem;
+  }
+
+  .available-today-grid input {
+    flex: 0 0 auto;
+  }
+
+  .team-assignment-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .team-assignment-summary-item {
+    flex: 1 1 auto;
+    padding: 7px 8px;
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .team-assignment-column {
+    padding: 10px;
+  }
+
+  .team-assignment-column legend {
+    font-size: 0.76rem;
+  }
+
+  .team-assignment-column .mt-3 {
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .team-assignment-column button {
+    min-height: 38px;
+  }
+
+  .innings-allocation-primary.is-live-scoring {
+    display: none;
+  }
+
+  .innings-allocation-mobile-details {
+    display: grid;
+  }
+
+  .detailed-records-header {
+    display: grid;
+    gap: 12px;
+  }
+
+  .detailed-records-header button {
+    width: 100%;
+  }
+
   .quick-scoring-header,
   .quick-score-strip,
   .quick-player-selectors,
-  .quick-correction-row,
   .quick-wicket-actions,
   .quick-next-pair {
     grid-template-columns: 1fr;
+  }
+
+  .quick-scoring-panel {
+    padding: 12px;
+  }
+
+  .quick-scoring-panel h2 {
+    font-size: 1.35rem;
+  }
+
+  .quick-score-strip {
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .quick-score-strip div {
+    padding: 8px;
+  }
+
+  .quick-score-strip strong {
+    font-size: 1.35rem;
+  }
+
+  .quick-player-selectors {
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .quick-player-selectors select,
+  .quick-wicket-panel select {
+    padding: 9px 10px;
+  }
+
+  .quick-special-buttons,
+  .quick-scoring-buttons {
+    margin-top: 10px;
+  }
+
+  .quick-correction-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .quick-correction-row button {
+    min-height: 42px;
+    font-size: 0.76rem;
   }
 
   .quick-no-ball-panel div,
@@ -6193,6 +6414,12 @@ textarea {
   }
 
   .player-stat-inputs {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 360px) {
+  .available-today-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -7051,9 +7278,22 @@ textarea {
 }
 
 @media (max-width: 640px) {
+  .site-header {
+    height: 76px;
+  }
+
+  .site-header-inner {
+    padding-inline: 12px;
+  }
+
   .header-brand-logo {
-    width: clamp(190px, 55vw, 230px);
-    max-height: 76px;
+    width: clamp(176px, 52vw, 214px);
+    max-height: 66px;
+  }
+
+  .mobile-navigation-trigger {
+    width: 40px;
+    height: 40px;
   }
 
   .next-ball-friends-artwork {

@@ -60,6 +60,8 @@ export type QuickScoringEvent = {
 
 export type QuickScoringMetadata = {
   version: 1;
+  setupLocked?: boolean;
+  setupLockedAt?: string;
   inningsAEvents: QuickScoringEvent[];
   inningsBEvents: QuickScoringEvent[];
 };

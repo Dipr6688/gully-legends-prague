@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type RefObject,
   type ReactNode
 } from "react";
 import {
@@ -140,13 +141,37 @@ type ValidateAndSetStatusOptions = {
   skipMonthlyCrownGuard?: boolean;
 };
 
+type SetupValidationErrors = Partial<
+  Record<
+    | "matchDate"
+    | "matchName"
+    | "overs"
+    | "battingFirst"
+    | "availability"
+    | "sharedPlayer"
+    | "teamAssignment",
+    string
+  >
+>;
+
+type QuickSelectionErrors = Partial<
+  Record<"striker" | "nonStriker" | "bowler", string>
+>;
+
+type QuickWicketErrors = Partial<
+  Record<"dismissedPlayer" | "completedRuns" | "fielder" | "newBatter", string>
+>;
+
+const FIXED_TEAM_A_NAME = "Team A";
+const FIXED_TEAM_B_NAME = "Team B";
+
 const initialValues: MockMatchFormValues = {
   matchDate: "",
   matchNumber: "",
   startTime: "",
   matchName: "Gully Premier League",
-  teamAName: "Team A",
-  teamBName: "Team B",
+  teamAName: FIXED_TEAM_A_NAME,
+  teamBName: FIXED_TEAM_B_NAME,
   teamATotal: 0,
   teamBTotal: 0,
   scheduledOversPerInnings: "",
@@ -206,8 +231,8 @@ function getFormValuesFromMatch(match: MatchRecord): MockMatchFormValues {
     matchNumber: match.matchNumber ?? "",
     startTime: match.startTime ?? "",
     matchName: match.matchName,
-    teamAName: match.teams.teamA.teamName,
-    teamBName: match.teams.teamB.teamName,
+    teamAName: FIXED_TEAM_A_NAME,
+    teamBName: FIXED_TEAM_B_NAME,
     teamATotal: match.teams.teamA.totalRuns,
     teamBTotal: match.teams.teamB.totalRuns,
     scheduledOversPerInnings: match.scheduledOversPerInnings ?? "",
@@ -250,6 +275,47 @@ function getMatchNumberValue(value: number | ""): number | null {
   return value === "" ? null : sanitizeRuns(value);
 }
 
+function getSetupValidationMessage(error: string) {
+  if (error === "Scheduled overs per innings must be a positive integer.") {
+    return "Please select the number of overs.";
+  }
+
+  if (error === "SELECT THE BATTING-FIRST TEAM") {
+    return "Please select which team will bat first.";
+  }
+
+  if (error === "Every non-shared available player must appear in exactly one team.") {
+    return "Please assign all available players to Team A or Team B.";
+  }
+
+  return error;
+}
+
+function getRequiredSummary(count: number) {
+  return count === 1
+    ? "Please complete 1 required field."
+    : `Please complete ${count} required fields.`;
+}
+
+function getInputClass(hasError?: boolean) {
+  return [
+    "rounded-md border bg-black/35 px-3 py-3 text-stone-100 outline-none disabled:opacity-60",
+    hasError
+      ? "border-neon-red ring-2 ring-neon-red/45 focus:ring-neon-red"
+      : "border-white/15 focus:ring-2 focus:ring-neon-cyan"
+  ].join(" ");
+}
+
+function ErrorText({ children }: { children?: string }) {
+  if (!children) return null;
+
+  return (
+    <p className="rounded-md border border-neon-red/40 bg-neon-red/10 px-3 py-2 text-xs font-black uppercase text-red-100">
+      {children}
+    </p>
+  );
+}
+
 export function MockMatchEntryForm({
   initialMatch = null,
   matches: suppliedMatches
@@ -287,6 +353,20 @@ export function MockMatchEntryForm({
   const [quickScoring, setQuickScoring] = useState(
     () => initialMatch?.quickScoring ?? createEmptyQuickScoringMetadata()
   );
+  const [setupExpanded, setSetupExpanded] = useState(
+    () =>
+      !(
+        initialMatch?.quickScoring?.setupLocked === true ||
+        initialMatch?.status === "in_progress" ||
+        initialMatch?.status === "finalised"
+      )
+  );
+  const [setupValidationAttempted, setSetupValidationAttempted] = useState(false);
+  const [quickValidationAttempted, setQuickValidationAttempted] = useState(false);
+  const [wicketValidationAttempted, setWicketValidationAttempted] = useState(false);
+  const [detailedRecordsExpanded, setDetailedRecordsExpanded] = useState(false);
+  const setupSectionRef = useRef<HTMLElement | null>(null);
+  const quickSectionRef = useRef<HTMLElement | null>(null);
   const [quickSelection, setQuickSelection] = useState({
     strikerId: "",
     nonStrikerId: "",
@@ -298,7 +378,7 @@ export function MockMatchEntryForm({
     dismissedPlayerId: string;
     fielderId: string;
     newBatterId: string;
-    completedRuns: number;
+    completedRuns: number | "";
     nextStrikerId: string;
     nextNonStrikerId: string;
   }>({
@@ -307,7 +387,7 @@ export function MockMatchEntryForm({
     dismissedPlayerId: "",
     fielderId: "",
     newBatterId: "",
-    completedRuns: 0,
+    completedRuns: "",
     nextStrikerId: "",
     nextNonStrikerId: ""
   });
@@ -369,7 +449,9 @@ export function MockMatchEntryForm({
       : status === "in_progress"
         ? "LIVE MATCH ENTRY"
         : "MATCH SCORECARD";
-  const isRosterLocked = status !== "draft";
+  const setupIsLocked = status !== "draft" || quickScoring.setupLocked === true;
+  const setupIsCollapsed = setupIsLocked && !setupExpanded;
+  const isRosterLocked = setupIsLocked;
 
   useEffect(() => {
     if (!initialMatch || loadedMatchIdRef.current === initialMatch.id) return;
@@ -384,6 +466,13 @@ export function MockMatchEntryForm({
     setSharedPlayerId(initialMatch.sharedPlayerId ?? null);
     setBattingFirstTeamId(initialMatch.battingFirstTeamId ?? "");
     setQuickScoring(initialMatch.quickScoring ?? createEmptyQuickScoringMetadata());
+    setSetupExpanded(
+      !(
+        initialMatch.quickScoring?.setupLocked === true ||
+        initialMatch.status === "in_progress" ||
+        initialMatch.status === "finalised"
+      )
+    );
     setPerformances(getPerformanceStateFromMatch(initialMatch));
     setPlayerOfMatchSelectionMode(
       initialMatch.finalisedPlayerRecords?.some((record) => record.playerOfMatch)
@@ -405,6 +494,16 @@ export function MockMatchEntryForm({
   const availablePlayers = useMemo(
     () => activePlayers.filter((player) => availablePlayerIds.includes(player.id)),
     [availablePlayerIds]
+  );
+  const unassignedPlayers = useMemo(
+    () =>
+      availablePlayers.filter(
+        (player) =>
+          player.id !== sharedPlayerId &&
+          !teamA.includes(player.id) &&
+          !teamB.includes(player.id)
+      ),
+    [availablePlayers, sharedPlayerId, teamA, teamB]
   );
   const teamAPlayers = useMemo(
     () => activePlayers.filter((player) => teamA.includes(player.id)),
@@ -503,6 +602,81 @@ export function MockMatchEntryForm({
     teamBSize: teamB.length,
     sharedSlots: sharedPlayerId ? 1 : 0
   };
+  const canEditLockedSetup =
+    setupIsLocked && !isFinalised && !hasQuickScoringEvents;
+  const setupErrors = useMemo<SetupValidationErrors>(() => {
+    if (setupIsLocked) return {};
+
+    const errors: SetupValidationErrors = {};
+    const selectedIds = new Set([...teamA, ...teamB]);
+
+    if (!values.matchDate) {
+      errors.matchDate = "Please select the match date.";
+    }
+
+    if (!values.matchName.trim()) {
+      errors.matchName = "Please enter the match name.";
+    }
+
+    if (availablePlayerIds.length === 0) {
+      errors.availability = "Please select the available players.";
+    }
+
+    if (
+      !Number.isInteger(values.scheduledOversPerInnings) ||
+      sanitizeRuns(values.scheduledOversPerInnings) <= 0
+    ) {
+      errors.overs = "Please select overs per innings.";
+    }
+
+    if (!battingFirstTeamId) {
+      errors.battingFirst = "Please select which team will bat first.";
+    }
+
+    if (hasOddAttendance && !sharedPlayerId) {
+      errors.sharedPlayer = "Please select one Shared Player.";
+    }
+
+    const hasIncompleteTeamAssignment = availablePlayerIds.some((playerId) => {
+      const inTeamA = teamA.includes(playerId);
+      const inTeamB = teamB.includes(playerId);
+
+      if (playerId === sharedPlayerId) {
+        return !inTeamA || !inTeamB;
+      }
+
+      return inTeamA === inTeamB;
+    });
+
+    if (
+      availablePlayerIds.length > 0 &&
+      (teamA.length === 0 ||
+        teamB.length === 0 ||
+        teamA.length !== teamB.length ||
+        hasIncompleteTeamAssignment ||
+        [...selectedIds].some((playerId) => !availablePlayerIds.includes(playerId)) ||
+        ordinaryDuplicatePlayers.length > 0)
+    ) {
+      errors.teamAssignment =
+        "Please assign all available players to Team A or Team B.";
+    }
+
+    return errors;
+  }, [
+    availablePlayerIds,
+    battingFirstTeamId,
+    hasOddAttendance,
+    ordinaryDuplicatePlayers.length,
+    setupIsLocked,
+    sharedPlayerId,
+    teamA,
+    teamB,
+    values.matchDate,
+    values.matchName,
+    values.scheduledOversPerInnings
+  ]);
+  const setupErrorCount = Object.keys(setupErrors).length;
+  const visibleSetupErrors = setupValidationAttempted ? setupErrors : {};
 
   const teamAPerformances = useMemo(
     () =>
@@ -679,6 +853,157 @@ export function MockMatchEntryForm({
     quickActiveBowlingTeamId === "teamA" ? teamAPlayers : teamBPlayers;
   const quickActiveDerived =
     quickActiveBattingTeamId === "teamA" ? quickTeamADerived : quickTeamBDerived;
+  const quickSelectionErrors = useMemo<QuickSelectionErrors>(() => {
+    const errors: QuickSelectionErrors = {};
+    const dismissedPlayerIds = getQuickDismissedPlayerIds(quickActiveDerived);
+    const battingPlayerIds = new Set(
+      quickActiveBattingPlayers.map((player) => player.id)
+    );
+    const bowlingPlayerIds = new Set(
+      quickActiveBowlingPlayers.map((player) => player.id)
+    );
+
+    if (!setupIsLocked || isLocked) {
+      return errors;
+    }
+
+    if (!quickSelection.strikerId) {
+      errors.striker = "Please select the striker.";
+    } else if (!battingPlayerIds.has(quickSelection.strikerId)) {
+      errors.striker = "Select a striker from the batting team.";
+    } else if (dismissedPlayerIds.has(quickSelection.strikerId)) {
+      errors.striker = "A dismissed batter cannot face the next ball.";
+    }
+
+    if (!quickSelection.nonStrikerId) {
+      errors.nonStriker = "Please select the non-striker.";
+    } else if (!battingPlayerIds.has(quickSelection.nonStrikerId)) {
+      errors.nonStriker = "Select a non-striker from the batting team.";
+    } else if (dismissedPlayerIds.has(quickSelection.nonStrikerId)) {
+      errors.nonStriker = "A dismissed batter cannot face the next ball.";
+    }
+
+    if (
+      quickSelection.strikerId &&
+      quickSelection.nonStrikerId &&
+      quickSelection.strikerId === quickSelection.nonStrikerId
+    ) {
+      errors.striker = "Striker and non-striker must be different players.";
+      errors.nonStriker = "Striker and non-striker must be different players.";
+    }
+
+    if (!quickSelection.bowlerId) {
+      errors.bowler =
+        quickActiveDerived.legalBalls > 0 &&
+        quickActiveDerived.legalBalls % 6 === 0
+          ? "Please select the next bowler."
+          : "Please select the bowler.";
+    } else if (!bowlingPlayerIds.has(quickSelection.bowlerId)) {
+      errors.bowler = "Select a bowler from the bowling team.";
+    } else if (
+      quickActiveDerived.legalBalls > 0 &&
+      quickActiveDerived.legalBalls % 6 === 0 &&
+      quickActiveDerived.previousOverBowlerId === quickSelection.bowlerId
+    ) {
+      errors.bowler = "Select a different bowler for the next over.";
+    }
+
+    return errors;
+  }, [
+    isLocked,
+    quickActiveBattingPlayers,
+    quickActiveBowlingPlayers,
+    quickActiveDerived,
+    quickSelection.bowlerId,
+    quickSelection.nonStrikerId,
+    quickSelection.strikerId,
+    setupIsLocked
+  ]);
+  const visibleQuickSelectionErrors = quickValidationAttempted
+    ? quickSelectionErrors
+    : {};
+  const quickWicketErrors = useMemo<QuickWicketErrors>(() => {
+    const errors: QuickWicketErrors = {};
+
+    if (!quickWicketDraft.open) {
+      return errors;
+    }
+
+    const dismissedPlayerId =
+      quickWicketDraft.type === "run_out"
+        ? quickWicketDraft.dismissedPlayerId
+        : quickWicketDraft.dismissedPlayerId || quickSelection.strikerId;
+    const survivorId =
+      dismissedPlayerId === quickSelection.strikerId
+        ? quickSelection.nonStrikerId
+        : quickSelection.strikerId;
+    const dismissedPlayerIds = getQuickDismissedPlayerIds(quickActiveDerived);
+    const battingPlayerIds = new Set(
+      quickActiveBattingPlayers.map((player) => player.id)
+    );
+    const hasAvailableReplacement = quickActiveBattingPlayers.some(
+      (player) =>
+        player.id !== quickSelection.strikerId &&
+        player.id !== quickSelection.nonStrikerId &&
+        player.id !== dismissedPlayerId &&
+        !dismissedPlayerIds.has(player.id)
+    );
+
+    if (!dismissedPlayerId) {
+      errors.dismissedPlayer =
+        quickWicketDraft.type === "run_out"
+          ? "Please select who was run out."
+          : "Please select the dismissed batter.";
+    } else if (
+      dismissedPlayerId !== quickSelection.strikerId &&
+      dismissedPlayerId !== quickSelection.nonStrikerId
+    ) {
+      errors.dismissedPlayer =
+        "The dismissed batter must be one of the active batters.";
+    }
+
+    if (
+      quickWicketDraft.type === "run_out" &&
+      quickWicketDraft.completedRuns === ""
+    ) {
+      errors.completedRuns =
+        "Please select the completed runs before the run out.";
+    }
+
+    if (
+      (quickWicketDraft.type === "caught" ||
+        quickWicketDraft.type === "run_out") &&
+      !quickWicketDraft.fielderId
+    ) {
+      errors.fielder =
+        quickWicketDraft.type === "caught"
+          ? "Please select the catcher."
+          : "Please select the run-out fielder.";
+    }
+
+    if (
+      quickWicketDraft.newBatterId &&
+      (quickWicketDraft.newBatterId === survivorId ||
+        quickWicketDraft.newBatterId === dismissedPlayerId ||
+        !battingPlayerIds.has(quickWicketDraft.newBatterId) ||
+        dismissedPlayerIds.has(quickWicketDraft.newBatterId))
+    ) {
+      errors.newBatter = "Select an eligible new batter.";
+    } else if (hasAvailableReplacement && !quickWicketDraft.newBatterId) {
+      errors.newBatter = "Please select the new batter.";
+    }
+
+    return errors;
+  }, [
+    quickActiveBattingPlayers,
+    quickActiveDerived,
+    quickSelection.nonStrikerId,
+    quickSelection.strikerId,
+    quickWicketDraft
+  ]);
+  const visibleQuickWicketErrors = wicketValidationAttempted
+    ? quickWicketErrors
+    : {};
 
   useEffect(() => {
     if (!hasQuickScoringEvents) return;
@@ -1308,56 +1633,20 @@ export function MockMatchEntryForm({
   }
 
   function validateQuickScoringAction() {
-    const dismissedPlayerIds = getQuickDismissedPlayerIds(quickActiveDerived);
-    const battingPlayerIds = new Set(
-      quickActiveBattingPlayers.map((player) => player.id)
-    );
-    const bowlingPlayerIds = new Set(
-      quickActiveBowlingPlayers.map((player) => player.id)
-    );
+    setQuickValidationAttempted(true);
 
-    if (
-      isLocked ||
-      !quickSelection.strikerId ||
-      !quickSelection.nonStrikerId ||
-      !quickSelection.bowlerId
-    ) {
-      setMessage("Select striker, non-striker and bowler before quick scoring.");
-      return false;
-    }
+    const errorCount = Object.keys(quickSelectionErrors).length;
 
-    if (quickSelection.strikerId === quickSelection.nonStrikerId) {
-      setMessage("Striker and non-striker must be different players.");
-      return false;
-    }
-
-    if (
-      !battingPlayerIds.has(quickSelection.strikerId) ||
-      !battingPlayerIds.has(quickSelection.nonStrikerId)
-    ) {
-      setMessage("Select batters from the batting team.");
-      return false;
-    }
-
-    if (
-      dismissedPlayerIds.has(quickSelection.strikerId) ||
-      dismissedPlayerIds.has(quickSelection.nonStrikerId)
-    ) {
-      setMessage("A dismissed batter cannot face the next ball.");
-      return false;
-    }
-
-    if (!bowlingPlayerIds.has(quickSelection.bowlerId)) {
-      setMessage("Select a bowler from the bowling team.");
-      return false;
-    }
-
-    if (
-      quickActiveDerived.legalBalls > 0 &&
-      quickActiveDerived.legalBalls % 6 === 0 &&
-      quickActiveDerived.previousOverBowlerId === quickSelection.bowlerId
-    ) {
-      setMessage("Select a different bowler for the next over.");
+    if (isLocked || errorCount > 0) {
+      setMessage(
+        errorCount > 0
+          ? getRequiredSummary(errorCount)
+          : "Quick scoring is locked."
+      );
+      quickSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
       return false;
     }
 
@@ -1395,6 +1684,8 @@ export function MockMatchEntryForm({
       ...quickScoring,
       [key]: [...events, event]
     });
+    setQuickValidationAttempted(false);
+    setWicketValidationAttempted(false);
     setMessage("Quick scoring event recorded.");
   }
 
@@ -1431,94 +1722,37 @@ export function MockMatchEntryForm({
   }
 
   function submitQuickWicket() {
+    setQuickValidationAttempted(true);
+    setWicketValidationAttempted(true);
+
+    const selectionErrorCount = Object.keys(quickSelectionErrors).length;
+    const wicketErrorCount = Object.keys(quickWicketErrors).length;
+
+    if (selectionErrorCount + wicketErrorCount > 0) {
+      setMessage(getRequiredSummary(selectionErrorCount + wicketErrorCount));
+      quickSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+      return;
+    }
+
     const dismissedPlayerId =
-      quickWicketDraft.dismissedPlayerId || quickSelection.strikerId;
-    const survivorId =
-      dismissedPlayerId === quickSelection.strikerId
-        ? quickSelection.nonStrikerId
-        : quickSelection.strikerId;
-    const dismissedPlayerIds = getQuickDismissedPlayerIds(quickActiveDerived);
-    const battingPlayerIds = new Set(
-      quickActiveBattingPlayers.map((player) => player.id)
-    );
-    const wicketWouldLeaveAvailableBatter =
-      dismissedPlayerIds.size + 1 < quickActiveBattingPlayers.length;
-
-    if (!dismissedPlayerId) {
-      setMessage("Select who was dismissed.");
-      return;
-    }
-
-    if (
-      dismissedPlayerId !== quickSelection.strikerId &&
-      dismissedPlayerId !== quickSelection.nonStrikerId
-    ) {
-      setMessage("The dismissed batter must be one of the active batters.");
-      return;
-    }
-
-    if (
-      (quickWicketDraft.type === "caught" || quickWicketDraft.type === "run_out") &&
-      !quickWicketDraft.fielderId
-    ) {
-      setMessage(
-        quickWicketDraft.type === "caught"
-          ? "Select the catcher."
-          : "Select the run-out fielder."
-      );
-      return;
-    }
-
-    if (
-      quickWicketDraft.type === "run_out" &&
-      (!quickWicketDraft.nextStrikerId ||
-        !quickWicketDraft.nextNonStrikerId ||
-        quickWicketDraft.nextStrikerId === quickWicketDraft.nextNonStrikerId)
-    ) {
-      setMessage("Confirm distinct next-ball striker and non-striker for the run-out.");
-      return;
-    }
-
-    if (
-      quickWicketDraft.newBatterId &&
-      (quickWicketDraft.newBatterId === survivorId ||
-        quickWicketDraft.newBatterId === dismissedPlayerId ||
-        !battingPlayerIds.has(quickWicketDraft.newBatterId) ||
-        dismissedPlayerIds.has(quickWicketDraft.newBatterId))
-    ) {
-      setMessage("Select an eligible new batter.");
-      return;
-    }
-
-    if (wicketWouldLeaveAvailableBatter && !quickWicketDraft.newBatterId) {
-      setMessage("Select the new batter before recording this wicket.");
-      return;
-    }
-
-    if (
-      quickWicketDraft.type === "run_out" &&
-      (!battingPlayerIds.has(quickWicketDraft.nextStrikerId) ||
-        !battingPlayerIds.has(quickWicketDraft.nextNonStrikerId) ||
-        quickWicketDraft.nextStrikerId === dismissedPlayerId ||
-        quickWicketDraft.nextNonStrikerId === dismissedPlayerId ||
-        dismissedPlayerIds.has(quickWicketDraft.nextStrikerId) ||
-        dismissedPlayerIds.has(quickWicketDraft.nextNonStrikerId))
-    ) {
-      setMessage("Confirm eligible next-ball batters for the run-out.");
-      return;
-    }
+      quickWicketDraft.type === "run_out"
+        ? quickWicketDraft.dismissedPlayerId
+        : quickWicketDraft.dismissedPlayerId || quickSelection.strikerId;
 
     appendQuickScoringEvent({
-      batterRuns: quickWicketDraft.completedRuns,
+      batterRuns: sanitizeRuns(quickWicketDraft.completedRuns),
       extraType: null,
       wicket: {
         type: quickWicketDraft.type,
         dismissedPlayerId,
         fielderId: quickWicketDraft.fielderId || null,
         newBatterId: quickWicketDraft.newBatterId || null,
-        completedRuns: quickWicketDraft.completedRuns,
-        nextStrikerId: quickWicketDraft.nextStrikerId || null,
-        nextNonStrikerId: quickWicketDraft.nextNonStrikerId || null
+        completedRuns: sanitizeRuns(quickWicketDraft.completedRuns),
+        nextStrikerId: null,
+        nextNonStrikerId: null
       }
     });
     setQuickWicketDraft({
@@ -1527,7 +1761,7 @@ export function MockMatchEntryForm({
       dismissedPlayerId: "",
       fielderId: "",
       newBatterId: "",
-      completedRuns: 0,
+      completedRuns: "",
       nextStrikerId: "",
       nextNonStrikerId: ""
     });
@@ -1553,7 +1787,8 @@ export function MockMatchEntryForm({
   function buildCurrentMatchRecord(
     finalStatus: MatchStatus,
     result: MatchResult,
-    appliedAt: string
+    appliedAt: string,
+    quickScoringOverride = quickScoring
   ): MatchRecord {
     const allBowlingOvers = [...bowlingOvers.teamA, ...bowlingOvers.teamB];
     const teamContextFinalisedRecords: FinalisedPlayerMatchRecord[] = performanceList.map(
@@ -1584,14 +1819,14 @@ export function MockMatchEntryForm({
     });
     const teamAMatchData = buildTeamMatchData({
       teamId: "teamA",
-      teamName: values.teamAName,
+      teamName: FIXED_TEAM_A_NAME,
       playerIds: teamA,
       performances: performanceList,
       bowlingOvers: bowlingOvers.teamA
     });
     const teamBMatchData = buildTeamMatchData({
       teamId: "teamB",
-      teamName: values.teamBName,
+      teamName: FIXED_TEAM_B_NAME,
       playerIds: teamB,
       performances: performanceList,
       bowlingOvers: bowlingOvers.teamB
@@ -1625,7 +1860,7 @@ export function MockMatchEntryForm({
             : null
           : chasingTeamId,
       sharedPlayerId,
-      quickScoring,
+      quickScoring: quickScoringOverride,
       teams: {
         teamA: {
           ...teamAMatchData,
@@ -1684,6 +1919,47 @@ export function MockMatchEntryForm({
     return true;
   }
 
+  async function editLockedSetupBeforeScoring() {
+    if (!canEditLockedSetup) return;
+
+    const confirmed = window.confirm(
+      "EDIT MATCH SETUP?\n\nNo deliveries have been recorded yet. Quick Scoring will be paused until you Start Match again."
+    );
+
+    if (!confirmed) return;
+
+    const nextQuickScoring = {
+      ...quickScoring,
+      setupLocked: false,
+      setupLockedAt: undefined
+    };
+
+    setIsSavingMatch(true);
+
+    try {
+      const saved = await persistNonFinalisedMatch(
+        buildCurrentMatchRecord(
+          "draft",
+          liveResult,
+          new Date().toISOString(),
+          nextQuickScoring
+        )
+      );
+
+      if (!saved) return;
+
+      setQuickScoring(nextQuickScoring);
+      setStatus("draft");
+      setSetupExpanded(true);
+      setSetupValidationAttempted(false);
+      setQuickValidationAttempted(false);
+      setWicketValidationAttempted(false);
+      setMessage("Match setup is editable again. Start Match after corrections.");
+    } finally {
+      setIsSavingMatch(false);
+    }
+  }
+
   async function validateAndSetStatus(
     nextStatus: MatchStatus,
     stage: MatchValidationStage,
@@ -1694,6 +1970,19 @@ export function MockMatchEntryForm({
     try {
       setLiveConflictMatchId(null);
       setBlockedCrownMonthKey(null);
+
+      if (stage === "start") {
+        setSetupValidationAttempted(true);
+
+        if (setupErrorCount > 0) {
+          setMessage(getRequiredSummary(setupErrorCount));
+          setupSectionRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start"
+          });
+          return false;
+        }
+      }
 
       const matchNumber = getMatchNumberValue(values.matchNumber);
 
@@ -1785,7 +2074,13 @@ export function MockMatchEntryForm({
       setValues((current) => ({ ...current, ...result.totals }));
 
       if (!response.ok || !result.ok) {
-        setMessage(result.errors[0] ?? "Please check the match record.");
+        setMessage(
+          stage === "start"
+            ? getSetupValidationMessage(
+                result.errors[0] ?? "Please check the match setup."
+              )
+            : result.errors[0] ?? "Please check the match record."
+        );
         return false;
       }
 
@@ -1859,12 +2154,31 @@ export function MockMatchEntryForm({
           )
         );
       } else {
+        const nextQuickScoring =
+          nextStatus === "in_progress"
+            ? {
+                ...quickScoring,
+                setupLocked: true,
+                setupLockedAt:
+                  quickScoring.setupLockedAt ?? new Date().toISOString()
+              }
+            : quickScoring;
         const saved = await persistNonFinalisedMatch(
-          buildCurrentMatchRecord(nextStatus, result.result, new Date().toISOString())
+          buildCurrentMatchRecord(
+            nextStatus,
+            result.result,
+            new Date().toISOString(),
+            nextQuickScoring
+          )
         );
 
         if (!saved) return false;
 
+        if (nextStatus === "in_progress") {
+          setQuickScoring(nextQuickScoring);
+          setSetupExpanded(false);
+          setSetupValidationAttempted(false);
+        }
         setFinalisedXPBreakdowns({});
       }
 
@@ -1879,14 +2193,6 @@ export function MockMatchEntryForm({
       return false;
     } finally {
       setIsSavingMatch(false);
-    }
-  }
-
-  async function continueToTeamSetup() {
-    const saved = await validateAndSetStatus("draft", "draft");
-
-    if (saved) {
-      window.location.href = `/matches/${matchId}`;
     }
   }
 
@@ -1929,12 +2235,18 @@ export function MockMatchEntryForm({
     setTeamB([]);
     setSharedPlayerId(null);
     setBattingFirstTeamId("");
+    setQuickScoring(createEmptyQuickScoringMetadata());
+    setSetupExpanded(true);
     setInningsExtras({ teamA: 0, teamB: 0 });
     setPerformances({});
     setPlayerOfMatchSelectionMode("auto");
     setBowlingOvers({ teamA: [], teamB: [] });
     setStatus("draft");
     setFinalisedXPBreakdowns({});
+    setSetupValidationAttempted(false);
+    setQuickValidationAttempted(false);
+    setWicketValidationAttempted(false);
+    setDetailedRecordsExpanded(false);
     setMessage("Match entry reset.");
   }
 
@@ -1960,19 +2272,37 @@ export function MockMatchEntryForm({
 
       <form
         aria-label={matchPageTitle}
-        className="mt-5 grid gap-5"
+        className="match-management-form mt-5 grid gap-5"
         onSubmit={(event) => event.preventDefault()}
       >
-        <ResultBanner
-          result={liveResult}
-          status={status}
-          teamAName={values.teamAName}
-          teamBName={values.teamBName}
-          firstInnings={firstInnings}
-          secondInnings={secondInnings}
-          firstInningsIsComplete={firstInningsIsComplete}
-          secondInningsIsComplete={secondInningsIsComplete}
-        />
+        <div className={status === "in_progress" ? "live-result-full-preview" : ""}>
+          <ResultBanner
+            result={liveResult}
+            status={status}
+            teamAName={values.teamAName}
+            teamBName={values.teamBName}
+            firstInnings={firstInnings}
+            secondInnings={secondInnings}
+            firstInningsIsComplete={firstInningsIsComplete}
+            secondInningsIsComplete={secondInningsIsComplete}
+          />
+        </div>
+        {status === "in_progress" ? (
+          <CompactLiveScoreBanner
+            battingTeamName={
+              quickActiveBattingTeamId === "teamA"
+                ? values.teamAName || "Team A"
+                : values.teamBName || "Team B"
+            }
+            bowlingTeamName={
+              quickActiveBowlingTeamId === "teamA"
+                ? values.teamAName || "Team A"
+                : values.teamBName || "Team B"
+            }
+            score={quickActiveDerived}
+            maximumOvers={scheduledOversForCalculations}
+          />
+        ) : null}
 
         {isFinalised ? (
           <FinalisedMatchOverview
@@ -1988,6 +2318,226 @@ export function MockMatchEntryForm({
           />
         ) : (
         <>
+          <section
+            ref={setupSectionRef}
+            className="match-setup-panel rounded-lg border border-neon-green/30 bg-black/25 p-4"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase text-neon-green">
+                  Phase 1
+                </p>
+                <h2 className="text-2xl font-black uppercase text-stone-50">
+                  Match Setup {setupIsLocked ? "- Locked" : ""}
+                </h2>
+                <p className="text-sm text-stone-400">
+                  {setupIsLocked
+                    ? "Teams and match settings are locked for this match."
+                    : "Pick the available players, assign teams, then start Quick Scoring."}
+                </p>
+              </div>
+              {setupIsLocked ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setSetupExpanded((current) => !current)}
+                  >
+                    {setupIsCollapsed ? "View Setup" : "Hide Setup"}
+                  </Button>
+                  {canEditLockedSetup ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={editLockedSetupBeforeScoring}
+                      disabled={isSavingMatch}
+                    >
+                      Edit Setup
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            {setupIsCollapsed ? (
+              <>
+              <p className="mobile-locked-setup-title">
+                Match Setup Locked
+              </p>
+              <div className="locked-setup-summary mt-4 grid gap-3 md:grid-cols-4">
+                <div className="locked-setup-item rounded-md border border-neon-cyan/25 bg-black/25 p-3 text-sm font-black uppercase text-stone-100">
+                  Team A: {teamA.length} players
+                </div>
+                <div className="locked-setup-item rounded-md border border-neon-yellow/25 bg-black/25 p-3 text-sm font-black uppercase text-neon-yellow">
+                  Team B: {teamB.length} players
+                </div>
+                <div className="locked-setup-item rounded-md border border-neon-green/25 bg-black/25 p-3 text-sm font-black uppercase text-neon-green">
+                  {scheduledOversForCalculations || "-"} overs
+                </div>
+                <div className="locked-setup-item rounded-md border border-white/15 bg-black/25 p-3 text-sm font-black uppercase text-stone-100">
+                  {battingFirstTeamId === "teamB" ? FIXED_TEAM_B_NAME : FIXED_TEAM_A_NAME} batting first
+                </div>
+              </div>
+              </>
+            ) : (
+              <div className="mt-4 grid gap-5">
+                <section
+                  className={[
+                    "rounded-lg border bg-black/20 p-4",
+                    visibleSetupErrors.availability
+                      ? "border-neon-red/60"
+                      : "border-white/12"
+                  ].join(" ")}
+                >
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                    <div>
+                      <h3 className="flex items-center gap-2 text-xl font-black uppercase text-stone-50">
+                        <Users className="h-5 w-5 text-neon-green" aria-hidden="true" />
+                        Available Today
+                      </h3>
+                      <p className="text-sm text-stone-400">
+                        Select everybody available for today&apos;s match.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="secondary" onClick={selectAllAvailable} disabled={isRosterLocked}>
+                        Select All
+                      </Button>
+                      <Button type="button" variant="ghost" onClick={clearAvailability} disabled={isRosterLocked}>
+                        Clear All
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="available-today-grid mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    {activePlayers.map((player) => {
+                      const isAvailable = availablePlayerIds.includes(player.id);
+
+                      return (
+                        <label
+                          key={`available-${player.id}`}
+                          className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-stone-100 hover:bg-white/10 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-45"
+                        >
+                          <span>{player.name}</span>
+                          <input
+                            type="checkbox"
+                            checked={isAvailable}
+                            disabled={isRosterLocked}
+                            onChange={(event) =>
+                              toggleAvailability(player.id, event.target.checked)
+                            }
+                            className="h-5 w-5 accent-neon-yellow"
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <ErrorText>{visibleSetupErrors.availability}</ErrorText>
+                </section>
+
+                <section
+                  className={[
+                    "rounded-lg border bg-black/20 p-4",
+                    visibleSetupErrors.teamAssignment ||
+                    visibleSetupErrors.sharedPlayer
+                      ? "border-neon-red/60"
+                      : "border-white/12"
+                  ].join(" ")}
+                >
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                    <div>
+                      <h3 className="text-xl font-black uppercase text-stone-50">
+                        Team Assignment
+                      </h3>
+                      <p className="text-sm text-stone-400">
+                        Assign available players manually or generate balanced teams.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        onClick={autoBalanceTeams}
+                        disabled={
+                          isRosterLocked ||
+                          isBalancing ||
+                          availablePlayerIds.length < 2 ||
+                          !canUseTeamControls
+                        }
+                      >
+                        <Shuffle className="h-4 w-4" aria-hidden="true" />
+                        Balance Teams
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={autoBalanceTeams}
+                        disabled={
+                          isRosterLocked ||
+                          isBalancing ||
+                          availablePlayerIds.length < 2 ||
+                          !canUseTeamControls
+                        }
+                      >
+                        Shuffle
+                      </Button>
+                      <Button type="button" variant="ghost" onClick={clearTeams} disabled={isRosterLocked}>
+                        Clear Teams
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="team-assignment-summary mt-4 grid gap-3 md:grid-cols-3">
+                    <div className="team-assignment-summary-item rounded-md border border-neon-cyan/25 bg-black/25 p-3 text-sm font-black uppercase text-stone-100">
+                      {availableSummary.uniquePlayers} unique players available
+                    </div>
+                    <div className="team-assignment-summary-item rounded-md border border-neon-yellow/25 bg-black/25 p-3 text-sm font-black uppercase text-neon-yellow">
+                      {availableSummary.teamASize} vs {availableSummary.teamBSize}
+                    </div>
+                    <div className="team-assignment-summary-item rounded-md border border-neon-green/25 bg-black/25 p-3 text-sm font-black uppercase text-neon-green">
+                      {availableSummary.sharedSlots} shared player
+                    </div>
+                  </div>
+                  <ErrorText>{visibleSetupErrors.teamAssignment}</ErrorText>
+
+                  {hasOddAttendance ? (
+                    <div className="mt-4 rounded-lg border border-neon-yellow/35 bg-neon-yellow/10 p-4">
+                      <label className="grid gap-2 text-sm font-black uppercase text-yellow-100">
+                        Shared Player - Plays for Both Teams
+                        <select
+                          value={sharedPlayerId ?? ""}
+                          disabled={isRosterLocked}
+                          onChange={(event) => changeSharedPlayer(event.target.value)}
+                          className={getInputClass(Boolean(visibleSetupErrors.sharedPlayer))}
+                        >
+                          <option value="">Select shared player</option>
+                          {availablePlayers.map((player) => (
+                            <option key={`shared-${player.id}`} value={player.id}>
+                              {player.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <p className="mt-2 text-sm font-bold text-yellow-100">
+                        Choose one available player to represent both teams so the playing sides remain equal.
+                      </p>
+                      <ErrorText>{visibleSetupErrors.sharedPlayer}</ErrorText>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)_minmax(0,1fr)]">
+                    {renderAssignedTeam("A", teamA)}
+                    {renderUnassignedPlayers()}
+                    {renderAssignedTeam("B", teamB)}
+                  </div>
+                </section>
+
+                <section className="rounded-lg border border-white/12 bg-black/20 p-4">
+                  <h3 className="text-xl font-black uppercase text-stone-50">
+                    Match Settings
+                  </h3>
+                  <p className="text-sm text-stone-400">
+                    Team names are fixed as Team A and Team B.
+                  </p>
           <div className="grid gap-4 md:grid-cols-2">
           <label className="grid gap-2 text-sm font-bold text-stone-200">
             Match date
@@ -2005,8 +2555,9 @@ export function MockMatchEntryForm({
                       : getNextAvailableMatchNumber(savedMatches, event.target.value)
                 }))
               }
-              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+              className={getInputClass(Boolean(visibleSetupErrors.matchDate))}
             />
+            <ErrorText>{visibleSetupErrors.matchDate}</ErrorText>
           </label>
           <label className="grid gap-2 text-sm font-bold text-stone-200">
             Game number
@@ -2025,7 +2576,7 @@ export function MockMatchEntryForm({
                       : Math.max(1, sanitizeRuns(event.target.value))
                 }))
               }
-              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+              className={getInputClass()}
             />
           </label>
           <label className="grid gap-2 text-sm font-bold text-stone-200">
@@ -2037,7 +2588,7 @@ export function MockMatchEntryForm({
               onChange={(event) =>
                 setValues((current) => ({ ...current, startTime: event.target.value }))
               }
-              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+              className={getInputClass()}
             />
           </label>
           <label className="grid gap-2 text-sm font-bold text-stone-200">
@@ -2048,30 +2599,9 @@ export function MockMatchEntryForm({
               onChange={(event) =>
                 setValues((current) => ({ ...current, matchName: event.target.value }))
               }
-              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+              className={getInputClass(Boolean(visibleSetupErrors.matchName))}
             />
-          </label>
-          <label className="grid gap-2 text-sm font-bold text-stone-200">
-            Team A name
-            <input
-              value={values.teamAName}
-              disabled={isLocked}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, teamAName: event.target.value }))
-              }
-              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
-            />
-          </label>
-          <label className="grid gap-2 text-sm font-bold text-stone-200">
-            Team B name
-            <input
-              value={values.teamBName}
-              disabled={isLocked}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, teamBName: event.target.value }))
-              }
-              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
-            />
+            <ErrorText>{visibleSetupErrors.matchName}</ErrorText>
           </label>
           <div className="grid gap-2 text-sm font-bold text-stone-200">
             Scoring flow
@@ -2095,8 +2625,9 @@ export function MockMatchEntryForm({
                       : Math.max(1, sanitizeRuns(event.target.value))
                 }))
               }
-              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+              className={getInputClass(Boolean(visibleSetupErrors.overs))}
             />
+            <ErrorText>{visibleSetupErrors.overs}</ErrorText>
           </label>
           <label className="grid gap-2 text-sm font-bold text-stone-200">
             Who bats first?
@@ -2104,12 +2635,13 @@ export function MockMatchEntryForm({
               value={battingFirstTeamId}
               disabled={isRosterLocked}
               onChange={(event) => setBattingFirstTeamId(event.target.value as TeamId | "")}
-              className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
+              className={getInputClass(Boolean(visibleSetupErrors.battingFirst))}
             >
               <option value="">Select innings order</option>
               <option value="teamA">{values.teamAName || "Team A"}</option>
               <option value="teamB">{values.teamBName || "Team B"}</option>
             </select>
+            <ErrorText>{visibleSetupErrors.battingFirst}</ErrorText>
           </label>
           <div className="grid gap-2 text-sm font-bold text-stone-200">
             Live innings scores
@@ -2122,9 +2654,39 @@ export function MockMatchEntryForm({
               </output>
             </div>
           </div>
-        </div>
+          </div>
+          {status === "draft" ? (
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => validateAndSetStatus("in_progress", "start")}
+                disabled={isSavingMatch || isRosterLocked}
+              >
+                <Swords className="h-4 w-4" aria-hidden="true" />
+                Start Match
+              </Button>
+              <Button
+                type="button"
+                onClick={() => validateAndSetStatus("draft", "draft")}
+                disabled={isSavingMatch || isRosterLocked}
+              >
+                <Save className="h-4 w-4" aria-hidden="true" />
+                Save Draft
+              </Button>
+              {setupValidationAttempted && setupErrorCount > 0 ? (
+                <div className="basis-full">
+                  <ErrorText>{getRequiredSummary(setupErrorCount)}</ErrorText>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+                </section>
+              </div>
+            )}
+          </section>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className={`innings-allocation-primary grid gap-4 md:grid-cols-2 ${status === "in_progress" ? "is-live-scoring" : ""}`}>
           <InningsAllocationPanel
             teamName={values.teamAName || "Team A"}
             score={teamAInningsScore}
@@ -2151,10 +2713,13 @@ export function MockMatchEntryForm({
             derived={quickActiveDerived}
             maximumOvers={scheduledOversForCalculations}
             selection={quickSelection}
+            selectionErrors={visibleQuickSelectionErrors}
             wicketDraft={quickWicketDraft}
+            wicketErrors={visibleQuickWicketErrors}
             noBallOpen={quickNoBallOpen}
             saveStatus={quickSaveStatus}
-            disabled={isLocked || !battingFirstTeamId || !canUseTeamControls}
+            disabled={isLocked || !setupIsLocked || !battingFirstTeamId || !canUseTeamControls}
+            sectionRef={quickSectionRef}
             onSelectionChange={setQuickSelection}
             onWicketDraftChange={setQuickWicketDraft}
             onNoBallOpenChange={setQuickNoBallOpen}
@@ -2185,128 +2750,47 @@ export function MockMatchEntryForm({
             onSubmitWicket={submitQuickWicket}
           />
 
-          <section className="rounded-lg border border-neon-green/30 bg-black/25 p-4">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <h2 className="flex items-center gap-2 text-xl font-black uppercase text-stone-50">
-                <Users className="h-5 w-5 text-neon-green" aria-hidden="true" />
-                Available Today
-              </h2>
-              <p className="text-sm text-stone-400">
-                Select the players available today, then generate two balanced teams or choose them manually.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" onClick={selectAllAvailable} disabled={isRosterLocked}>
-                Select All
-              </Button>
-              <Button type="button" variant="ghost" onClick={clearAvailability} disabled={isRosterLocked}>
-                Clear All
-              </Button>
-              <Button
-                type="button"
-                onClick={autoBalanceTeams}
-                disabled={
-                  isRosterLocked ||
-                  isBalancing ||
-                  availablePlayerIds.length < 2 ||
-                  !canUseTeamControls
-                }
-              >
-                <Shuffle className="h-4 w-4" aria-hidden="true" />
-                Auto-Balance Teams
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={autoBalanceTeams}
-                disabled={
-                  isRosterLocked ||
-                  isBalancing ||
-                  availablePlayerIds.length < 2 ||
-                  !canUseTeamControls
-                }
-              >
-                Shuffle Again
-              </Button>
-              <Button type="button" variant="ghost" onClick={clearTeams} disabled={isRosterLocked}>
-                Clear Teams
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {activePlayers.map((player) => {
-              const isAvailable = availablePlayerIds.includes(player.id);
-
-              return (
-                <label
-                  key={`available-${player.id}`}
-                  className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-stone-100 hover:bg-white/10 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-45"
-                >
-                  <span>{player.name}</span>
-                  <input
-                    type="checkbox"
-                    checked={isAvailable}
-                    disabled={isRosterLocked}
-                    onChange={(event) =>
-                      toggleAvailability(player.id, event.target.checked)
-                    }
-                    className="h-5 w-5 accent-neon-yellow"
-                  />
-                </label>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <div className="rounded-md border border-neon-cyan/25 bg-black/25 p-3 text-sm font-black uppercase text-stone-100">
-              {availableSummary.uniquePlayers} unique players available
-            </div>
-            <div className="rounded-md border border-neon-yellow/25 bg-black/25 p-3 text-sm font-black uppercase text-neon-yellow">
-              {availableSummary.teamASize} vs {availableSummary.teamBSize}
-            </div>
-            <div className="rounded-md border border-neon-green/25 bg-black/25 p-3 text-sm font-black uppercase text-neon-green">
-              {availableSummary.sharedSlots} shared player
-            </div>
-          </div>
-
-          {hasOddAttendance ? (
-            <div className="mt-4 rounded-lg border border-neon-yellow/35 bg-neon-yellow/10 p-4">
-              <label className="grid gap-2 text-sm font-black uppercase text-yellow-100">
-                Shared Player - Plays for Both Teams
-                <select
-                  value={sharedPlayerId ?? ""}
-                  disabled={isRosterLocked}
-                  onChange={(event) => changeSharedPlayer(event.target.value)}
-                  className="rounded-md border border-white/15 bg-black/45 px-3 py-3 text-stone-100 outline-none focus:ring-2 focus:ring-neon-cyan disabled:opacity-60"
-                >
-                  <option value="">Select shared player</option>
-                  {availablePlayers.map((player) => (
-                    <option key={`shared-${player.id}`} value={player.id}>
-                      {player.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p className="mt-2 text-sm font-bold text-yellow-100">
-                Choose one available player to represent both teams so the playing sides remain equal.
-              </p>
-              {!sharedPlayerId ? (
-                <p className="mt-2 rounded-md border border-neon-red/40 bg-neon-red/10 p-3 text-sm font-black uppercase text-red-100">
-                  Select one Shared Player to create equal teams.
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-          </section>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            {renderTeamSelector("A", teamA, teamB)}
-            {renderTeamSelector("B", teamB, teamA)}
-          </div>
         </>
         )}
+
+        <section className="detailed-records-panel rounded-lg border border-white/12 bg-black/25 p-4">
+          <div className="detailed-records-header">
+            <div>
+              <p className="text-xs font-black uppercase text-neon-cyan">
+                Detailed Records
+              </p>
+              <h2 className="text-2xl font-black uppercase text-stone-50">
+                Bowling & Player Records
+              </h2>
+              <p className="text-sm font-bold text-stone-400">
+                Bowling and player records are automatically updated from Quick Scoring.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              aria-expanded={detailedRecordsExpanded}
+              aria-controls="detailed-records-content"
+              onClick={() => setDetailedRecordsExpanded((current) => !current)}
+            >
+              {detailedRecordsExpanded ? "Hide Records" : "View Records"}
+            </Button>
+          </div>
+          <div
+            id="detailed-records-content"
+            hidden={!detailedRecordsExpanded}
+            className="detailed-records-content"
+          >
+            <div className="innings-allocation-mobile-details grid gap-4 md:hidden">
+              <InningsAllocationPanel
+                teamName={values.teamAName || "Team A"}
+                score={teamAInningsScore}
+              />
+              <InningsAllocationPanel
+                teamName={values.teamBName || "Team B"}
+                score={teamBInningsScore}
+              />
+            </div>
 
         <div className="bowling-teams-grid">
           {isFinalised ? (
@@ -2505,6 +2989,8 @@ export function MockMatchEntryForm({
           />
           )}
         </div>
+          </div>
+        </section>
 
         {!isFinalised ? (
           <section className="pom-review-panel rounded-lg border border-neon-yellow/30 bg-black/25 p-4">
@@ -2625,32 +3111,11 @@ export function MockMatchEntryForm({
                 ? "Save Live Match"
                 : "Save Draft"}
           </Button>
-          {status === "draft" ? (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={continueToTeamSetup}
-              disabled={isSavingMatch}
-            >
-              Continue to Team Setup
-            </Button>
-          ) : null}
-          {status === "draft" ? (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => validateAndSetStatus("in_progress", "start")}
-              disabled={isLocked || !canUseTeamControls || isSavingMatch}
-            >
-              <Swords className="h-4 w-4" aria-hidden="true" />
-              Start Quick Scoring
-            </Button>
-          ) : null}
           <Button
             type="button"
             variant="secondary"
             onClick={() => validateAndSetStatus("finalised", "finalise")}
-            disabled={isLocked || !canUseTeamControls || isSavingMatch}
+            disabled={isLocked || status !== "in_progress" || !canUseTeamControls || isSavingMatch}
           >
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
             Finalise Match
@@ -2680,28 +3145,36 @@ export function MockMatchEntryForm({
     </>
   );
 
-  function renderTeamSelector(team: TeamKey, source: string[], other: string[]) {
+  function getAssignmentPlayers(source: string[]) {
+    return source
+      .map((playerId) =>
+        availablePlayers.find((player) => player.id === playerId)
+      )
+      .filter((player): player is Player => Boolean(player));
+  }
+
+  function renderAssignedTeam(team: TeamKey, source: string[]) {
+    const players = getAssignmentPlayers(source);
+
     return (
-      <fieldset className="rounded-lg border border-white/12 bg-black/20 p-4">
+      <fieldset className="team-assignment-column rounded-lg border border-white/12 bg-black/20 p-4">
         <legend className="px-1 text-sm font-black uppercase text-neon-yellow">
           Team {team} players
         </legend>
         <div className="mt-3 grid gap-2">
-          {availablePlayers.length === 0 ? (
+          {players.length === 0 ? (
             <p className="rounded-md border border-white/10 bg-white/5 p-3 text-sm font-bold text-stone-300">
-              Mark players Available Today before choosing teams.
+              No players assigned yet.
             </p>
           ) : null}
 
-          {availablePlayers.map((player) => {
-            const selected = source.includes(player.id);
+          {players.map((player) => {
             const isShared = player.id === sharedPlayerId;
-            const disabled = isRosterLocked || isShared || other.includes(player.id);
 
             return (
-              <label
+              <div
                 key={`${team}-${player.id}`}
-                className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-stone-100 hover:bg-white/10 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-45"
+                className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-stone-100"
               >
                 <span className="flex flex-wrap items-center gap-2">
                   {player.name}
@@ -2711,16 +3184,71 @@ export function MockMatchEntryForm({
                     </b>
                   ) : null}
                 </span>
-                <input
-                  type="checkbox"
-                  checked={selected}
-                  disabled={disabled}
-                  onChange={() => togglePlayer(team, player.id)}
-                  className="h-5 w-5 accent-neon-yellow"
-                />
-              </label>
+                <button
+                  type="button"
+                  disabled={isRosterLocked || isShared}
+                  onClick={() => togglePlayer(team, player.id)}
+                  className="rounded border border-neon-red/35 bg-neon-red/10 px-2 py-1 text-[11px] font-black uppercase text-red-100 disabled:cursor-not-allowed disabled:opacity-45"
+                  title={
+                    isShared
+                      ? "Change Shared Player from the Shared Player selector"
+                      : "Remove player from this team"
+                  }
+                >
+                  Remove
+                </button>
+              </div>
             );
           })}
+        </div>
+      </fieldset>
+    );
+  }
+
+  function renderUnassignedPlayers() {
+    return (
+      <fieldset className="team-assignment-column rounded-lg border border-neon-cyan/25 bg-black/20 p-4">
+        <legend className="px-1 text-sm font-black uppercase text-neon-cyan">
+          Unassigned
+        </legend>
+        <div className="mt-3 grid gap-2">
+          {availablePlayers.length === 0 ? (
+            <p className="rounded-md border border-white/10 bg-white/5 p-3 text-sm font-bold text-stone-300">
+              Mark players Available Today before choosing teams.
+            </p>
+          ) : null}
+          {availablePlayers.length > 0 && unassignedPlayers.length === 0 ? (
+            <p className="rounded-md border border-neon-green/25 bg-neon-green/10 p-3 text-sm font-black uppercase text-neon-green">
+              All available players are assigned.
+            </p>
+          ) : null}
+
+          {unassignedPlayers.map((player) => (
+            <div
+              key={`unassigned-${player.id}`}
+              className="grid min-h-11 gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-stone-100"
+            >
+              <span>{player.name}</span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={isRosterLocked}
+                  onClick={() => togglePlayer("A", player.id)}
+                  className="rounded border border-neon-cyan/35 bg-neon-cyan/10 px-2 py-1 text-[11px] font-black uppercase text-cyan-100 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  Team A
+                </button>
+                <button
+                  type="button"
+                  disabled={isRosterLocked}
+                  onClick={() => togglePlayer("B", player.id)}
+                  className="rounded border border-neon-yellow/35 bg-neon-yellow/10 px-2 py-1 text-[11px] font-black uppercase text-yellow-100 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  Team B
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </fieldset>
     );
@@ -3131,10 +3659,13 @@ function QuickScoringPanel({
   derived,
   maximumOvers,
   selection,
+  selectionErrors,
   wicketDraft,
+  wicketErrors,
   noBallOpen,
   saveStatus,
   disabled,
+  sectionRef,
   onSelectionChange,
   onWicketDraftChange,
   onNoBallOpenChange,
@@ -3153,19 +3684,22 @@ function QuickScoringPanel({
   derived: QuickScoringDerivedInnings;
   maximumOvers: number;
   selection: { strikerId: string; nonStrikerId: string; bowlerId: string };
+  selectionErrors: QuickSelectionErrors;
   wicketDraft: {
     open: boolean;
     type: QuickScoringDismissalType;
     dismissedPlayerId: string;
     fielderId: string;
     newBatterId: string;
-    completedRuns: number;
+    completedRuns: number | "";
     nextStrikerId: string;
     nextNonStrikerId: string;
   };
+  wicketErrors: QuickWicketErrors;
   noBallOpen: boolean;
   saveStatus: string;
   disabled: boolean;
+  sectionRef?: RefObject<HTMLElement | null>;
   onSelectionChange: (selection: {
     strikerId: string;
     nonStrikerId: string;
@@ -3177,7 +3711,7 @@ function QuickScoringPanel({
     dismissedPlayerId: string;
     fielderId: string;
     newBatterId: string;
-    completedRuns: number;
+    completedRuns: number | "";
     nextStrikerId: string;
     nextNonStrikerId: string;
   }) => void;
@@ -3204,6 +3738,7 @@ function QuickScoringPanel({
     maximumOvers > 0 && derived.legalBalls >= maximumOvers * 6;
   const overJustEnded = derived.legalBalls > 0 && derived.legalBalls % 6 === 0;
   const scoringDisabled = disabled || overLimitReached;
+  const wicketWouldEndInnings = derived.wicketsLost + 1 >= battingPlayers.length;
   const dismissedPlayerIds = new Set(
     derived.battingPerformances
       .filter((performance) => performance.wasOut)
@@ -3246,14 +3781,11 @@ function QuickScoringPanel({
       label: `Non-striker: ${getPlayerDisplayName(battingPlayers, selection.nonStrikerId)}`
     }
   ].filter((option) => option.id);
-  const nextBatterOptions = battingPlayers.filter(
-    (player) =>
-      !dismissedPlayerIds.has(player.id) &&
-      player.id !== wicketDraft.dismissedPlayerId
-  );
-
   return (
-    <section className="quick-scoring-panel rounded-lg border border-neon-cyan/35 bg-black/30 p-4">
+    <section
+      ref={sectionRef}
+      className="quick-scoring-panel rounded-lg border border-neon-cyan/35 bg-black/30 p-4"
+    >
       <div className="quick-scoring-header">
         <div>
           <p className="text-xs font-black uppercase text-neon-cyan">
@@ -3289,7 +3821,7 @@ function QuickScoringPanel({
       </div>
 
       <div className="quick-player-selectors">
-        <label>
+        <label className={selectionErrors.striker ? "quick-field-error" : undefined}>
           Striker
           <select
             value={selection.strikerId}
@@ -3312,8 +3844,9 @@ function QuickScoringPanel({
               </option>
             ))}
           </select>
+          <ErrorText>{selectionErrors.striker}</ErrorText>
         </label>
-        <label>
+        <label className={selectionErrors.nonStriker ? "quick-field-error" : undefined}>
           Non-striker
           <select
             value={selection.nonStrikerId}
@@ -3336,8 +3869,9 @@ function QuickScoringPanel({
               </option>
             ))}
           </select>
+          <ErrorText>{selectionErrors.nonStriker}</ErrorText>
         </label>
-        <label>
+        <label className={selectionErrors.bowler ? "quick-field-error" : undefined}>
           Bowler
           <select
             value={selection.bowlerId}
@@ -3353,6 +3887,7 @@ function QuickScoringPanel({
               </option>
             ))}
           </select>
+          <ErrorText>{selectionErrors.bowler}</ErrorText>
         </label>
       </div>
 
@@ -3388,6 +3923,7 @@ function QuickScoringPanel({
               ...wicketDraft,
               open: true,
               dismissedPlayerId: selection.strikerId,
+              completedRuns: "",
               nextStrikerId: selection.strikerId,
               nextNonStrikerId: selection.nonStrikerId
             })
@@ -3431,7 +3967,7 @@ function QuickScoringPanel({
                   fielderId: "",
                   dismissedPlayerId:
                     event.target.value === "run_out"
-                      ? wicketDraft.dismissedPlayerId || selection.strikerId
+                      ? ""
                       : selection.strikerId
                 })
               }
@@ -3475,6 +4011,7 @@ function QuickScoringPanel({
                   </button>
                 ))}
               </div>
+              <ErrorText>{wicketErrors.dismissedPlayer}</ErrorText>
 
               <p>Step 2 - runs completed before the wicket</p>
               <div>
@@ -3496,11 +4033,12 @@ function QuickScoringPanel({
                   </button>
                 ))}
               </div>
+              <ErrorText>{wicketErrors.completedRuns}</ErrorText>
             </div>
           ) : null}
 
           {wicketDraft.type === "caught" || wicketDraft.type === "run_out" ? (
-            <label>
+            <label className={wicketErrors.fielder ? "quick-field-error" : undefined}>
               {wicketDraft.type === "caught" ? "Catcher" : "Primary fielder"}
               <select
                 value={wicketDraft.fielderId}
@@ -3518,82 +4056,35 @@ function QuickScoringPanel({
                   </option>
                 ))}
               </select>
+              <ErrorText>{wicketErrors.fielder}</ErrorText>
             </label>
           ) : null}
-          <label>
-            New batter
-            <select
-              value={wicketDraft.newBatterId}
-              onChange={(event) =>
-                onWicketDraftChange({
-                  ...wicketDraft,
-                  newBatterId: event.target.value
-                })
-              }
-            >
-              <option value="">Select new batter</option>
-              {availableNewBatters.map((player) => (
-                <option key={`quick-new-batter-${player.id}`} value={player.id}>
-                  {player.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {wicketDraft.type === "run_out" ? (
-            <div className="quick-next-pair">
-              <p>Step 5 - next ball batters</p>
-              <label>
-                Striker
-                <select
-                  value={wicketDraft.nextStrikerId}
-                  onChange={(event) =>
-                    onWicketDraftChange({
-                      ...wicketDraft,
-                      nextStrikerId: event.target.value,
-                      nextNonStrikerId:
-                        event.target.value === wicketDraft.nextNonStrikerId
-                          ? ""
-                          : wicketDraft.nextNonStrikerId
-                    })
-                  }
-                >
-                  <option value="">Select striker</option>
-                  {nextBatterOptions
-                    .filter((player) => player.id !== wicketDraft.nextNonStrikerId)
-                    .map((player) => (
-                    <option key={`quick-next-striker-${player.id}`} value={player.id}>
-                      {player.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Non-striker
-                <select
-                  value={wicketDraft.nextNonStrikerId}
-                  onChange={(event) =>
-                    onWicketDraftChange({
-                      ...wicketDraft,
-                      nextNonStrikerId: event.target.value,
-                      nextStrikerId:
-                        event.target.value === wicketDraft.nextStrikerId
-                          ? ""
-                          : wicketDraft.nextStrikerId
-                    })
-                  }
-                >
-                  <option value="">Select non-striker</option>
-                  {nextBatterOptions
-                    .filter((player) => player.id !== wicketDraft.nextStrikerId)
-                    .map((player) => (
-                    <option key={`quick-next-nonstriker-${player.id}`} value={player.id}>
-                      {player.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          ) : null}
+          {wicketWouldEndInnings ? (
+            <p className="rounded-md border border-white/10 bg-white/5 p-3 text-sm font-bold text-stone-300">
+              No new batter needed if this wicket ends the innings.
+            </p>
+          ) : (
+            <label className={wicketErrors.newBatter ? "quick-field-error" : undefined}>
+              New batter
+              <select
+                value={wicketDraft.newBatterId}
+                onChange={(event) =>
+                  onWicketDraftChange({
+                    ...wicketDraft,
+                    newBatterId: event.target.value
+                  })
+                }
+              >
+                <option value="">Select new batter</option>
+                {availableNewBatters.map((player) => (
+                  <option key={`quick-new-batter-${player.id}`} value={player.id}>
+                    {player.name}
+                  </option>
+                ))}
+              </select>
+              <ErrorText>{wicketErrors.newBatter}</ErrorText>
+            </label>
+          )}
           <div className="quick-wicket-actions">
             <button type="button" onClick={onSubmitWicket}>
               Record wicket
@@ -4434,6 +4925,40 @@ function TeamPlayerRecordsSection({
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function CompactLiveScoreBanner({
+  battingTeamName,
+  bowlingTeamName,
+  score,
+  maximumOvers
+}: {
+  battingTeamName: string;
+  bowlingTeamName: string;
+  score: QuickScoringDerivedInnings;
+  maximumOvers: number;
+}) {
+  const strikerName = score.currentStrikerId
+    ? getPlayerDisplayName(activePlayers, score.currentStrikerId)
+    : "Select striker";
+  const maxOversLabel = maximumOvers > 0 ? maximumOvers : "-";
+
+  return (
+    <section className="mobile-live-score" aria-label="Compact live score">
+      <div>
+        <span>{battingTeamName}</span>
+        <strong>
+          {score.runs}/{score.wicketsLost}
+        </strong>
+      </div>
+      <p>
+        {formatQuickOvers(score.legalBalls)} / {maxOversLabel} overs
+      </p>
+      <p>
+        {battingTeamName} batting - {bowlingTeamName} bowling - {strikerName}*
+      </p>
     </section>
   );
 }

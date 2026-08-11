@@ -48,6 +48,7 @@ type MutablePerformance = PlayerMatchPerformance & {
 export function createEmptyQuickScoringMetadata(): QuickScoringMetadata {
   return {
     version: 1,
+    setupLocked: false,
     inningsAEvents: [],
     inningsBEvents: []
   };
@@ -205,6 +206,14 @@ function updateStrikeAfterEvent({
   let nextNonStrikerId = nonStrikerId;
   const dismissedPlayerId = event.wicket?.dismissedPlayerId ?? null;
   const newBatterId = event.wicket?.newBatterId ?? null;
+  const rotationRuns =
+    event.wicket?.type === "run_out"
+      ? sanitizeRuns(event.wicket.completedRuns)
+      : sanitizeRuns(event.batterRuns);
+
+  if (rotationRuns % 2 === 1) {
+    [nextStrikerId, nextNonStrikerId] = [nextNonStrikerId, nextStrikerId];
+  }
 
   if (dismissedPlayerId && newBatterId) {
     if (dismissedPlayerId === nextStrikerId) {
@@ -212,15 +221,6 @@ function updateStrikeAfterEvent({
     } else if (dismissedPlayerId === nextNonStrikerId) {
       nextNonStrikerId = newBatterId;
     }
-  }
-
-  const rotationRuns =
-    event.wicket?.type === "run_out" && sanitizeRuns(event.batterRuns) === 0
-      ? sanitizeRuns(event.wicket.completedRuns)
-      : sanitizeRuns(event.batterRuns);
-
-  if (rotationRuns % 2 === 1) {
-    [nextStrikerId, nextNonStrikerId] = [nextNonStrikerId, nextStrikerId];
   }
 
   if (overEnded) {
@@ -396,18 +396,16 @@ export function deriveQuickScoringInnings({
         });
       }
 
-      if (
-        !event.wicket.newBatterId &&
-        wicketsLost < battingPlayerIds.length
-      ) {
-        missingInformation.push(`Missing new batter for event ${event.sequence}.`);
-      }
+      const hasEligibleReplacementBatter = battingPlayerIds.some(
+        (playerId) =>
+          playerId !== event.strikerId &&
+          playerId !== event.nonStrikerId &&
+          playerId !== event.wicket?.dismissedPlayerId &&
+          !dismissedPlayerIds.has(playerId)
+      );
 
-      if (
-        event.wicket.type === "run_out" &&
-        (!event.wicket.nextStrikerId || !event.wicket.nextNonStrikerId)
-      ) {
-        missingInformation.push(`Missing next-ball batters for event ${event.sequence}.`);
+      if (!event.wicket.newBatterId && hasEligibleReplacementBatter) {
+        missingInformation.push(`Missing new batter for event ${event.sequence}.`);
       }
 
       if (
