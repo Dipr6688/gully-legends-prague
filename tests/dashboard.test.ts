@@ -106,6 +106,16 @@ const newPlayerImagePaths = [
   "/player-cards/precision-pacer.png",
   "/player-cards/style-striker.png"
 ];
+
+function getPublicPngDimensions(publicPath: string) {
+  const image = readFileSync(path.join(process.cwd(), "public", publicPath.replace(/^\//, "")));
+
+  return {
+    width: image.readUInt32BE(16),
+    height: image.readUInt32BE(20)
+  };
+}
+
 const originalPlayerSummaries = [
   ["aninda", "Rulebook Rambo", "/player-cards/rulebook-rambo.png"],
   ["arunabha", "Turbo Technician", "/player-cards/turbo-technician.png"],
@@ -2408,6 +2418,27 @@ test("the original sixteen player identities and approved card assets are canoni
     assert.equal(player.avatar, player.cardImage);
     assert.equal(existsSync(path.join(process.cwd(), "public", player.cardImage.slice(1))), true);
   }
+});
+
+test("active player-card artwork uses the shared two-by-three card aspect", () => {
+  for (const player of activePlayers) {
+    const dimensions = getPublicPngDimensions(player.cardImage);
+    const aspectRatio = dimensions.width / dimensions.height;
+
+    assert.ok(
+      Math.abs(aspectRatio - 2 / 3) < 0.01,
+      `${player.id} card artwork should be close to 2:3 but is ${dimensions.width}x${dimensions.height}`
+    );
+  }
+
+  assert.deepEqual(getPublicPngDimensions("/player-cards/slow-poison.png"), {
+    width: 1024,
+    height: 1536
+  });
+  assert.deepEqual(getPublicPngDimensions("/player-cards/skidball-sheriff.png"), {
+    width: 1024,
+    height: 1536
+  });
 });
 
 test("approved player avatar title changes preserve stable roster identities", () => {
