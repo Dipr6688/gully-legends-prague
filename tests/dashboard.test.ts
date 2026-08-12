@@ -107,22 +107,22 @@ const newPlayerImagePaths = [
   "/player-cards/style-striker.png"
 ];
 const originalPlayerSummaries = [
-  ["aninda", "Rulebook Rambo", "/images/player-cards/rulebook-rambo.png"],
-  ["arunabha", "Turbo Technician", "/images/player-cards/turbo-technician.png"],
-  ["atripan", "Smiling Sniper", "/images/player-cards/smiling-sniper.png"],
-  ["biplab", "Nerve Ninja", "/images/player-cards/nerve-ninja.png"],
-  ["dipanjan", "Cutter Commander", "/images/player-cards/cutter-commander.png"],
-  ["gaurav", "Loopy Lightning", "/images/player-cards/loopy-lightning.png"],
-  ["madhab", "Sweep Samurai", "/images/player-cards/sweep-samurai.png"],
-  ["rohit", "Skidball Sheriff", "/images/player-cards/skidball-sheriff.png"],
-  ["soman", "Silent Sixer", "/images/player-cards/silent-sixer.png"],
-  ["utpal", "Tempo Tactician", "/images/player-cards/tempo-tactician.png"],
-  ["jogindar", "Loopy Loyalist", "/images/player-cards/loopy-loyalist.png"],
-  ["badhan", "Quiet Quake", "/images/player-cards/quiet-quake.png"],
-  ["debraj", "Steady Sentinel", "/images/player-cards/steady-sentinel.png"],
-  ["dipayan", "Chessboard Charger", "/images/player-cards/chessboard-charger.png"],
-  ["dheeraj", "Leg-Break Jester", "/images/player-cards/leg-break-jester.png"],
-  ["saurav", "Zen Sixsmith", "/images/player-cards/zen-sixsmith.png"]
+  ["aninda", "Rulebook Rambo", "/player-cards/rulebook-rambo.png"],
+  ["arunabha", "Turbo Technician", "/player-cards/turbo-technician.png"],
+  ["atripan", "Smiling Sniper", "/player-cards/smiling-sniper.png"],
+  ["biplab", "Nerve Ninja", "/player-cards/nerve-ninja.png"],
+  ["dipanjan", "Cutter Commander", "/player-cards/cutter-commander.png"],
+  ["gaurav", "Slow Poison", "/player-cards/slow-poison.png"],
+  ["madhab", "Sweep Samurai", "/player-cards/sweep-samurai.png"],
+  ["rohit", "Skidball Sheriff", "/player-cards/skidball-sheriff.png"],
+  ["soman", "Apex Crusher", "/player-cards/apex-crusher.png"],
+  ["utpal", "Tempo Tactician", "/player-cards/tempo-tactician.png"],
+  ["jogindar", "Loopy Loyalist", "/player-cards/loopy-loyalist.png"],
+  ["badhan", "Quiet Quake", "/player-cards/quiet-quake.png"],
+  ["debraj", "Steady Sentinel", "/player-cards/steady-sentinel.png"],
+  ["dipayan", "Dipayan the Destroyer", "/player-cards/dipayan-the-destroyer.png"],
+  ["dheeraj", "Surgical Chase Master", "/player-cards/surgical-chase-master.png"],
+  ["saurav", "Zen Sixsmith", "/player-cards/zen-sixsmith.png"]
 ];
 
 function matchRecord({
@@ -226,7 +226,7 @@ function temporaryPlayer(index: number): Player {
     slug: `temporary-player-${index}`,
     name: `Temporary Player ${index}`,
     cardTitle: `Temporary Title ${index}`,
-    cardImage: `/images/player-cards/temporary-player-${index}.png`,
+    cardImage: `/player-cards/temporary-player-${index}.png`,
     playStyles: ["batting", "utility"],
     avatar: `/player-cards/temporary-player-${index}.png`,
     level: 0,
@@ -2105,7 +2105,7 @@ test("canonical active roster contains the five new approved players", () => {
       runOuts: 0,
       hatTricks: 0
     });
-    assert.equal(player.avatar, "");
+    assert.equal(player.avatar, playerId === "pritvi" ? "" : player.cardImage);
     assert.equal(getPlayerBySlug(playerId)?.id, playerId);
   }
 
@@ -2368,16 +2368,17 @@ test("production player display names keep their stable ids slugs and zero caree
   }
 });
 
-test("Soman keeps his player identity and production Silent Sixer card artwork", () => {
+test("Soman keeps his player identity and approved Apex Crusher card artwork", () => {
   const soman = getPlayerById("soman");
 
   assert.ok(soman);
   assert.equal(soman.name, "Soman");
   assert.equal(soman.slug, "soman");
-  assert.equal(soman.cardTitle, "Silent Sixer");
-  assert.equal(soman.cardImage, "/images/player-cards/silent-sixer.png");
+  assert.equal(soman.cardTitle, "Apex Crusher");
+  assert.equal(soman.cardImage, "/player-cards/apex-crusher.png");
+  assert.equal(soman.avatar, "/player-cards/apex-crusher.png");
   assert.equal(
-    existsSync(path.join(process.cwd(), "public", "images", "player-cards", "silent-sixer.png")),
+    existsSync(path.join(process.cwd(), "public", "player-cards", "apex-crusher.png")),
     true
   );
   assert.equal(soman.level, 0);
@@ -2402,6 +2403,49 @@ test("the original sixteen player identities and approved card assets are canoni
     ]),
     originalPlayerSummaries
   );
+
+  for (const player of activePlayers.slice(0, 16)) {
+    assert.equal(player.avatar, player.cardImage);
+    assert.equal(existsSync(path.join(process.cwd(), "public", player.cardImage.slice(1))), true);
+  }
+});
+
+test("approved player avatar title changes preserve stable roster identities", () => {
+  const approvedUpdates = [
+    ["gaurav", "Gaurav", "Slow Poison", "/player-cards/slow-poison.png"],
+    ["soman", "Soman", "Apex Crusher", "/player-cards/apex-crusher.png"],
+    ["dipayan", "Dipayan", "Dipayan the Destroyer", "/player-cards/dipayan-the-destroyer.png"],
+    ["dheeraj", "Dheeraj", "Surgical Chase Master", "/player-cards/surgical-chase-master.png"]
+  ];
+
+  for (const [id, name, cardTitle, cardImage] of approvedUpdates) {
+    const player = getPlayerById(id);
+
+    assert.ok(player);
+    assert.equal(player.id, id);
+    assert.equal(player.name, name);
+    assert.equal(player.slug, id);
+    assert.equal(player.cardTitle, cardTitle);
+    assert.equal(player.cardImage, cardImage);
+    assert.equal(player.avatar, cardImage);
+    assert.equal(existsSync(path.join(process.cwd(), "public", cardImage.slice(1))), true);
+    assert.equal(player.level, 0);
+    assert.equal(player.xp, 0);
+    assert.deepEqual(player.ratings, { batting: 0, bowling: 0, fielding: 0 });
+    assert.deepEqual(player.stats, {
+      matches: 0,
+      runs: 0,
+      wickets: 0,
+      catches: 0,
+      runOuts: 0,
+      hatTricks: 0
+    });
+  }
+
+  assert.equal(activePlayers.length, 21);
+  assert.equal(new Set(activePlayers.map((player) => player.id)).size, activePlayers.length);
+  assert.equal(getPlayerById("gaurav")?.cardTitle, "Slow Poison");
+  assert.notEqual(getPlayerById("gaurav")?.cardTitle, "Spin Wizard");
 });
 
 test("Dashboard panels use shared persisted match summary source", () => {
