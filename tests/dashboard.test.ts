@@ -1400,6 +1400,196 @@ test("Scorecard Player of the Match uses stored XP and omits zero contributions"
   assert.deepEqual(playerOfMatch?.contributions, ["15 runs"]);
 });
 
+test("finalised scorecards resolve renamed players from stable ids at display time", () => {
+  const jogi = finalisedPerformance({
+    playerId: "jogindar",
+    teamId: "teamA",
+    played: true,
+    didBat: true,
+    runs: 14,
+    wasOut: true,
+    wickets: 0,
+    catches: 0,
+    runOuts: 0,
+    hatTricks: 0,
+    playerOfMatch: false
+  });
+  const naeem = finalisedPerformance({
+    playerId: "naim",
+    teamId: "teamB",
+    played: true,
+    didBat: true,
+    runs: 22,
+    wasOut: false,
+    wickets: 1,
+    catches: 1,
+    runOuts: 0,
+    hatTricks: 0,
+    playerOfMatch: true
+  });
+  naeem.xpBreakdown = xpBreakdown(38);
+  const match: MatchRecord = {
+    ...matchRecord({ id: "historical-name-resolution", matchDate: "2026-08-12" }),
+    teams: {
+      teamA: {
+        teamId: "teamA",
+        teamName: "Team A",
+        playerIds: ["jogindar", "amrit"],
+        playerPerformances: [jogi],
+        bowlingOvers: [],
+        totalRuns: 14,
+        completedBowlingOvers: 1
+      },
+      teamB: {
+        teamId: "teamB",
+        teamName: "Team B",
+        playerIds: ["naim", "saurav"],
+        playerPerformances: [naeem],
+        bowlingOvers: [],
+        totalRuns: 22,
+        completedBowlingOvers: 1
+      }
+    },
+    innings: {
+      first: {
+        battingTeamId: "teamA",
+        bowlingTeamId: "teamB",
+        runs: 14,
+        wicketsLost: 1,
+        extras: 0,
+        playerCount: 2,
+        completedOvers: 1,
+        battingPerformances: [jogi],
+        bowlingOvers: [
+          {
+            id: "team-b-over-1",
+            bowlingTeamId: "teamB",
+            battingTeamId: "teamA",
+            bowlerId: "naim",
+            overNumber: 1,
+            runsConceded: 14,
+            wicketsTaken: 1,
+            maiden: false,
+            dismissals: [
+              {
+                id: "jogi-dismissal",
+                overId: "team-b-over-1",
+                battingTeamId: "teamA",
+                bowlingTeamId: "teamB",
+                dismissedBatterId: "jogindar",
+                type: "caught",
+                creditedBowlerId: "naim",
+                fielderId: "naim"
+              }
+            ]
+          }
+        ]
+      },
+      second: {
+        battingTeamId: "teamB",
+        bowlingTeamId: "teamA",
+        runs: 22,
+        wicketsLost: 0,
+        extras: 0,
+        playerCount: 2,
+        completedOvers: 1,
+        battingPerformances: [naeem],
+        bowlingOvers: []
+      }
+    },
+    finalisedPlayerRecords: [jogi, naeem]
+  };
+  const resolvePlayerName = (playerId: string) => getPlayerById(playerId)?.name ?? playerId;
+  const firstScorecard = buildScorecardInnings(match, match.innings.first, resolvePlayerName);
+  const secondScorecard = buildScorecardInnings(match, match.innings.second, resolvePlayerName);
+  const playerOfMatch = buildPlayerOfMatchSummary(match, getPlayerById);
+
+  assert.equal(firstScorecard.battingRows[0]?.playerId, "jogindar");
+  assert.equal(firstScorecard.battingRows[0]?.batter, "Jogi");
+  assert.equal(firstScorecard.battingRows[0]?.dismissal, "c Naeem b Naeem");
+  assert.equal(firstScorecard.bowlingFigures[0]?.playerId, "naim");
+  assert.equal(firstScorecard.bowlingFigures[0]?.bowler, "Naeem");
+  assert.equal(secondScorecard.battingRows[0]?.playerId, "naim");
+  assert.equal(secondScorecard.battingRows[0]?.batter, "Naeem");
+  assert.equal(playerOfMatch?.playerId, "naim");
+  assert.equal(playerOfMatch?.name, "Naeem");
+  assert.equal(playerOfMatch?.xpAwarded, 38);
+  assert.equal(firstScorecard.score, "14/1");
+  assert.equal(secondScorecard.score, "22/0");
+  assert.equal(match.teams.teamA.playerIds[0], "jogindar");
+  assert.equal(match.teams.teamB.playerIds[0], "naim");
+  assert.equal(jogi.runs, 14);
+  assert.equal(naeem.wickets, 1);
+});
+
+test("match archive search resolves renamed historical player ids from current metadata", () => {
+  const match: MatchRecord = {
+    ...matchRecord({ id: "archive-name-resolution", matchDate: "2026-08-13" }),
+    matchName: "Archive Name Resolution",
+    teams: {
+      ...matchRecord({ id: "archive-base", matchDate: "2026-08-13" }).teams,
+      teamA: {
+        ...matchRecord({ id: "archive-a", matchDate: "2026-08-13" }).teams.teamA,
+        playerIds: ["jogindar"],
+        playerPerformances: [
+          finalisedPerformance({
+            playerId: "jogindar",
+            teamId: "teamA",
+            played: true,
+            playerOfMatch: false,
+            didBat: true,
+            runs: 8,
+            wasOut: false,
+            wickets: 0,
+            hatTricks: 0,
+            catches: 0,
+            runOuts: 0
+          })
+        ]
+      },
+      teamB: {
+        ...matchRecord({ id: "archive-b", matchDate: "2026-08-13" }).teams.teamB,
+        playerIds: ["naim"],
+        playerPerformances: [
+          finalisedPerformance({
+            playerId: "naim",
+            teamId: "teamB",
+            played: true,
+            playerOfMatch: true,
+            didBat: true,
+            runs: 18,
+            wasOut: false,
+            wickets: 0,
+            hatTricks: 0,
+            catches: 0,
+            runOuts: 0
+          })
+        ]
+      }
+    },
+    finalisedPlayerRecords: [
+      finalisedPerformance({
+        playerId: "naim",
+        teamId: "teamB",
+        played: true,
+        playerOfMatch: true,
+        didBat: true,
+        runs: 18,
+        wasOut: false,
+        wickets: 0,
+        hatTricks: 0,
+        catches: 0,
+        runOuts: 0
+      })
+    ]
+  };
+  const searchText = getArchiveMatchSearchText(match);
+
+  assert.match(searchText, /jogi/);
+  assert.match(searchText, /naeem/);
+  assert.doesNotMatch(searchText, /jogindar/);
+});
+
 test("Shared Player of the Match appears once with combined saved contributions", () => {
   const match = richScorecardMatch();
   const biplabTeamA = finalisedPerformance({
@@ -2356,12 +2546,16 @@ test("production player display names keep their stable ids slugs and zero caree
 
   assert.ok(jogindar);
   assert.ok(naim);
-  assert.equal(jogindar.name, "Jogindar");
+  assert.equal(jogindar.name, "Jogi");
   assert.equal(jogindar.slug, "jogindar");
   assert.equal(getPlayerBySlug("jogindar")?.id, "jogindar");
-  assert.equal(naim.name, "Naim");
+  assert.equal(naim.name, "Naeem");
   assert.equal(naim.slug, "naim");
   assert.equal(getPlayerBySlug("naim")?.id, "naim");
+  assert.equal(jogindar.cardTitle, "Loopy Loyalist");
+  assert.equal(jogindar.avatar, "/player-cards/loopy-loyalist.png");
+  assert.equal(naim.cardTitle, "Calm Cannon");
+  assert.equal(naim.avatar, "/player-cards/calm-cannon.png");
 
   for (const player of [jogindar, naim]) {
     assert.equal(player.level, 0);

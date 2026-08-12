@@ -233,7 +233,7 @@ export const players: Player[] = [
   }),
   makePlayer({
     id: "jogindar",
-    name: "Jogindar",
+    name: "Jogi",
     cardTitle: "Loopy Loyalist",
     cardImage: "/player-cards/loopy-loyalist.png",
     role: "Spin All-Rounder",
@@ -348,7 +348,7 @@ export const players: Player[] = [
   makePlayer({
     id: "naim",
     slug: "naim",
-    name: "Naim",
+    name: "Naeem",
     cardTitle: "Calm Cannon",
     cardImage: "/player-cards/calm-cannon.png",
     role: "Power All-Rounder",

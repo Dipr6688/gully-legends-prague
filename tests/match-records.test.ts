@@ -428,7 +428,7 @@ test("scorecard batting rows sort by batting position and keep did-not-bat playe
     },
     (playerId) =>
       ({
-        naim: "Naim",
+        naim: "Naeem",
         saurav: "Saurav",
         soman: "Soman",
         rohit: "Rohit",
@@ -441,7 +441,7 @@ test("scorecard batting rows sort by batting position and keep did-not-bat playe
 
   assert.deepEqual(
     rows.map((row) => row.batter),
-    ["Naim", "Saurav", "Soman", "Rohit", "Amrit", "Suprateem"]
+    ["Naeem", "Saurav", "Soman", "Rohit", "Amrit", "Suprateem"]
   );
   assert.equal(rows[3]?.dismissal, "not out");
   assert.equal(rows[4]?.dismissal, "did not bat");
