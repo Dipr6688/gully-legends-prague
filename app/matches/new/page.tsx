@@ -36,7 +36,7 @@ export default async function NewMatchPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 lg:px-6">
-      <MockMatchEntryForm matches={data?.matches} />
+      <MockMatchEntryForm matches={data?.matches} isAdmin />
     </div>
   );
 }

@@ -1003,6 +1003,27 @@ test("Phase 2C2 and Phase 3 keep Gallery behind a repository and match writes be
   assert.match(monthlyFeature, /reopenSupabaseMonthlyBeasts/);
 });
 
+test("match entry becomes read-only immediately when admin session is lost", () => {
+  const matchPage = source("app/matches/[matchId]/page.tsx");
+  const scorecard = source("components/matches/MatchScorecard.tsx");
+  const form = source("components/matches/MockMatchEntryForm.tsx");
+
+  assert.match(matchPage, /isCurrentUserAdmin/);
+  assert.match(matchPage, /isAdmin=\{isAdmin\}/);
+  assert.match(scorecard, /isAdmin = true/);
+  assert.match(scorecard, /<MockMatchEntryForm[\s\S]*isAdmin=\{isAdmin\}/);
+  assert.match(form, /isAdmin = true/);
+  assert.match(form, /const \[hasAdminWriteAccess, setHasAdminWriteAccess\]/);
+  assert.match(form, /supabase\.rpc\("is_admin"\)/);
+  assert.match(form, /supabase\.auth\.onAuthStateChange/);
+  assert.match(form, /setHasAdminWriteAccess\(false\)/);
+  assert.match(form, /const canEditMatch = !supabaseWriteMode \|\| hasAdminWriteAccess/);
+  assert.match(form, /const isLocked = status === "finalised" \|\| !canEditMatch/);
+  assert.match(form, /const isRosterLocked = setupIsLocked \|\| !canEditMatch/);
+  assert.match(form, /if \(!canEditMatch\)[\s\S]*Admin login required to continue scoring/);
+  assert.match(form, /Admin login required to continue scoring\./);
+});
+
 test("Phase 2D2B protects Monthly Beast writes and Demo Reset", () => {
   const adminPage = source("app/admin/page.tsx");
   const resetControl = source("components/admin/DemoDataResetControl.tsx");

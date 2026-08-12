@@ -122,6 +122,11 @@ import {
   getMatchMonthKey
 } from "@/lib/monthly-beasts";
 import { monthlyBeastCrownRepository } from "@/lib/monthly-beasts-store";
+import {
+  formatCompletedOvers,
+  formatCricketOversFromLegalBalls
+} from "@/lib/match-scorecard";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type TeamKey = "A" | "B";
 type TeamBowlingState = Record<TeamId, BowlingOver[]>;
@@ -318,10 +323,12 @@ function ErrorText({ children }: { children?: string }) {
 
 export function MockMatchEntryForm({
   initialMatch = null,
-  matches: suppliedMatches
+  matches: suppliedMatches,
+  isAdmin = true
 }: {
   initialMatch?: MatchRecord | null;
   matches?: MatchRecord[];
+  isAdmin?: boolean;
 } = {}) {
   const router = useRouter();
   const supabaseWriteMode = isSupabaseDataSource();
@@ -425,8 +432,12 @@ export function MockMatchEntryForm({
   const [reopenCrownMonthKey, setReopenCrownMonthKey] = useState<string | null>(
     null
   );
+  const [hasAdminWriteAccess, setHasAdminWriteAccess] = useState(
+    () => !supabaseWriteMode || isAdmin
+  );
 
-  const isLocked = status === "finalised";
+  const canEditMatch = !supabaseWriteMode || hasAdminWriteAccess;
+  const isLocked = status === "finalised" || !canEditMatch;
   const isFinalised = status === "finalised";
   const canSafelyReopenFinalisedMatch = false;
   const isDemoMatch = initialMatch?.isDemo === true;
@@ -451,7 +462,48 @@ export function MockMatchEntryForm({
         : "MATCH SCORECARD";
   const setupIsLocked = status !== "draft" || quickScoring.setupLocked === true;
   const setupIsCollapsed = setupIsLocked && !setupExpanded;
-  const isRosterLocked = setupIsLocked;
+  const isRosterLocked = setupIsLocked || !canEditMatch;
+
+  useEffect(() => {
+    if (!supabaseWriteMode) {
+      return;
+    }
+
+    let isCurrent = true;
+    const supabase = createSupabaseBrowserClient();
+
+    async function refreshAdminWriteAccess() {
+      const { data, error } = await supabase.auth.getUser();
+      const isVerifiedAdmin =
+        !error && data.user
+          ? (await supabase.rpc("is_admin")).data === true
+          : false;
+
+      if (!isCurrent) return;
+
+      setHasAdminWriteAccess(isVerifiedAdmin);
+    }
+
+    void refreshAdminWriteAccess();
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        void refreshAdminWriteAccess();
+      } else {
+        setHasAdminWriteAccess(false);
+        setIsSavingMatch(false);
+        setQuickSaveStatus("Login required");
+        setMessage("Admin login required to continue scoring.");
+      }
+    });
+
+    return () => {
+      isCurrent = false;
+      subscription.unsubscribe();
+    };
+  }, [supabaseWriteMode]);
 
   useEffect(() => {
     if (!initialMatch || loadedMatchIdRef.current === initialMatch.id) return;
@@ -1079,6 +1131,8 @@ export function MockMatchEntryForm({
     nextTeamB: string[],
     nextSharedPlayerId = sharedPlayerId
   ) {
+    if (isRosterLocked) return;
+
     const validSharedPlayerId =
       nextSharedPlayerId && nextAvailable.includes(nextSharedPlayerId)
         ? nextSharedPlayerId
@@ -1620,6 +1674,8 @@ export function MockMatchEntryForm({
   }
 
   function updateQuickScoring(nextQuickScoring: typeof quickScoring) {
+    if (isLocked) return;
+
     setQuickScoring(nextQuickScoring);
     void autosaveQuickScoring(nextQuickScoring);
   }
@@ -1891,6 +1947,12 @@ export function MockMatchEntryForm({
   }
 
   async function persistNonFinalisedMatch(match: MatchRecord) {
+    if (!canEditMatch) {
+      setQuickSaveStatus("Login required");
+      setMessage("Admin login required to continue scoring.");
+      return false;
+    }
+
     if (!supabaseWriteMode) {
       localMatchRepository.saveMatch(match);
       return true;
@@ -1920,7 +1982,7 @@ export function MockMatchEntryForm({
   }
 
   async function editLockedSetupBeforeScoring() {
-    if (!canEditLockedSetup) return;
+    if (!canEditLockedSetup || !canEditMatch) return;
 
     const confirmed = window.confirm(
       "EDIT MATCH SETUP?\n\nNo deliveries have been recorded yet. Quick Scoring will be paused until you Start Match again."
@@ -1965,6 +2027,12 @@ export function MockMatchEntryForm({
     stage: MatchValidationStage,
     options: ValidateAndSetStatusOptions = {}
   ): Promise<boolean> {
+    if (!canEditMatch) {
+      setQuickSaveStatus("Login required");
+      setMessage("Admin login required to continue scoring.");
+      return false;
+    }
+
     setIsSavingMatch(true);
 
     try {
@@ -2202,7 +2270,7 @@ export function MockMatchEntryForm({
   }
 
   async function confirmMonthlyBeastReopenFromMatch() {
-    if (!reopenCrownMonthKey) return;
+    if (!reopenCrownMonthKey || !canEditMatch) return;
 
     if (supabaseWriteMode) {
       setIsSavingMatch(true);
@@ -2227,6 +2295,11 @@ export function MockMatchEntryForm({
   }
 
   function resetForm() {
+    if (!canEditMatch) {
+      setMessage("Admin login required to continue scoring.");
+      return;
+    }
+
     setMatchId(createLocalMatchId());
     setSupabaseUpdatedAt(null);
     setValues(initialValues);
@@ -2264,6 +2337,11 @@ export function MockMatchEntryForm({
           {getFriendlyWorkflowStatus(status, quickSaveStatus)}
         </span>
       </div>
+      {!canEditMatch && !isFinalised ? (
+        <div className="mt-4 rounded-md border border-neon-red/50 bg-neon-red/10 px-3 py-2 text-sm font-black uppercase text-red-100">
+          Admin login required to continue scoring.
+        </div>
+      ) : null}
       {isDemoTestMatch ? (
         <div className="mt-4 inline-flex w-fit rounded-md border border-neon-yellow/45 bg-neon-yellow/10 px-3 py-2 text-xs font-black uppercase text-neon-yellow">
           Demo Test - Will Be Removed By Demo Reset
@@ -2350,7 +2428,7 @@ export function MockMatchEntryForm({
                       type="button"
                       variant="ghost"
                       onClick={editLockedSetupBeforeScoring}
-                      disabled={isSavingMatch}
+                      disabled={!canEditMatch || isSavingMatch}
                     >
                       Edit Setup
                     </Button>
@@ -3120,7 +3198,7 @@ export function MockMatchEntryForm({
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
             Finalise Match
           </Button>
-          <Button type="button" variant="ghost" onClick={resetForm} disabled={isSavingMatch}>
+          <Button type="button" variant="ghost" onClick={resetForm} disabled={isLocked || isSavingMatch}>
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
             Reset
           </Button>
@@ -3437,7 +3515,7 @@ function calculateTeamMatchXP(
 function getBowlingDisclosureSummary(overs: BowlingOver[]) {
   const score = calculateScoreFromBowlingFeed(overs);
 
-  return `${score.completedOvers} overs - ${score.wicketsLost} wickets - ${score.runs} runs conceded`;
+  return `${formatCompletedOvers(score.completedOvers)} overs - ${score.wicketsLost} wickets - ${score.runs} runs conceded`;
 }
 
 function getPlayerRecordsDisclosureSummary(
@@ -3450,9 +3528,7 @@ function getPlayerRecordsDisclosureSummary(
 }
 
 function formatQuickOvers(legalBalls: number): string {
-  const safeLegalBalls = sanitizeRuns(legalBalls);
-
-  return `${Math.floor(safeLegalBalls / 6)}.${safeLegalBalls % 6}`;
+  return formatCricketOversFromLegalBalls(sanitizeRuns(legalBalls));
 }
 
 function formatQuickOverBalls(legalBalls: number): string {
@@ -3630,7 +3706,7 @@ function InningsAllocationPanel({
             {formatInningsScore(score.runs, score.wicketsLost)}
           </p>
           <p className="text-xs font-black uppercase text-stone-400">
-            {score.completedOvers} overs - source: {score.source.replace("_", " ")}
+            {formatCompletedOvers(score.completedOvers)} overs - source: {score.source.replace("_", " ")}
           </p>
         </div>
         <div className="grid gap-1 rounded-md border border-white/15 bg-black/35 px-3 py-2 text-right text-xs font-black uppercase text-stone-300">

@@ -39,7 +39,10 @@ import {
   toggleTeamSelection,
   validateMatchRecordInput
 } from "../lib/match-records";
-import { buildBattingRows } from "../lib/match-scorecard";
+import {
+  buildBattingRows,
+  formatCricketOversFromLegalBalls
+} from "../lib/match-scorecard";
 import { calculateMatchXP } from "../lib/progression";
 import {
   createEmptyQuickScoringMetadata,
@@ -1477,6 +1480,28 @@ test("Start Scoring works when required setup is complete", () => {
   );
 });
 
+test("cricket over display uses legal-ball notation instead of decimal overs", () => {
+  const expected = new Map([
+    [0, "0.0"],
+    [1, "0.1"],
+    [5, "0.5"],
+    [6, "1.0"],
+    [11, "1.5"],
+    [12, "2.0"],
+    [17, "2.5"]
+  ]);
+
+  for (const [legalBalls, overs] of expected) {
+    assert.equal(formatCricketOversFromLegalBalls(legalBalls), overs);
+  }
+
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+
+  assert.match(form, /formatQuickOvers\(legalBalls: number\)[\s\S]*formatCricketOversFromLegalBalls/);
+  assert.match(form, /formatCompletedOvers\(score\.completedOvers\)\} overs - source/);
+  assert.doesNotMatch(form, /\{score\.completedOvers\} overs - source/);
+});
+
 test("Draft saving does not trigger finalisation side effects", () => {
   const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
   const nonFinalisedSaveSection =
@@ -1773,7 +1798,7 @@ test("setup lock is persisted in Quick Scoring metadata and collapses read-only"
 test("availability and roster controls lock once setup starts", () => {
   const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
 
-  assert.match(form, /const isRosterLocked = setupIsLocked/);
+  assert.match(form, /const isRosterLocked = setupIsLocked \|\| !canEditMatch/);
   assert.match(form, /if \(isRosterLocked\) return/);
   assert.match(
     form,

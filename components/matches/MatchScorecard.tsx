@@ -25,12 +25,14 @@ export function MatchScorecard({
   matchId,
   initialMatch,
   players,
-  matches: suppliedMatches
+  matches: suppliedMatches,
+  isAdmin = true
 }: {
   matchId: string;
   initialMatch?: MatchRecord | null;
   players?: Player[];
   matches?: MatchRecord[];
+  isAdmin?: boolean;
 }) {
   const localRepository = useMatchRepository();
   const searchParams = useSearchParams();
@@ -55,7 +57,11 @@ export function MatchScorecard({
   if (match.status === "draft" || match.status === "in_progress") {
     return (
       <div className="mx-auto max-w-6xl px-4 py-8 lg:px-6">
-        <MockMatchEntryForm initialMatch={match} matches={matches} />
+        <MockMatchEntryForm
+          initialMatch={match}
+          matches={matches}
+          isAdmin={isAdmin}
+        />
       </div>
     );
   }

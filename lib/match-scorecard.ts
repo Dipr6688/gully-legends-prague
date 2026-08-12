@@ -63,11 +63,19 @@ export function formatOneDecimal(value: number): string {
   return Number.isFinite(value) ? value.toFixed(1) : "0.0";
 }
 
+export function formatCricketOversFromLegalBalls(legalBalls: number): string {
+  const safeLegalBalls = Math.max(
+    0,
+    Number.isFinite(legalBalls) ? Math.round(legalBalls) : 0
+  );
+
+  return `${Math.floor(safeLegalBalls / 6)}.${safeLegalBalls % 6}`;
+}
+
 export function formatCompletedOvers(overs: number): string {
   const safeOvers = Math.max(0, Number.isFinite(overs) ? overs : 0);
-  const totalBalls = Math.round(safeOvers * 6);
 
-  return `${Math.floor(totalBalls / 6)}.${totalBalls % 6}`;
+  return formatCricketOversFromLegalBalls(safeOvers * 6);
 }
 
 function pluralise(value: number, singular: string, plural: string): string {

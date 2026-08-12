@@ -1,5 +1,6 @@
 import { MatchScorecard } from "@/components/matches/MatchScorecard";
 import { Card } from "@/components/ui/Card";
+import { isCurrentUserAdmin } from "@/lib/admin/auth";
 import { isSupabaseDataSource } from "@/lib/data-source";
 import { loadPublicSupabaseReadData } from "@/lib/supabase/public-read-data";
 
@@ -13,7 +14,12 @@ export default async function MatchScorecardPage({
 }) {
   const { matchId } = await params;
   const supabaseMode = isSupabaseDataSource();
-  const data = supabaseMode ? await loadPublicSupabaseReadData().catch(() => null) : null;
+  const [data, isAdmin] = supabaseMode
+    ? await Promise.all([
+        loadPublicSupabaseReadData().catch(() => null),
+        isCurrentUserAdmin()
+      ])
+    : [null, true];
 
   if (supabaseMode && !data) {
     return (
@@ -37,6 +43,7 @@ export default async function MatchScorecardPage({
       initialMatch={supabaseMode ? match : undefined}
       players={data?.careerPlayers}
       matches={data?.matches}
+      isAdmin={isAdmin}
     />
   );
 }
