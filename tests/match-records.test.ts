@@ -18,6 +18,7 @@ import {
   calculateTeamTotals,
   formatInningsScore,
   calculateScoreFromBowlingFeed,
+  canEditQuickScoring,
   getInningsCompleteMessage,
   getInningsState,
   getFinalResultHeadline,
@@ -55,7 +56,7 @@ import {
   applyFinalisedMatchToCareerStats,
   createEmptyCareerProgressionState
 } from "../lib/career-store";
-import type { BowlingOver, DismissalEvent, MatchRecord, MatchStatus, PlayerMatchPerformance, TeamId, TeamInnings } from "../lib/types/match";
+import type { BattingMode, BowlingOver, DismissalEvent, MatchRecord, MatchStatus, PlayerMatchPerformance, TeamId, TeamInnings } from "../lib/types/match";
 
 test("manual Team A selection disables Team B selection by moving membership", () => {
   const state = toggleTeamSelection(baseState(), "teamA", "aninda");
@@ -1035,6 +1036,53 @@ test("Quick Scoring reducer requires a new batter before all-out", () => {
   assert.match(derived.missingInformation.join(" "), /Missing new batter/);
 });
 
+test("Quick Scoring two-batter mode lets the last undismissed batter continue solo", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput(
+      [
+        quickEvent(1, {
+          wicket: {
+            type: "bowled",
+            dismissedPlayerId: "naim",
+            fielderId: null,
+            newBatterId: "soman",
+            completedRuns: 0
+          }
+        }),
+        quickEvent(2, {
+          strikerId: "soman",
+          nonStrikerId: "saurav",
+          wicket: {
+            type: "caught",
+            dismissedPlayerId: "soman",
+            fielderId: "aninda",
+            newBatterId: null,
+            completedRuns: 0
+          }
+        }),
+        quickEvent(3, {
+          strikerId: "saurav",
+          nonStrikerId: "",
+          batterRuns: 4
+        })
+      ],
+      {
+        battingPlayerIds: ["naim", "saurav", "soman"],
+        battingMode: "two_batter"
+      }
+    )
+  );
+
+  assert.equal(derived.currentStrikerId, "saurav");
+  assert.equal(derived.currentNonStrikerId, null);
+  assert.equal(derived.isLastBatterSolo, true);
+  assert.equal(
+    derived.battingPerformances.find((row) => row.playerId === "saurav")?.runs,
+    4
+  );
+  assert.deepEqual(derived.missingInformation, []);
+});
+
 test("Quick Scoring reducer allows innings-ending wicket without a new batter", () => {
   const derived = deriveQuickScoringInnings({
     battingTeamId: "teamB",
@@ -1055,6 +1103,125 @@ test("Quick Scoring reducer allows innings-ending wicket without a new batter", 
   });
 
   assert.equal(derived.wicketsLost, 1);
+  assert.deepEqual(derived.missingInformation, []);
+});
+
+test("Quick Scoring single-batter mode does not require a non-striker or strike swaps", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput(
+      [
+        quickEvent(1, {
+          nonStrikerId: "",
+          batterRuns: 1
+        }),
+        quickEvent(2, {
+          nonStrikerId: "",
+          batterRuns: 2
+        })
+      ],
+      { battingMode: "single_batter" }
+    )
+  );
+
+  assert.equal(derived.battingMode, "single_batter");
+  assert.equal(derived.currentStrikerId, "naim");
+  assert.equal(derived.currentNonStrikerId, null);
+  assert.equal(derived.isLastBatterSolo, false);
+  assert.equal(
+    derived.battingPerformances.find((row) => row.playerId === "naim")?.runs,
+    3
+  );
+  assert.deepEqual(derived.missingInformation, []);
+});
+
+test("Quick Scoring single-batter mode brings the next batter after a wicket", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput(
+      [
+        quickEvent(1, {
+          nonStrikerId: "",
+          wicket: {
+            type: "bowled",
+            dismissedPlayerId: "naim",
+            fielderId: null,
+            newBatterId: "saurav",
+            completedRuns: 0
+          }
+        }),
+        quickEvent(2, {
+          strikerId: "saurav",
+          nonStrikerId: "",
+          batterRuns: 6
+        })
+      ],
+      { battingMode: "single_batter" }
+    )
+  );
+
+  assert.equal(derived.currentStrikerId, "saurav");
+  assert.equal(derived.currentNonStrikerId, null);
+  assert.equal(
+    derived.battingPerformances.find((row) => row.playerId === "saurav")?.battingPosition,
+    2
+  );
+  assert.equal(
+    derived.battingPerformances.find((row) => row.playerId === "saurav")?.runs,
+    6
+  );
+  assert.deepEqual(derived.missingInformation, []);
+});
+
+test("first delivery can be recorded after selecting required two-batter players", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput(
+      [
+        quickEvent(1, {
+          strikerId: "naim",
+          nonStrikerId: "saurav",
+          bowlerId: "aninda",
+          batterRuns: 0
+        })
+      ],
+      {
+        battingPlayerIds: ["naim", "saurav", "soman", "rohit"],
+        bowlingPlayerIds: ["aninda", "dipanjan", "utpal", "dheeraj"],
+        battingMode: "two_batter"
+      }
+    )
+  );
+
+  assert.equal(derived.runs, 0);
+  assert.equal(derived.legalBalls, 1);
+  assert.equal(derived.currentStrikerId, "naim");
+  assert.equal(derived.currentNonStrikerId, "saurav");
+  assert.equal(derived.currentBowlerId, "aninda");
+  assert.deepEqual(derived.missingInformation, []);
+});
+
+test("first delivery can be recorded after selecting required single-batter players", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput(
+      [
+        quickEvent(1, {
+          strikerId: "naim",
+          nonStrikerId: "",
+          bowlerId: "aninda",
+          batterRuns: 0
+        })
+      ],
+      {
+        battingPlayerIds: ["naim", "saurav", "soman", "rohit"],
+        bowlingPlayerIds: ["aninda", "dipanjan", "utpal", "dheeraj"],
+        battingMode: "single_batter"
+      }
+    )
+  );
+
+  assert.equal(derived.runs, 0);
+  assert.equal(derived.legalBalls, 1);
+  assert.equal(derived.currentStrikerId, "naim");
+  assert.equal(derived.currentNonStrikerId, null);
+  assert.equal(derived.currentBowlerId, "aninda");
   assert.deepEqual(derived.missingInformation, []);
 });
 
@@ -1569,6 +1736,8 @@ test("Supabase mode sends match writes and finalisation to protected admin APIs"
   assert.match(apiClient, /\/api\/admin\/matches\/finalize/);
   assert.match(apiRoute, /isAdminWithClient/);
   assert.match(apiRoute, /validateMatchOnServer/);
+  assert.match(apiRoute, /battingMode:\s*match\.battingMode \?\? match\.quickScoring\?\.battingMode \?\? "two_batter"/);
+  assert.match(finaliseRoute, /battingMode:\s*match\.battingMode \?\? match\.quickScoring\?\.battingMode \?\? "two_batter"/);
   assert.match(apiRoute, /revalidatePath\("\/"\)/);
   assert.match(finaliseRoute, /ADMIN LOGIN REQUIRED/);
   assert.match(finaliseRoute, /ADMIN ACCESS REQUIRED/);
@@ -1778,6 +1947,189 @@ test("match setup uses fixed team names and appears before Quick Scoring", () =>
   assert.ok(form.indexOf("Match Settings") < form.indexOf("<QuickScoringPanel"));
 });
 
+test("match setup requires and persists batting mode for Start Match", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const types = readFileSync("lib/types/match.ts", "utf8");
+  const quickScoring = readFileSync("lib/quick-scoring.ts", "utf8");
+  const errors = validateMatchRecordInput(
+    validationInput({
+      stage: "start",
+      battingMode: null
+    })
+  );
+
+  assert.match(types, /export type BattingMode = "two_batter" \| "single_batter"/);
+  assert.match(quickScoring, /export const DEFAULT_BATTING_MODE/);
+  assert.match(form, /name="battingMode"/);
+  assert.match(form, /value="two_batter"/);
+  assert.match(form, /value="single_batter"/);
+  assert.match(form, /battingMode:\s*values\.battingMode \|\| DEFAULT_BATTING_MODE/);
+  assert.deepEqual(errors, ["Please select a batting mode."]);
+});
+
+test("batting mode persists through Quick Scoring saves undo innings break and finalisation", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const saveRoute = readFileSync("app/api/admin/matches/route.ts", "utf8");
+  const finaliseRoute = readFileSync("app/api/admin/matches/finalize/route.ts", "utf8");
+  const twoBatterErrors = validateMatchRecordInput(
+    validationInput({
+      status: "finalised",
+      stage: "finalise",
+      battingMode: "two_batter"
+    })
+  );
+  const singleBatterErrors = validateMatchRecordInput(
+    validationInput({
+      status: "finalised",
+      stage: "finalise",
+      battingMode: "single_batter"
+    })
+  );
+  const legacyDefaultErrors = validateMatchRecordInput(
+    validationInput({
+      status: "finalised",
+      stage: "finalise",
+      battingMode: "two_batter"
+    })
+  );
+
+  assert.doesNotMatch(twoBatterErrors.join("\n"), /batting mode/i);
+  assert.doesNotMatch(singleBatterErrors.join("\n"), /batting mode/i);
+  assert.doesNotMatch(legacyDefaultErrors.join("\n"), /batting mode/i);
+  assert.match(form, /const activeBattingMode: BattingMode =\s*values\.battingMode \|\| quickScoring\.battingMode \|\| DEFAULT_BATTING_MODE/);
+  assert.match(form, /const validationBattingMode =\s*status === "draft" \? values\.battingMode \|\| null : activeBattingMode/);
+  assert.match(form, /const persistedBattingMode =\s*values\.battingMode \|\|[\s\S]*quickScoringOverride\.battingMode \|\|[\s\S]*\(finalStatus === "draft" \? null : activeBattingMode\)/);
+  assert.match(form, /battingMode:\s*persistedBattingMode/);
+  assert.match(form, /quickScoring:\s*persistedQuickScoring/);
+  assert.match(form, /battingMode:\s*validationBattingMode/);
+  assert.match(form, /battingMode:\s*values\.battingMode \|\| DEFAULT_BATTING_MODE/);
+  assert.match(form, /function startSecondInnings\(\)[\s\S]*buildCurrentMatchRecord\(\s*"in_progress"[\s\S]*nextQuickScoring/);
+  assert.match(form, /function undoQuickScoringEvent\(\)[\s\S]*updateQuickScoring/);
+  assert.match(saveRoute, /battingMode:\s*match\.battingMode \?\? match\.quickScoring\?\.battingMode \?\? "two_batter"/);
+  assert.match(finaliseRoute, /battingMode:\s*match\.battingMode \?\? match\.quickScoring\?\.battingMode \?\? "two_batter"/);
+});
+
+test("Quick Scoring undo and cancel reset transient wicket and no-ball editors", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+
+  assert.match(form, /const initialQuickWicketDraft =/);
+  assert.match(form, /function resetQuickDeliveryEditors\(\)/);
+  assert.match(form, /setQuickNoBallOpen\(false\)/);
+  assert.match(form, /setQuickWicketDraft\(\{ \.\.\.initialQuickWicketDraft \}\)/);
+  assert.match(form, /function updateQuickWicketDraft\(draft: typeof quickWicketDraft\)/);
+  assert.match(form, /if \(!draft\.open\)[\s\S]*resetQuickDeliveryEditors\(\)/);
+  assert.match(form, /function updateQuickNoBallOpen\(open: boolean\)/);
+  assert.match(form, /if \(open\)[\s\S]*setQuickWicketDraft\(\{ \.\.\.initialQuickWicketDraft \}\)/);
+  assert.match(form, /function appendQuickScoringEvent[\s\S]*resetQuickDeliveryEditors\(\)/);
+  assert.match(form, /function undoQuickScoringEvent\(\)[\s\S]*resetQuickDeliveryEditors\(\)/);
+  assert.match(form, /onWicketDraftChange=\{updateQuickWicketDraft\}/);
+  assert.match(form, /onNoBallOpenChange=\{updateQuickNoBallOpen\}/);
+});
+
+test("Quick Scoring remains editable for admin after Start Match locks setup", () => {
+  const startMatchState = {
+    canEditMatch: true,
+    status: "in_progress" as const,
+    setupIsLocked: true,
+    inningsPhase: "first_innings" as const,
+    battingFirstTeamId: "teamA" as const
+  };
+
+  assert.equal(canEditQuickScoring(startMatchState), true);
+  assert.equal(
+    canEditQuickScoring({
+      ...startMatchState,
+      inningsPhase: "second_innings"
+    }),
+    true
+  );
+  assert.equal(
+    canEditQuickScoring({
+      ...startMatchState,
+      setupIsLocked: false
+    }),
+    false
+  );
+  assert.equal(
+    canEditQuickScoring({
+      ...startMatchState,
+      inningsPhase: "innings_break"
+    }),
+    false
+  );
+  assert.equal(
+    canEditQuickScoring({
+      ...startMatchState,
+      canEditMatch: false
+    }),
+    false
+  );
+  assert.equal(
+    canEditQuickScoring({
+      ...startMatchState,
+      status: "draft"
+    }),
+    false
+  );
+});
+
+test("Quick Scoring editability does not depend on setup team-control state", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const quickScoringEditableBlock =
+    form.match(/const quickScoringCanBeEdited = canEditQuickScoring\(\{[\s\S]*?\}\);/)?.[0] ?? "";
+
+  assert.equal(
+    canEditQuickScoring({
+      canEditMatch: true,
+      status: "in_progress",
+      setupIsLocked: true,
+      inningsPhase: "first_innings",
+      battingFirstTeamId: "teamA"
+    }),
+    true
+  );
+  assert.match(form, /const canUseTeamControls =/);
+  assert.match(form, /const quickScoringCanBeEdited = canEditQuickScoring/);
+  assert.doesNotMatch(quickScoringEditableBlock, /canUseTeamControls/);
+});
+
+test("Quick Scoring selector disabled state uses scoring editability not roster lock", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+
+  assert.match(form, /const quickScoringCanBeEdited = canEditQuickScoring/);
+  assert.match(form, /disabled=\{!quickScoringCanBeEdited\}/);
+  assert.match(form, /if \(!quickScoringCanBeEdited \|\| errorCount > 0\)/);
+  assert.doesNotMatch(
+    form,
+    /disabled=\{isLocked \|\| !setupIsLocked \|\| !battingFirstTeamId \|\| !canUseTeamControls\}/
+  );
+});
+
+test("Start Match persists scoreable quick-scoring state for reload", () => {
+  const quickScoring = {
+    ...createEmptyQuickScoringMetadata(),
+    version: 2 as const,
+    setupLocked: true,
+    setupLockedAt: "2026-08-10T10:00:00.000Z",
+    battingMode: "two_batter" as const,
+    inningsPhase: "first_innings" as const
+  };
+
+  assert.equal(quickScoring.setupLocked, true);
+  assert.equal(quickScoring.battingMode, "two_batter");
+  assert.equal(quickScoring.inningsPhase, "first_innings");
+  assert.equal(
+    canEditQuickScoring({
+      canEditMatch: true,
+      status: "in_progress",
+      setupIsLocked: quickScoring.setupLocked === true,
+      inningsPhase: quickScoring.inningsPhase,
+      battingFirstTeamId: "teamA"
+    }),
+    true
+  );
+});
+
 test("setup lock is persisted in Quick Scoring metadata and collapses read-only", () => {
   const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
   const types = readFileSync("lib/types/match.ts", "utf8");
@@ -1861,6 +2213,31 @@ test("mobile live scoring uses compact score and keeps detailed score cards seco
   assert.match(css, /@media \(max-width:\s*700px\)[\s\S]*?\.live-result-full-preview\s*{\s*display:\s*none;/);
   assert.match(css, /@media \(max-width:\s*700px\)[\s\S]*?\.mobile-live-score\s*{\s*display:\s*grid;/);
   assert.match(css, /@media \(max-width:\s*700px\)[\s\S]*?\.innings-allocation-primary\.is-live-scoring\s*{\s*display:\s*none;/);
+});
+
+test("live result preview appears once near the top before Quick Scoring", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+
+  assert.equal(form.match(/<ResultBanner/g)?.length, 1);
+  assert.ok(form.indexOf("<ResultBanner") < form.indexOf("<CompactLiveScoreBanner"));
+  assert.ok(form.indexOf("<ResultBanner") < form.indexOf("<QuickScoringPanel"));
+  assert.ok(form.indexOf("<ResultBanner") < form.indexOf("Match Setup"));
+});
+
+test("first innings completion persists an innings break until Start Second Innings", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const types = readFileSync("lib/types/match.ts", "utf8");
+
+  assert.match(types, /export type QuickScoringInningsPhase =/);
+  assert.match(types, /"innings_break"/);
+  assert.match(form, /const isFirstInningsBreak =/);
+  assert.match(form, /inningsPhase:\s*"innings_break"/);
+  assert.match(form, /firstInningsCompletedAt/);
+  assert.match(form, /function startSecondInnings\(\)/);
+  assert.match(form, /inningsPhase:\s*"second_innings"/);
+  assert.match(form, /START SECOND INNINGS/);
+  assert.match(form, /undoQuickScoringEvent[\s\S]*inningsPhase:\s*"first_innings"/);
+  assert.match(form, /isFirstInningsBreak \?/);
 });
 
 test("mobile setup and team assignment use compact responsive markers", () => {
@@ -3235,6 +3612,7 @@ function validationInput(
     status: MatchStatus;
     stage: "schedule" | "draft" | "start" | "finalise";
     scheduledOversPerInnings: number | null;
+    battingMode?: BattingMode | null;
     battingFirstTeamId?: TeamId | null;
     availablePlayerIds: string[];
     teamAPlayerIds: string[];
@@ -3253,6 +3631,7 @@ function validationInput(
     matchName: "Gully Premier League",
     status: "draft" as const,
     scheduledOversPerInnings: 8,
+    battingMode: "two_batter" as const,
     battingFirstTeamId: "teamA" as const,
     availablePlayerIds: ["aninda", "biplab"],
     teamAPlayerIds: ["aninda"],
@@ -3326,13 +3705,21 @@ function quickLegalOver(
   );
 }
 
-function quickInput(events: ReturnType<typeof quickEvent>[]) {
+function quickInput(
+  events: ReturnType<typeof quickEvent>[],
+  overrides: Partial<{
+    battingPlayerIds: string[];
+    bowlingPlayerIds: string[];
+    battingMode: BattingMode;
+  }> = {}
+) {
   return {
     battingTeamId: "teamB" as const,
     bowlingTeamId: "teamA" as const,
     battingPlayerIds: ["naim", "saurav", "soman", "rohit", "amrit", "suprateem"],
     bowlingPlayerIds: ["aninda", "dipanjan", "utpal", "dheeraj", "chaitanya", "biplab"],
-    events
+    events,
+    ...overrides
   };
 }
 

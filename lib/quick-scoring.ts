@@ -4,6 +4,7 @@ import {
   sanitizeRuns
 } from "./match-records";
 import type {
+  BattingMode,
   BowlingOver,
   DismissalEvent,
   PlayerMatchPerformance,
@@ -13,12 +14,19 @@ import type {
   TeamId
 } from "./types/match";
 
+export const DEFAULT_BATTING_MODE: BattingMode = "two_batter";
+
+export function normalizeBattingMode(value: unknown): BattingMode {
+  return value === "single_batter" ? "single_batter" : DEFAULT_BATTING_MODE;
+}
+
 export type QuickScoringInningsInput = {
   battingTeamId: TeamId;
   bowlingTeamId: TeamId;
   battingPlayerIds: string[];
   bowlingPlayerIds?: string[];
   events: QuickScoringEvent[];
+  battingMode?: BattingMode | null;
 };
 
 export type QuickScoringDerivedInnings = {
@@ -35,6 +43,9 @@ export type QuickScoringDerivedInnings = {
   currentNonStrikerId: string | null;
   currentBowlerId: string | null;
   battingOrder: string[];
+  battingMode: BattingMode;
+  isLastBatterSolo: boolean;
+  activeBatterCount: number;
   currentOverEvents: QuickScoringEvent[];
   lastCompletedOverEvents: QuickScoringEvent[];
   previousOverBowlerId: string | null;
@@ -47,8 +58,10 @@ type MutablePerformance = PlayerMatchPerformance & {
 
 export function createEmptyQuickScoringMetadata(): QuickScoringMetadata {
   return {
-    version: 1,
+    version: 2,
     setupLocked: false,
+    battingMode: null,
+    inningsPhase: "first_innings",
     inningsAEvents: [],
     inningsBEvents: []
   };
@@ -182,15 +195,24 @@ function mapDismissal(event: QuickScoringEvent, overId: string): DismissalEvent 
 
 function updateStrikeAfterEvent({
   event,
-  strikerId,
-  nonStrikerId,
-  overEnded
+  battingMode,
+  overEnded,
+  pairRequired
 }: {
   event: QuickScoringEvent;
-  strikerId: string | null;
-  nonStrikerId: string | null;
+  battingMode: BattingMode;
   overEnded: boolean;
+  pairRequired: boolean;
 }) {
+  if (battingMode === "single_batter" || !pairRequired) {
+    return {
+      strikerId: event.wicket?.dismissedPlayerId === event.strikerId
+        ? event.wicket.newBatterId ?? null
+        : event.strikerId,
+      nonStrikerId: null
+    };
+  }
+
   if (
     event.wicket?.nextStrikerId &&
     event.wicket.nextNonStrikerId &&
@@ -202,8 +224,8 @@ function updateStrikeAfterEvent({
     };
   }
 
-  let nextStrikerId = strikerId;
-  let nextNonStrikerId = nonStrikerId;
+  let nextStrikerId: string | null = event.strikerId;
+  let nextNonStrikerId: string | null = event.nonStrikerId || null;
   const dismissedPlayerId = event.wicket?.dismissedPlayerId ?? null;
   const newBatterId = event.wicket?.newBatterId ?? null;
   const rotationRuns =
@@ -221,9 +243,16 @@ function updateStrikeAfterEvent({
     } else if (dismissedPlayerId === nextNonStrikerId) {
       nextNonStrikerId = newBatterId;
     }
+  } else if (dismissedPlayerId) {
+    if (dismissedPlayerId === nextStrikerId) {
+      nextStrikerId = nextNonStrikerId;
+      nextNonStrikerId = null;
+    } else if (dismissedPlayerId === nextNonStrikerId) {
+      nextNonStrikerId = null;
+    }
   }
 
-  if (overEnded) {
+  if (overEnded && nextNonStrikerId) {
     [nextStrikerId, nextNonStrikerId] = [nextNonStrikerId, nextStrikerId];
   }
 
@@ -238,8 +267,10 @@ export function deriveQuickScoringInnings({
   bowlingTeamId,
   battingPlayerIds,
   bowlingPlayerIds,
-  events
+  events,
+  battingMode: inputBattingMode
 }: QuickScoringInningsInput): QuickScoringDerivedInnings {
+  const battingMode = normalizeBattingMode(inputBattingMode);
   const records = new Map<string, MutablePerformance>();
   const battingOrder: string[] = [];
   const oversByNumber = new Map<number, BowlingOver>();
@@ -260,21 +291,31 @@ export function deriveQuickScoringInnings({
   }
 
   for (const event of [...events].sort((left, right) => left.sequence - right.sequence)) {
-    if (!event.strikerId || !event.nonStrikerId || !event.bowlerId) {
-      missingInformation.push(`Event ${event.sequence} is missing striker, non-striker or bowler.`);
+    const undismissedBeforeEvent = battingPlayerIds.filter(
+      (playerId) => !dismissedPlayerIds.has(playerId)
+    );
+    const pairRequired =
+      battingMode === "two_batter" && undismissedBeforeEvent.length >= 2;
+
+    if (!event.strikerId || (pairRequired && !event.nonStrikerId) || !event.bowlerId) {
+      missingInformation.push(
+        pairRequired
+          ? `Event ${event.sequence} is missing striker, non-striker or bowler.`
+          : `Event ${event.sequence} is missing batter or bowler.`
+      );
       continue;
     }
 
     const overNumber = Math.floor(legalBalls / 6) + 1;
 
-    if (event.strikerId === event.nonStrikerId) {
+    if (pairRequired && event.strikerId === event.nonStrikerId) {
       missingInformation.push(`Event ${event.sequence} has the same striker and non-striker.`);
       continue;
     }
 
     if (
       !battingPlayerIds.includes(event.strikerId) ||
-      !battingPlayerIds.includes(event.nonStrikerId)
+      (pairRequired && !battingPlayerIds.includes(event.nonStrikerId))
     ) {
       missingInformation.push(`Event ${event.sequence} has an ineligible batter.`);
       continue;
@@ -282,7 +323,7 @@ export function deriveQuickScoringInnings({
 
     if (
       dismissedPlayerIds.has(event.strikerId) ||
-      dismissedPlayerIds.has(event.nonStrikerId)
+      (pairRequired && dismissedPlayerIds.has(event.nonStrikerId))
     ) {
       missingInformation.push(`Event ${event.sequence} uses a batter who is already out.`);
       continue;
@@ -328,12 +369,14 @@ export function deriveQuickScoringInnings({
       event
     ]);
 
-    ensureBatter({
-      records,
-      battingOrder,
-      playerId: event.nonStrikerId,
-      teamId: battingTeamId
-    });
+    if (pairRequired) {
+      ensureBatter({
+        records,
+        battingOrder,
+        playerId: event.nonStrikerId,
+        teamId: battingTeamId
+      });
+    }
 
     striker.runs = sanitizeRuns(striker.runs) + sanitizeRuns(event.batterRuns);
     runs += eventTotalRuns(event);
@@ -382,7 +425,7 @@ export function deriveQuickScoringInnings({
           !battingPlayerIds.includes(event.wicket.newBatterId) ||
           event.wicket.newBatterId === event.wicket.dismissedPlayerId ||
           event.wicket.newBatterId === event.strikerId ||
-          event.wicket.newBatterId === event.nonStrikerId ||
+          (pairRequired && event.wicket.newBatterId === event.nonStrikerId) ||
           dismissedPlayerIds.has(event.wicket.newBatterId)
         ) {
           missingInformation.push(`Event ${event.sequence} has an ineligible new batter.`);
@@ -399,7 +442,7 @@ export function deriveQuickScoringInnings({
       const hasEligibleReplacementBatter = battingPlayerIds.some(
         (playerId) =>
           playerId !== event.strikerId &&
-          playerId !== event.nonStrikerId &&
+          (!pairRequired || playerId !== event.nonStrikerId) &&
           playerId !== event.wicket?.dismissedPlayerId &&
           !dismissedPlayerIds.has(playerId)
       );
@@ -409,6 +452,7 @@ export function deriveQuickScoringInnings({
       }
 
       if (
+        pairRequired &&
         event.wicket.nextStrikerId &&
         event.wicket.nextNonStrikerId &&
         event.wicket.nextStrikerId === event.wicket.nextNonStrikerId
@@ -417,6 +461,7 @@ export function deriveQuickScoringInnings({
       }
 
       if (
+        pairRequired &&
         event.wicket.nextStrikerId &&
         event.wicket.nextNonStrikerId &&
         (!battingPlayerIds.includes(event.wicket.nextStrikerId) ||
@@ -443,9 +488,9 @@ export function deriveQuickScoringInnings({
     const overEnded = event.legalDelivery && legalBalls % 6 === 0;
     const nextStrike = updateStrikeAfterEvent({
       event,
-      strikerId: event.strikerId,
-      nonStrikerId: event.nonStrikerId,
-      overEnded
+      battingMode,
+      overEnded,
+      pairRequired
     });
 
     strikerId = nextStrike.strikerId;
@@ -476,6 +521,14 @@ export function deriveQuickScoringInnings({
     currentNonStrikerId: nonStrikerId,
     currentBowlerId,
     battingOrder,
+    battingMode,
+    isLastBatterSolo:
+      battingMode === "two_batter" &&
+      Boolean(strikerId) &&
+      !nonStrikerId &&
+      battingPlayerIds.filter((playerId) => !dismissedPlayerIds.has(playerId))
+        .length === 1,
+    activeBatterCount: [strikerId, nonStrikerId].filter(Boolean).length,
     currentOverEvents:
       legalBalls > 0 && legalBalls % 6 === 0
         ? []

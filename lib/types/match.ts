@@ -7,6 +7,8 @@ export type MatchStatus =
 
 export type TeamId = "teamA" | "teamB";
 
+export type BattingMode = "two_batter" | "single_batter";
+
 export type MatchTeams = {
   teamAPlayerIds: string[];
   teamBPlayerIds: string[];
@@ -22,6 +24,11 @@ export type DismissalType =
   | "other_bowler_wicket";
 
 export type QuickScoringInningsKey = "inningsAEvents" | "inningsBEvents";
+
+export type QuickScoringInningsPhase =
+  | "first_innings"
+  | "innings_break"
+  | "second_innings";
 
 export type QuickScoringExtraType = "wide" | "no_ball" | null;
 
@@ -59,9 +66,13 @@ export type QuickScoringEvent = {
 };
 
 export type QuickScoringMetadata = {
-  version: 1;
+  version: 1 | 2;
   setupLocked?: boolean;
   setupLockedAt?: string;
+  battingMode?: BattingMode | null;
+  inningsPhase?: QuickScoringInningsPhase;
+  firstInningsCompletedAt?: string;
+  secondInningsStartedAt?: string;
   inningsAEvents: QuickScoringEvent[];
   inningsBEvents: QuickScoringEvent[];
 };
@@ -213,6 +224,7 @@ export type MatchRecord = {
   venue: string;
   status: MatchStatus;
   scheduledOversPerInnings: number | null;
+  battingMode?: BattingMode | null;
   battingFirstTeamId: TeamId | null;
   chasingTeamId: TeamId | null;
   sharedPlayerId?: string | null;
@@ -241,5 +253,6 @@ export type MockMatchFormValues = {
   teamATotal: number;
   teamBTotal: number;
   scheduledOversPerInnings: number | "";
+  battingMode: BattingMode | "";
   notes: string;
 };

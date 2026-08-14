@@ -1015,6 +1015,8 @@ test("match entry becomes read-only immediately when admin session is lost", () 
   assert.match(form, /isAdmin = true/);
   assert.match(form, /const \[hasAdminWriteAccess, setHasAdminWriteAccess\]/);
   assert.match(form, /supabase\.rpc\("is_admin"\)/);
+  assert.match(form, /preserveServerAdmin: isAdmin/);
+  assert.match(form, /if \(adminError\)/);
   assert.match(form, /supabase\.auth\.onAuthStateChange/);
   assert.match(form, /setHasAdminWriteAccess\(false\)/);
   assert.match(form, /const canEditMatch = !supabaseWriteMode \|\| hasAdminWriteAccess/);

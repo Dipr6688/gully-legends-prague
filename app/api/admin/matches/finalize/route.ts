@@ -63,6 +63,7 @@ function validationInputFromFinalMatch(match: MatchRecord): MatchValidationInput
     status: "finalised",
     stage: "finalise",
     scheduledOversPerInnings: match.scheduledOversPerInnings,
+    battingMode: match.battingMode ?? match.quickScoring?.battingMode ?? "two_batter",
     battingFirstTeamId: match.battingFirstTeamId,
     inningsExtras: {
       teamA: match.innings.first.battingTeamId === "teamA"

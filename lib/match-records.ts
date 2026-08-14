@@ -1,10 +1,12 @@
 import type {
   BowlingOver,
+  BattingMode,
   DismissalEvent,
   MatchTeams,
   MatchResult,
   MatchStatus,
   PlayerMatchPerformance,
+  QuickScoringInningsPhase,
   TeamId,
   InningsState,
   TeamInnings,
@@ -33,6 +35,28 @@ export type TeamBowlingOvers = {
 
 export type MatchValidationStage = "schedule" | "draft" | "start" | "finalise";
 
+export function canEditQuickScoring({
+  canEditMatch,
+  status,
+  setupIsLocked,
+  inningsPhase,
+  battingFirstTeamId
+}: {
+  canEditMatch: boolean;
+  status: MatchStatus;
+  setupIsLocked: boolean;
+  inningsPhase: QuickScoringInningsPhase;
+  battingFirstTeamId: TeamId | "" | null;
+}) {
+  return (
+    canEditMatch &&
+    status === "in_progress" &&
+    setupIsLocked &&
+    inningsPhase !== "innings_break" &&
+    Boolean(battingFirstTeamId)
+  );
+}
+
 export type MatchValidationInput = TeamSelectionState & {
   matchDate: string;
   matchNumber?: number | null;
@@ -43,6 +67,7 @@ export type MatchValidationInput = TeamSelectionState & {
   status: MatchStatus;
   stage?: MatchValidationStage;
   scheduledOversPerInnings?: number | null;
+  battingMode?: BattingMode | null;
   battingFirstTeamId?: TeamId | null;
   inningsExtras?: Record<TeamId, number>;
   performances: PlayerMatchPerformance[];
@@ -1262,6 +1287,10 @@ export function validateReadyToStart(
 
   if (!input.battingFirstTeamId) {
     errors.push("SELECT THE BATTING-FIRST TEAM");
+  }
+
+  if (!input.battingMode) {
+    errors.push("Please select a batting mode.");
   }
 
   if (hasOddAvailablePlayers(input.availablePlayerIds) && !sharedPlayerId) {

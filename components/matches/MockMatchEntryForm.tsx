@@ -29,6 +29,7 @@ import { activePlayers } from "@/lib/data/players";
 import {
   buildTeamInnings,
   buildTeamMatchData,
+  canEditQuickScoring,
   calculateBattingAllocation,
   calculateBowlerWickets,
   calculateScoreFromBowlingFeed,
@@ -66,6 +67,7 @@ import {
 } from "@/lib/match-records";
 import type { LiveInningsScore, MatchValidationStage } from "@/lib/match-records";
 import {
+  DEFAULT_BATTING_MODE,
   createEmptyQuickScoringMetadata,
   createQuickScoringEvent,
   deriveQuickScoringInnings,
@@ -97,6 +99,7 @@ import {
 } from "@/lib/progression";
 import { getPlayerOfMatchRecommendation } from "@/lib/player-of-match";
 import type {
+  BattingMode,
   BowlingOver,
   DismissalEvent,
   DismissalType,
@@ -152,6 +155,7 @@ type SetupValidationErrors = Partial<
     | "matchName"
     | "overs"
     | "battingFirst"
+    | "battingMode"
     | "availability"
     | "sharedPlayer"
     | "teamAssignment",
@@ -180,10 +184,22 @@ const initialValues: MockMatchFormValues = {
   teamATotal: 0,
   teamBTotal: 0,
   scheduledOversPerInnings: "",
+  battingMode: "",
   notes: ""
 };
 
 const allPlayerIds = activePlayers.map((player) => player.id);
+
+const initialQuickWicketDraft = {
+  open: false,
+  type: "bowled" as QuickScoringDismissalType,
+  dismissedPlayerId: "",
+  fielderId: "",
+  newBatterId: "",
+  completedRuns: "" as number | "",
+  nextStrikerId: "",
+  nextNonStrikerId: ""
+};
 
 function createLocalMatchId() {
   return `local-match-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -241,6 +257,10 @@ function getFormValuesFromMatch(match: MatchRecord): MockMatchFormValues {
     teamATotal: match.teams.teamA.totalRuns,
     teamBTotal: match.teams.teamB.totalRuns,
     scheduledOversPerInnings: match.scheduledOversPerInnings ?? "",
+    battingMode:
+      match.battingMode ??
+      match.quickScoring?.battingMode ??
+      DEFAULT_BATTING_MODE,
     notes: ""
   };
 }
@@ -388,16 +408,7 @@ export function MockMatchEntryForm({
     completedRuns: number | "";
     nextStrikerId: string;
     nextNonStrikerId: string;
-  }>({
-    open: false,
-    type: "bowled",
-    dismissedPlayerId: "",
-    fielderId: "",
-    newBatterId: "",
-    completedRuns: "",
-    nextStrikerId: "",
-    nextNonStrikerId: ""
-  });
+  }>(initialQuickWicketDraft);
   const [quickNoBallOpen, setQuickNoBallOpen] = useState(false);
   const [playerOfMatchSelectionMode, setPlayerOfMatchSelectionMode] = useState<
     "auto" | "manual"
@@ -472,19 +483,37 @@ export function MockMatchEntryForm({
     let isCurrent = true;
     const supabase = createSupabaseBrowserClient();
 
-    async function refreshAdminWriteAccess() {
+    async function refreshAdminWriteAccess({ preserveServerAdmin = false } = {}) {
       const { data, error } = await supabase.auth.getUser();
-      const isVerifiedAdmin =
-        !error && data.user
-          ? (await supabase.rpc("is_admin")).data === true
-          : false;
 
       if (!isCurrent) return;
 
-      setHasAdminWriteAccess(isVerifiedAdmin);
+      if (error || !data.user) {
+        if (!preserveServerAdmin) {
+          setHasAdminWriteAccess(false);
+          setIsSavingMatch(false);
+          setQuickSaveStatus("Login required");
+          setMessage("Admin login required to continue scoring.");
+        }
+        return;
+      }
+
+      const { data: isVerifiedAdmin, error: adminError } =
+        await supabase.rpc("is_admin");
+
+      if (!isCurrent) return;
+
+      if (adminError) {
+        if (!preserveServerAdmin) {
+          setHasAdminWriteAccess(false);
+        }
+        return;
+      }
+
+      setHasAdminWriteAccess(isVerifiedAdmin === true);
     }
 
-    void refreshAdminWriteAccess();
+    void refreshAdminWriteAccess({ preserveServerAdmin: isAdmin });
 
     const {
       data: { subscription }
@@ -503,7 +532,7 @@ export function MockMatchEntryForm({
       isCurrent = false;
       subscription.unsubscribe();
     };
-  }, [supabaseWriteMode]);
+  }, [isAdmin, supabaseWriteMode]);
 
   useEffect(() => {
     if (!initialMatch || loadedMatchIdRef.current === initialMatch.id) return;
@@ -565,6 +594,10 @@ export function MockMatchEntryForm({
     () => activePlayers.filter((player) => teamB.includes(player.id)),
     [teamB]
   );
+  const activeBattingMode: BattingMode =
+    values.battingMode || quickScoring.battingMode || DEFAULT_BATTING_MODE;
+  const validationBattingMode =
+    status === "draft" ? values.battingMode || null : activeBattingMode;
   const quickTeamADerived = useMemo(
     () =>
       deriveQuickScoringInnings({
@@ -572,9 +605,10 @@ export function MockMatchEntryForm({
         bowlingTeamId: "teamB",
         battingPlayerIds: teamA,
         bowlingPlayerIds: teamB,
-        events: quickScoring.inningsAEvents
+        events: quickScoring.inningsAEvents,
+        battingMode: activeBattingMode
       }),
-    [quickScoring.inningsAEvents, teamA, teamB]
+    [activeBattingMode, quickScoring.inningsAEvents, teamA, teamB]
   );
   const quickTeamBDerived = useMemo(
     () =>
@@ -583,9 +617,10 @@ export function MockMatchEntryForm({
         bowlingTeamId: "teamA",
         battingPlayerIds: teamB,
         bowlingPlayerIds: teamA,
-        events: quickScoring.inningsBEvents
+        events: quickScoring.inningsBEvents,
+        battingMode: activeBattingMode
       }),
-    [quickScoring.inningsBEvents, teamA, teamB]
+    [activeBattingMode, quickScoring.inningsBEvents, teamA, teamB]
   );
   const hasQuickScoringEvents =
     quickScoring.inningsAEvents.length + quickScoring.inningsBEvents.length > 0;
@@ -685,6 +720,10 @@ export function MockMatchEntryForm({
       errors.battingFirst = "Please select which team will bat first.";
     }
 
+    if (!values.battingMode) {
+      errors.battingMode = "Please select a batting mode.";
+    }
+
     if (hasOddAttendance && !sharedPlayerId) {
       errors.sharedPlayer = "Please select one Shared Player.";
     }
@@ -725,6 +764,7 @@ export function MockMatchEntryForm({
     teamB,
     values.matchDate,
     values.matchName,
+    values.battingMode,
     values.scheduledOversPerInnings
   ]);
   const setupErrorCount = Object.keys(setupErrors).length;
@@ -895,9 +935,32 @@ export function MockMatchEntryForm({
     effectiveBattingFirstTeamId === "teamA"
       ? teamBBowlingInningsState.isComplete
       : teamABowlingInningsState.isComplete;
-  const quickActiveBattingTeamId: TeamId = firstInningsIsComplete
-    ? chasingTeamId
-    : effectiveBattingFirstTeamId;
+  const secondInningsEvents = getQuickScoringEventsForTeam(
+    quickScoring,
+    chasingTeamId
+  );
+  const quickInningsPhase =
+    quickScoring.inningsPhase ??
+    (secondInningsEvents.length > 0
+      ? "second_innings"
+      : firstInningsIsComplete
+        ? "innings_break"
+        : "first_innings");
+  const isFirstInningsBreak =
+    status === "in_progress" &&
+    quickInningsPhase === "innings_break" &&
+    firstInningsIsComplete;
+  const quickScoringCanBeEdited = canEditQuickScoring({
+    canEditMatch,
+    status,
+    setupIsLocked,
+    inningsPhase: quickInningsPhase,
+    battingFirstTeamId
+  });
+  const quickActiveBattingTeamId: TeamId =
+    quickInningsPhase === "second_innings"
+      ? chasingTeamId
+      : effectiveBattingFirstTeamId;
   const quickActiveBowlingTeamId = getChasingTeamId(quickActiveBattingTeamId);
   const quickActiveBattingPlayers =
     quickActiveBattingTeamId === "teamA" ? teamAPlayers : teamBPlayers;
@@ -905,6 +968,14 @@ export function MockMatchEntryForm({
     quickActiveBowlingTeamId === "teamA" ? teamAPlayers : teamBPlayers;
   const quickActiveDerived =
     quickActiveBattingTeamId === "teamA" ? quickTeamADerived : quickTeamBDerived;
+  const quickDismissedPlayerIdsForState = getQuickDismissedPlayerIds(quickActiveDerived);
+  const quickUndismissedBattingPlayers = quickActiveBattingPlayers.filter(
+    (player) => !quickDismissedPlayerIdsForState.has(player.id)
+  );
+  const quickRequiresNonStriker =
+    activeBattingMode === "two_batter" &&
+    !quickActiveDerived.isLastBatterSolo &&
+    quickUndismissedBattingPlayers.length >= 2;
   const quickSelectionErrors = useMemo<QuickSelectionErrors>(() => {
     const errors: QuickSelectionErrors = {};
     const dismissedPlayerIds = getQuickDismissedPlayerIds(quickActiveDerived);
@@ -927,15 +998,22 @@ export function MockMatchEntryForm({
       errors.striker = "A dismissed batter cannot face the next ball.";
     }
 
-    if (!quickSelection.nonStrikerId) {
+    if (quickRequiresNonStriker && !quickSelection.nonStrikerId) {
       errors.nonStriker = "Please select the non-striker.";
-    } else if (!battingPlayerIds.has(quickSelection.nonStrikerId)) {
+    } else if (
+      quickRequiresNonStriker &&
+      !battingPlayerIds.has(quickSelection.nonStrikerId)
+    ) {
       errors.nonStriker = "Select a non-striker from the batting team.";
-    } else if (dismissedPlayerIds.has(quickSelection.nonStrikerId)) {
+    } else if (
+      quickRequiresNonStriker &&
+      dismissedPlayerIds.has(quickSelection.nonStrikerId)
+    ) {
       errors.nonStriker = "A dismissed batter cannot face the next ball.";
     }
 
     if (
+      quickRequiresNonStriker &&
       quickSelection.strikerId &&
       quickSelection.nonStrikerId &&
       quickSelection.strikerId === quickSelection.nonStrikerId
@@ -966,6 +1044,7 @@ export function MockMatchEntryForm({
     quickActiveBattingPlayers,
     quickActiveBowlingPlayers,
     quickActiveDerived,
+    quickRequiresNonStriker,
     quickSelection.bowlerId,
     quickSelection.nonStrikerId,
     quickSelection.strikerId,
@@ -986,17 +1065,20 @@ export function MockMatchEntryForm({
         ? quickWicketDraft.dismissedPlayerId
         : quickWicketDraft.dismissedPlayerId || quickSelection.strikerId;
     const survivorId =
-      dismissedPlayerId === quickSelection.strikerId
+      quickRequiresNonStriker && dismissedPlayerId === quickSelection.strikerId
         ? quickSelection.nonStrikerId
         : quickSelection.strikerId;
     const dismissedPlayerIds = getQuickDismissedPlayerIds(quickActiveDerived);
     const battingPlayerIds = new Set(
       quickActiveBattingPlayers.map((player) => player.id)
     );
+    const activeBatterIds = [
+      quickSelection.strikerId,
+      quickRequiresNonStriker ? quickSelection.nonStrikerId : ""
+    ].filter(Boolean);
     const hasAvailableReplacement = quickActiveBattingPlayers.some(
       (player) =>
-        player.id !== quickSelection.strikerId &&
-        player.id !== quickSelection.nonStrikerId &&
+        !activeBatterIds.includes(player.id) &&
         player.id !== dismissedPlayerId &&
         !dismissedPlayerIds.has(player.id)
     );
@@ -1007,8 +1089,7 @@ export function MockMatchEntryForm({
           ? "Please select who was run out."
           : "Please select the dismissed batter.";
     } else if (
-      dismissedPlayerId !== quickSelection.strikerId &&
-      dismissedPlayerId !== quickSelection.nonStrikerId
+      !activeBatterIds.includes(dismissedPlayerId)
     ) {
       errors.dismissedPlayer =
         "The dismissed batter must be one of the active batters.";
@@ -1049,6 +1130,7 @@ export function MockMatchEntryForm({
   }, [
     quickActiveBattingPlayers,
     quickActiveDerived,
+    quickRequiresNonStriker,
     quickSelection.nonStrikerId,
     quickSelection.strikerId,
     quickWicketDraft
@@ -1067,8 +1149,9 @@ export function MockMatchEntryForm({
 
       setQuickSelection((current) => ({
         strikerId: quickActiveDerived.currentStrikerId ?? current.strikerId,
-        nonStrikerId:
-          quickActiveDerived.currentNonStrikerId ?? current.nonStrikerId,
+        nonStrikerId: quickRequiresNonStriker
+          ? quickActiveDerived.currentNonStrikerId ?? current.nonStrikerId
+          : "",
         bowlerId: quickActiveDerived.currentBowlerId ?? ""
       }));
     });
@@ -1080,7 +1163,8 @@ export function MockMatchEntryForm({
     hasQuickScoringEvents,
     quickActiveDerived.currentBowlerId,
     quickActiveDerived.currentNonStrikerId,
-    quickActiveDerived.currentStrikerId
+    quickActiveDerived.currentStrikerId,
+    quickRequiresNonStriker
   ]);
 
   useEffect(() => {
@@ -1665,10 +1749,14 @@ export function MockMatchEntryForm({
 
     setQuickSaveStatus("Saving...");
 
-    const saved = await persistNonFinalisedMatch({
-      ...buildCurrentMatchRecord(status, liveResult, new Date().toISOString()),
-      quickScoring: nextQuickScoring
-    });
+    const saved = await persistNonFinalisedMatch(
+      buildCurrentMatchRecord(
+        status,
+        liveResult,
+        new Date().toISOString(),
+        nextQuickScoring
+      )
+    );
 
     setQuickSaveStatus(saved ? "Saved" : "Save needed");
   }
@@ -1678,6 +1766,31 @@ export function MockMatchEntryForm({
 
     setQuickScoring(nextQuickScoring);
     void autosaveQuickScoring(nextQuickScoring);
+  }
+
+  function resetQuickDeliveryEditors() {
+    setQuickNoBallOpen(false);
+    setQuickWicketDraft({ ...initialQuickWicketDraft });
+    setWicketValidationAttempted(false);
+  }
+
+  function updateQuickWicketDraft(draft: typeof quickWicketDraft) {
+    if (!draft.open) {
+      resetQuickDeliveryEditors();
+      return;
+    }
+
+    setQuickNoBallOpen(false);
+    setQuickWicketDraft(draft);
+  }
+
+  function updateQuickNoBallOpen(open: boolean) {
+    setQuickNoBallOpen(open);
+
+    if (open) {
+      setQuickWicketDraft({ ...initialQuickWicketDraft });
+      setWicketValidationAttempted(false);
+    }
   }
 
   function getQuickDismissedPlayerIds(derived: QuickScoringDerivedInnings) {
@@ -1693,7 +1806,7 @@ export function MockMatchEntryForm({
 
     const errorCount = Object.keys(quickSelectionErrors).length;
 
-    if (isLocked || errorCount > 0) {
+    if (!quickScoringCanBeEdited || errorCount > 0) {
       setMessage(
         errorCount > 0
           ? getRequiredSummary(errorCount)
@@ -1720,14 +1833,14 @@ export function MockMatchEntryForm({
     extras?: number;
     wicket?: Parameters<typeof createQuickScoringEvent>[0]["wicket"];
   }) {
-    if (!validateQuickScoringAction()) return;
+    if (!validateQuickScoringAction()) return false;
 
     const key = getQuickScoringInningsKey(quickActiveBattingTeamId);
     const events = getQuickScoringEventsForTeam(quickScoring, quickActiveBattingTeamId);
     const event = createQuickScoringEvent({
       battingTeamId: quickActiveBattingTeamId,
       strikerId: quickSelection.strikerId,
-      nonStrikerId: quickSelection.nonStrikerId,
+      nonStrikerId: quickRequiresNonStriker ? quickSelection.nonStrikerId : "",
       bowlerId: quickSelection.bowlerId,
       batterRuns,
       extraType,
@@ -1735,23 +1848,110 @@ export function MockMatchEntryForm({
       wicket,
       sequence: nextQuickScoringSequence(events)
     });
-
-    updateQuickScoring({
+    const nextEvents = [...events, event];
+    let nextQuickScoring = {
       ...quickScoring,
-      [key]: [...events, event]
-    });
+      [key]: nextEvents
+    };
+
+    if (
+      status === "in_progress" &&
+      quickInningsPhase === "first_innings" &&
+      quickActiveBattingTeamId === effectiveBattingFirstTeamId
+    ) {
+      const nextDerived = deriveQuickScoringInnings({
+        battingTeamId: quickActiveBattingTeamId,
+        bowlingTeamId: quickActiveBowlingTeamId,
+        battingPlayerIds:
+          quickActiveBattingTeamId === "teamA" ? teamA : teamB,
+        bowlingPlayerIds:
+          quickActiveBowlingTeamId === "teamA" ? teamA : teamB,
+        events: nextEvents,
+        battingMode: activeBattingMode
+      });
+      const nextInningsState = getInningsState({
+        battingTeamId: quickActiveBattingTeamId,
+        bowlingTeamId: quickActiveBowlingTeamId,
+        battingPlayerCount: quickActiveBattingPlayers.length,
+        bowlingOvers: nextDerived.bowlingOvers,
+        scheduledOvers: scheduledOversForCalculations,
+        runs: nextDerived.runs
+      });
+
+      if (nextInningsState.isComplete) {
+        nextQuickScoring = {
+          ...nextQuickScoring,
+          inningsPhase: "innings_break",
+          firstInningsCompletedAt: new Date().toISOString()
+        };
+      }
+    }
+
+    updateQuickScoring(nextQuickScoring);
+    resetQuickDeliveryEditors();
     setQuickValidationAttempted(false);
     setWicketValidationAttempted(false);
     setMessage("Quick scoring event recorded.");
+    return true;
   }
 
   function undoQuickScoringEvent() {
     if (isLocked) return;
 
-    updateQuickScoring(
-      undoLastQuickScoringEvent(quickScoring, quickActiveBattingTeamId)
+    const nextQuickScoring = undoLastQuickScoringEvent(
+      quickScoring,
+      quickActiveBattingTeamId
     );
+
+    updateQuickScoring(
+      isFirstInningsBreak
+        ? {
+            ...nextQuickScoring,
+            inningsPhase: "first_innings",
+            firstInningsCompletedAt: undefined
+          }
+        : nextQuickScoring
+    );
+    resetQuickDeliveryEditors();
+    setQuickValidationAttempted(false);
     setMessage("Last quick scoring event undone.");
+  }
+
+  async function startSecondInnings() {
+    if (isLocked || !isFirstInningsBreak) return;
+
+    const nextQuickScoring = {
+      ...quickScoring,
+      inningsPhase: "second_innings" as const,
+      secondInningsStartedAt: new Date().toISOString()
+    };
+
+    setIsSavingMatch(true);
+
+    try {
+      const saved = await persistNonFinalisedMatch(
+        buildCurrentMatchRecord(
+          "in_progress",
+          liveResult,
+          new Date().toISOString(),
+          nextQuickScoring
+        )
+      );
+
+      if (!saved) return;
+
+      setQuickScoring(nextQuickScoring);
+      setQuickSelection({
+        strikerId: "",
+        nonStrikerId: "",
+        bowlerId: ""
+      });
+      setQuickValidationAttempted(false);
+      setWicketValidationAttempted(false);
+      setMessage("Second innings started. Select the next batter and bowler.");
+    } finally {
+      setIsSavingMatch(false);
+    }
   }
 
   function correctQuickScoringEventToDot(eventId: string) {
@@ -1811,16 +2011,6 @@ export function MockMatchEntryForm({
         nextNonStrikerId: null
       }
     });
-    setQuickWicketDraft({
-      open: false,
-      type: "bowled",
-      dismissedPlayerId: "",
-      fielderId: "",
-      newBatterId: "",
-      completedRuns: "",
-      nextStrikerId: "",
-      nextNonStrikerId: ""
-    });
   }
 
   function selectPlayerOfMatch(playerId: string) {
@@ -1846,6 +2036,15 @@ export function MockMatchEntryForm({
     appliedAt: string,
     quickScoringOverride = quickScoring
   ): MatchRecord {
+    const persistedBattingMode =
+      values.battingMode ||
+      quickScoringOverride.battingMode ||
+      (finalStatus === "draft" ? null : activeBattingMode);
+    const persistedQuickScoring = {
+      ...quickScoringOverride,
+      version: 2 as const,
+      battingMode: persistedBattingMode
+    };
     const allBowlingOvers = [...bowlingOvers.teamA, ...bowlingOvers.teamB];
     const teamContextFinalisedRecords: FinalisedPlayerMatchRecord[] = performanceList.map(
       (performance) => ({
@@ -1901,6 +2100,7 @@ export function MockMatchEntryForm({
       scheduledOversPerInnings: getScheduledOversValue(
         values.scheduledOversPerInnings
       ),
+      battingMode: persistedBattingMode,
       battingFirstTeamId:
         finalStatus === "draft" ||
         finalStatus === "abandoned" ||
@@ -1916,7 +2116,7 @@ export function MockMatchEntryForm({
             : null
           : chasingTeamId,
       sharedPlayerId,
-      quickScoring: quickScoringOverride,
+      quickScoring: persistedQuickScoring,
       teams: {
         teamA: {
           ...teamAMatchData,
@@ -2127,6 +2327,7 @@ export function MockMatchEntryForm({
           scheduledOversPerInnings: getScheduledOversValue(
             values.scheduledOversPerInnings
           ),
+          battingMode: validationBattingMode,
           battingFirstTeamId: battingFirstTeamId || null,
           inningsExtras,
           availablePlayerIds,
@@ -2226,6 +2427,9 @@ export function MockMatchEntryForm({
           nextStatus === "in_progress"
             ? {
                 ...quickScoring,
+                version: 2 as const,
+                battingMode: values.battingMode || DEFAULT_BATTING_MODE,
+                inningsPhase: quickScoring.inningsPhase ?? "first_innings",
                 setupLocked: true,
                 setupLockedAt:
                   quickScoring.setupLockedAt ?? new Date().toISOString()
@@ -2379,6 +2583,7 @@ export function MockMatchEntryForm({
             }
             score={quickActiveDerived}
             maximumOvers={scheduledOversForCalculations}
+            battingMode={activeBattingMode}
           />
         ) : null}
 
@@ -2454,6 +2659,9 @@ export function MockMatchEntryForm({
                 </div>
                 <div className="locked-setup-item rounded-md border border-white/15 bg-black/25 p-3 text-sm font-black uppercase text-stone-100">
                   {battingFirstTeamId === "teamB" ? FIXED_TEAM_B_NAME : FIXED_TEAM_A_NAME} batting first
+                </div>
+                <div className="locked-setup-item rounded-md border border-neon-yellow/25 bg-black/25 p-3 text-sm font-black uppercase text-neon-yellow">
+                  {getBattingModeLabel(activeBattingMode)}
                 </div>
               </div>
               </>
@@ -2708,6 +2916,26 @@ export function MockMatchEntryForm({
             <ErrorText>{visibleSetupErrors.overs}</ErrorText>
           </label>
           <label className="grid gap-2 text-sm font-bold text-stone-200">
+            Batting mode
+                <select
+                  name="battingMode"
+                  value={values.battingMode}
+                  disabled={isRosterLocked}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                  ...current,
+                  battingMode: event.target.value as BattingMode | ""
+                }))
+              }
+              className={getInputClass(Boolean(visibleSetupErrors.battingMode))}
+            >
+              <option value="">Select batting mode</option>
+              <option value="two_batter">Two Batters - Striker + Non-striker</option>
+              <option value="single_batter">Single Batter - One active batter</option>
+            </select>
+            <ErrorText>{visibleSetupErrors.battingMode}</ErrorText>
+          </label>
+          <label className="grid gap-2 text-sm font-bold text-stone-200">
             Who bats first?
             <select
               value={battingFirstTeamId}
@@ -2775,6 +3003,24 @@ export function MockMatchEntryForm({
           />
         </div>
 
+          {isFirstInningsBreak ? (
+            <InningsBreakPanel
+              firstTeamName={
+                effectiveBattingFirstTeamId === "teamA"
+                  ? values.teamAName || "Team A"
+                  : values.teamBName || "Team B"
+              }
+              chasingTeamName={
+                chasingTeamId === "teamA"
+                  ? values.teamAName || "Team A"
+                  : values.teamBName || "Team B"
+              }
+              firstInnings={firstInnings}
+              target={target}
+              disabled={isLocked || isSavingMatch}
+              onStartSecondInnings={startSecondInnings}
+            />
+          ) : (
           <QuickScoringPanel
             battingTeamName={
               quickActiveBattingTeamId === "teamA"
@@ -2788,6 +3034,9 @@ export function MockMatchEntryForm({
             }
             battingPlayers={quickActiveBattingPlayers}
             bowlingPlayers={quickActiveBowlingPlayers}
+            battingMode={activeBattingMode}
+            requiresNonStriker={quickRequiresNonStriker}
+            isLastBatterSolo={quickActiveDerived.isLastBatterSolo}
             derived={quickActiveDerived}
             maximumOvers={scheduledOversForCalculations}
             selection={quickSelection}
@@ -2796,11 +3045,11 @@ export function MockMatchEntryForm({
             wicketErrors={visibleQuickWicketErrors}
             noBallOpen={quickNoBallOpen}
             saveStatus={quickSaveStatus}
-            disabled={isLocked || !setupIsLocked || !battingFirstTeamId || !canUseTeamControls}
+            disabled={!quickScoringCanBeEdited}
             sectionRef={quickSectionRef}
             onSelectionChange={setQuickSelection}
-            onWicketDraftChange={setQuickWicketDraft}
-            onNoBallOpenChange={setQuickNoBallOpen}
+            onWicketDraftChange={updateQuickWicketDraft}
+            onNoBallOpenChange={updateQuickNoBallOpen}
             onScoreRun={(runs) => appendQuickScoringEvent({ batterRuns: runs })}
             onWide={() =>
               appendQuickScoringEvent({
@@ -2827,6 +3076,7 @@ export function MockMatchEntryForm({
             onCorrectEventToDot={correctQuickScoringEventToDot}
             onSubmitWicket={submitQuickWicket}
           />
+          )}
 
         </>
         )}
@@ -3143,19 +3393,6 @@ export function MockMatchEntryForm({
           <div className="rounded-md border border-neon-red/50 bg-neon-red/10 p-3 text-sm font-bold text-red-100">
             A player cannot be selected for both teams.
           </div>
-        ) : null}
-
-        {!isFinalised ? (
-        <ResultBanner
-          result={liveResult}
-          status={status}
-          teamAName={values.teamAName}
-          teamBName={values.teamBName}
-          firstInnings={firstInnings}
-          secondInnings={secondInnings}
-          firstInningsIsComplete={firstInningsIsComplete}
-          secondInningsIsComplete={secondInningsIsComplete}
-        />
         ) : null}
 
         <div className="rounded-md border border-white/12 bg-white/5 p-3 text-sm text-stone-300">
@@ -3547,6 +3784,10 @@ function getFriendlyWorkflowStatus(status: MatchStatus, saveStatus: string): str
   return `Draft - ${saveStatus}`;
 }
 
+function getBattingModeLabel(mode: BattingMode): string {
+  return mode === "single_batter" ? "Single Batter Mode" : "Two Batter Mode";
+}
+
 function getTeamAccentStyle(teamId: TeamId): CSSProperties {
   return {
     "--team-accent": teamId === "teamA" ? "#2fd4ff" : "#ff9d2f"
@@ -3727,11 +3968,75 @@ function InningsAllocationPanel({
   );
 }
 
+function InningsBreakPanel({
+  firstTeamName,
+  chasingTeamName,
+  firstInnings,
+  target,
+  disabled,
+  onStartSecondInnings
+}: {
+  firstTeamName: string;
+  chasingTeamName: string;
+  firstInnings: TeamInnings;
+  target: number;
+  disabled: boolean;
+  onStartSecondInnings: () => void;
+}) {
+  return (
+    <section className="rounded-lg border border-neon-yellow/40 bg-neon-yellow/10 p-4">
+      <p className="text-xs font-black uppercase text-neon-yellow">
+        First Innings Complete
+      </p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-md border border-white/15 bg-black/35 px-3 py-3">
+          <span className="text-xs font-black uppercase text-stone-400">
+            {firstTeamName}
+          </span>
+          <strong className="block text-3xl font-black text-neon-yellow">
+            {formatInningsScore(firstInnings.runs, firstInnings.wicketsLost)}
+          </strong>
+          <span className="text-xs font-bold text-stone-300">
+            {formatCompletedOvers(firstInnings.completedOvers)} overs
+          </span>
+        </div>
+        <div className="rounded-md border border-neon-cyan/25 bg-black/35 px-3 py-3">
+          <span className="text-xs font-black uppercase text-stone-400">
+            Target
+          </span>
+          <strong className="block text-3xl font-black text-neon-cyan">
+            {target}
+          </strong>
+        </div>
+        <div className="rounded-md border border-neon-green/25 bg-black/35 px-3 py-3">
+          <span className="text-xs font-black uppercase text-stone-400">
+            {chasingTeamName}
+          </span>
+          <strong className="block text-xl font-black uppercase text-neon-green">
+            Needs {target} to win
+          </strong>
+        </div>
+      </div>
+      <Button
+        type="button"
+        className="mt-4"
+        disabled={disabled}
+        onClick={onStartSecondInnings}
+      >
+        START SECOND INNINGS
+      </Button>
+    </section>
+  );
+}
+
 function QuickScoringPanel({
   battingTeamName,
   bowlingTeamName,
   battingPlayers,
   bowlingPlayers,
+  battingMode,
+  requiresNonStriker,
+  isLastBatterSolo,
   derived,
   maximumOvers,
   selection,
@@ -3757,6 +4062,9 @@ function QuickScoringPanel({
   bowlingTeamName: string;
   battingPlayers: Player[];
   bowlingPlayers: Player[];
+  battingMode: BattingMode;
+  requiresNonStriker: boolean;
+  isLastBatterSolo: boolean;
   derived: QuickScoringDerivedInnings;
   maximumOvers: number;
   selection: { strikerId: string; nonStrikerId: string; bowlerId: string };
@@ -3802,7 +4110,7 @@ function QuickScoringPanel({
 }) {
   const availableNewBatters = battingPlayers.filter(
     (player) => player.id !== selection.strikerId &&
-      player.id !== selection.nonStrikerId &&
+      (!requiresNonStriker || player.id !== selection.nonStrikerId) &&
       player.id !== wicketDraft.dismissedPlayerId &&
       !derived.battingOrder.includes(player.id) &&
       !derived.battingPerformances.some(
@@ -3822,7 +4130,8 @@ function QuickScoringPanel({
   );
   const strikerOptions = battingPlayers.filter(
     (player) =>
-      !dismissedPlayerIds.has(player.id) && player.id !== selection.nonStrikerId
+      !dismissedPlayerIds.has(player.id) &&
+      (!requiresNonStriker || player.id !== selection.nonStrikerId)
   );
   const nonStrikerOptions = battingPlayers.filter(
     (player) =>
@@ -3835,6 +4144,13 @@ function QuickScoringPanel({
   const previousBowler = bowlingPlayers.find(
     (player) => player.id === derived.previousOverBowlerId
   );
+  const batterLabel =
+    battingMode === "single_batter" || isLastBatterSolo ? "Batter" : "Striker";
+  const wicketLeavesSoloBatter =
+    battingMode === "two_batter" &&
+    requiresNonStriker &&
+    availableNewBatters.length === 0 &&
+    !wicketWouldEndInnings;
   const correctionEvents =
     derived.currentOverEvents.length > 0
       ? derived.currentOverEvents
@@ -3856,7 +4172,7 @@ function QuickScoringPanel({
       id: selection.nonStrikerId,
       label: `Non-striker: ${getPlayerDisplayName(battingPlayers, selection.nonStrikerId)}`
     }
-  ].filter((option) => option.id);
+  ].filter((option) => option.id && (requiresNonStriker || option.id === selection.strikerId));
   return (
     <section
       ref={sectionRef}
@@ -3873,6 +4189,11 @@ function QuickScoringPanel({
           <span className="text-sm font-bold text-stone-400">
             Bowling: {bowlingTeamName}
           </span>
+          {battingMode === "single_batter" || isLastBatterSolo ? (
+            <span className="mt-2 inline-flex rounded border border-neon-yellow/40 bg-neon-yellow/10 px-2 py-1 text-xs font-black uppercase text-neon-yellow">
+              {battingMode === "single_batter" ? "Single Batter" : "Last Batter Solo"}
+            </span>
+          ) : null}
         </div>
         <div className="quick-save-status">{saveStatus}</div>
       </div>
@@ -3898,7 +4219,7 @@ function QuickScoringPanel({
 
       <div className="quick-player-selectors">
         <label className={selectionErrors.striker ? "quick-field-error" : undefined}>
-          Striker
+          {batterLabel}
           <select
             value={selection.strikerId}
             disabled={disabled}
@@ -3913,7 +4234,7 @@ function QuickScoringPanel({
               })
             }
           >
-            <option value="">Select striker</option>
+            <option value="">Select {batterLabel.toLowerCase()}</option>
             {strikerOptions.map((player) => (
               <option key={`quick-striker-${player.id}`} value={player.id}>
                 {player.name}
@@ -3922,6 +4243,7 @@ function QuickScoringPanel({
           </select>
           <ErrorText>{selectionErrors.striker}</ErrorText>
         </label>
+        {requiresNonStriker ? (
         <label className={selectionErrors.nonStriker ? "quick-field-error" : undefined}>
           Non-striker
           <select
@@ -3947,6 +4269,7 @@ function QuickScoringPanel({
           </select>
           <ErrorText>{selectionErrors.nonStriker}</ErrorText>
         </label>
+        ) : null}
         <label className={selectionErrors.bowler ? "quick-field-error" : undefined}>
           Bowler
           <select
@@ -4036,6 +4359,7 @@ function QuickScoringPanel({
             Dismissal
             <select
               value={wicketDraft.type}
+              disabled={disabled}
               onChange={(event) =>
                 onWicketDraftChange({
                   ...wicketDraft,
@@ -4068,6 +4392,7 @@ function QuickScoringPanel({
                         ? "is-selected"
                         : ""
                     }
+                    disabled={disabled}
                     onClick={() =>
                       onWicketDraftChange({
                         ...wicketDraft,
@@ -4098,6 +4423,7 @@ function QuickScoringPanel({
                     className={
                       wicketDraft.completedRuns === runs ? "is-selected" : ""
                     }
+                    disabled={disabled}
                     onClick={() =>
                       onWicketDraftChange({
                         ...wicketDraft,
@@ -4118,6 +4444,7 @@ function QuickScoringPanel({
               {wicketDraft.type === "caught" ? "Catcher" : "Primary fielder"}
               <select
                 value={wicketDraft.fielderId}
+                disabled={disabled}
                 onChange={(event) =>
                   onWicketDraftChange({
                     ...wicketDraft,
@@ -4135,15 +4462,18 @@ function QuickScoringPanel({
               <ErrorText>{wicketErrors.fielder}</ErrorText>
             </label>
           ) : null}
-          {wicketWouldEndInnings ? (
+          {wicketWouldEndInnings || wicketLeavesSoloBatter ? (
             <p className="rounded-md border border-white/10 bg-white/5 p-3 text-sm font-bold text-stone-300">
-              No new batter needed if this wicket ends the innings.
+              {wicketWouldEndInnings
+                ? "No new batter needed if this wicket ends the innings."
+                : "No new batter available. The surviving player continues as Last Batter Solo."}
             </p>
           ) : (
             <label className={wicketErrors.newBatter ? "quick-field-error" : undefined}>
               New batter
               <select
                 value={wicketDraft.newBatterId}
+                disabled={disabled}
                 onChange={(event) =>
                   onWicketDraftChange({
                     ...wicketDraft,
@@ -4162,11 +4492,12 @@ function QuickScoringPanel({
             </label>
           )}
           <div className="quick-wicket-actions">
-            <button type="button" onClick={onSubmitWicket}>
+            <button type="button" disabled={disabled} onClick={onSubmitWicket}>
               Record wicket
             </button>
             <button
               type="button"
+              disabled={disabled}
               onClick={() => onWicketDraftChange({ ...wicketDraft, open: false })}
             >
               Cancel
@@ -4176,9 +4507,11 @@ function QuickScoringPanel({
       ) : null}
 
       <div className="quick-correction-row">
+        {requiresNonStriker ? (
         <button type="button" disabled={disabled} onClick={onSwapStrikers}>
           Swap Strikers
         </button>
+        ) : null}
         <button
           type="button"
           disabled={disabled}
@@ -5009,16 +5342,20 @@ function CompactLiveScoreBanner({
   battingTeamName,
   bowlingTeamName,
   score,
-  maximumOvers
+  maximumOvers,
+  battingMode
 }: {
   battingTeamName: string;
   bowlingTeamName: string;
   score: QuickScoringDerivedInnings;
   maximumOvers: number;
+  battingMode: BattingMode;
 }) {
   const strikerName = score.currentStrikerId
     ? getPlayerDisplayName(activePlayers, score.currentStrikerId)
-    : "Select striker";
+    : battingMode === "single_batter"
+      ? "Select batter"
+      : "Select striker";
   const maxOversLabel = maximumOvers > 0 ? maximumOvers : "-";
 
   return (
@@ -5034,6 +5371,7 @@ function CompactLiveScoreBanner({
       </p>
       <p>
         {battingTeamName} batting - {bowlingTeamName} bowling - {strikerName}*
+        {score.isLastBatterSolo ? " - Solo Batter" : ""}
       </p>
     </section>
   );

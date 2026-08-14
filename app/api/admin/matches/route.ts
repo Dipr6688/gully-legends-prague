@@ -87,6 +87,7 @@ function validationInputFromMatch(match: MatchRecord): MatchValidationInput {
     status: match.status,
     stage: getValidationStage(match),
     scheduledOversPerInnings: match.scheduledOversPerInnings,
+    battingMode: match.battingMode ?? match.quickScoring?.battingMode ?? "two_batter",
     battingFirstTeamId: match.battingFirstTeamId,
     inningsExtras: {
       teamA: match.innings.first.battingTeamId === "teamA"
