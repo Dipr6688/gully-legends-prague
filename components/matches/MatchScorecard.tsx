@@ -184,9 +184,15 @@ function ScorecardInningsSection({ innings }: { innings: ScorecardInnings }) {
             <tbody>
               {innings.battingRows.map((row) => (
                 <tr key={row.key}>
-                  <td>{row.batter}</td>
-                  <td>{row.dismissal}</td>
-                  <td>{row.runs}</td>
+                  <td>
+                    <span className="scorecard-cell-value">{row.batter}</span>
+                  </td>
+                  <td>
+                    <span className="scorecard-cell-value">{row.dismissal}</span>
+                  </td>
+                  <td>
+                    <span className="scorecard-cell-value">{row.runs}</span>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -219,12 +225,24 @@ function ScorecardInningsSection({ innings }: { innings: ScorecardInnings }) {
             <tbody>
               {innings.bowlingFigures.map((figure) => (
                 <tr key={figure.playerId}>
-                  <td>{figure.bowler}</td>
-                  <td>{figure.overs}</td>
-                  <td>{figure.maidens}</td>
-                  <td>{figure.runsConceded}</td>
-                  <td>{figure.wickets}</td>
-                  <td>{figure.economy}</td>
+                  <td>
+                    <span className="scorecard-cell-value">{figure.bowler}</span>
+                  </td>
+                  <td>
+                    <span className="scorecard-cell-value">{figure.overs}</span>
+                  </td>
+                  <td>
+                    <span className="scorecard-cell-value">{figure.maidens}</span>
+                  </td>
+                  <td>
+                    <span className="scorecard-cell-value">{figure.runsConceded}</span>
+                  </td>
+                  <td>
+                    <span className="scorecard-cell-value">{figure.wickets}</span>
+                  </td>
+                  <td>
+                    <span className="scorecard-cell-value">{figure.economy}</span>
+                  </td>
                 </tr>
               ))}
             </tbody>

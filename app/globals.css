@@ -82,6 +82,7 @@ textarea {
 
 .leaderboard-hero-copy {
   min-width: 0;
+  max-width: 100%;
 }
 
 .leaderboard-eyebrow,
@@ -95,9 +96,12 @@ textarea {
 }
 
 .leaderboard-hero h1 {
+  max-width: 100%;
   color: #f8f1d6;
   font-size: clamp(3.2rem, 8vw, 6.5rem);
   line-height: 0.88;
+  overflow-wrap: normal;
+  white-space: normal;
 }
 
 .leaderboard-hero-copy > p:last-child {
@@ -107,6 +111,7 @@ textarea {
   font-size: clamp(1rem, 2vw, 1.18rem);
   font-weight: 800;
   line-height: 1.6;
+  overflow-wrap: break-word;
 }
 
 .leaderboard-period-filter {
@@ -1303,10 +1308,12 @@ textarea {
 }
 
 .formula-hero h1 {
+  max-width: 100%;
   color: #f8f1d6;
   font-size: clamp(3rem, 8vw, 6rem);
   line-height: 0.9;
   text-transform: uppercase;
+  white-space: normal;
 }
 
 .formula-hero p:last-child {
@@ -1316,6 +1323,7 @@ textarea {
   font-size: clamp(1rem, 2vw, 1.18rem);
   font-weight: 700;
   line-height: 1.6;
+  overflow-wrap: break-word;
 }
 
 .formula-eyebrow {
@@ -1348,8 +1356,11 @@ textarea {
 .formula-tabs {
   display: flex;
   gap: 10px;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .formula-tab-button {
@@ -1921,6 +1932,11 @@ textarea {
   padding: clamp(22px, 4vw, 42px);
 }
 
+.gallery-hero > div:first-child {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .gallery-eyebrow {
   color: #46dfff;
   font-size: 0.78rem;
@@ -1930,9 +1946,11 @@ textarea {
 }
 
 .gallery-hero h1 {
+  max-width: 100%;
   color: #f8f1d6;
   font-size: clamp(3rem, 8vw, 6rem);
   line-height: 0.9;
+  white-space: normal;
 }
 
 .gallery-hero p:last-child,
@@ -1940,6 +1958,7 @@ textarea {
   color: #d8d2c0;
   font-size: clamp(1rem, 2vw, 1.18rem);
   font-weight: 800;
+  overflow-wrap: break-word;
 }
 
 .gallery-hero-actions {
@@ -5037,6 +5056,8 @@ textarea {
   grid-auto-flow: column;
   grid-auto-columns: minmax(250px, 82%);
   gap: 16px;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -7119,6 +7140,16 @@ textarea {
     min-height: calc(100vh - 92px);
   }
 
+  .player-hero,
+  .player-profile-content {
+    width: min(100% - 24px, 720px);
+  }
+
+  .profile-artwork-frame {
+    width: min(100%, 300px);
+    max-width: calc(100vw - 48px);
+  }
+
   .profile-identity,
   .career-scoreboard,
   .player-power-section,
@@ -7337,13 +7368,37 @@ textarea {
   }
 
   .header-brand-logo {
-    width: clamp(176px, 52vw, 214px);
+    width: clamp(168px, 48vw, 204px);
     max-height: 66px;
   }
 
   .mobile-navigation-trigger {
     width: 40px;
     height: 40px;
+  }
+
+  .mobile-navigation {
+    position: fixed;
+    top: 18px;
+    right: 12px;
+    z-index: 90;
+    display: block;
+    flex: 0 0 auto;
+    margin-left: 0;
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
+  }
+
+  .mobile-navigation-trigger {
+    position: relative;
+    z-index: 2;
+  }
+
+  .mobile-navigation[open] .mobile-navigation-panel {
+    position: fixed;
+    top: 66px;
+    right: 12px;
   }
 
   .next-ball-friends-artwork {
@@ -7401,6 +7456,59 @@ textarea {
 }
 
 @media (max-width: 640px) {
+  .comic-title {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    font-size: clamp(1.85rem, 8vw, 2.3rem);
+    line-height: 1;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+    white-space: normal;
+  }
+
+  .gaming-panel {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .gaming-panel > * {
+    min-width: 0;
+  }
+
+  .gaming-panel p {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .leaderboard-hero h1,
+  .formula-hero h1,
+  .gallery-hero h1 {
+    font-size: clamp(2.05rem, 9.5vw, 2.75rem);
+    line-height: 1;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+  }
+
+  .leaderboard-hero-copy > p:last-child,
+  .formula-hero p:last-child,
+  .gallery-hero p:last-child {
+    max-width: 100%;
+  }
+
+  .leaderboard-period-filter button {
+    min-width: 0;
+    padding-inline: 8px;
+    font-size: 0.72rem;
+  }
+
+  .leaderboard-tabs,
+  .formula-tabs {
+    margin-inline: -2px;
+    padding-inline: 2px 12px;
+  }
+
   .admin-control-grid {
     grid-template-columns: 1fr;
   }
@@ -7410,9 +7518,21 @@ textarea {
   }
 
   .players-carousel {
-    grid-auto-columns: calc(100% - 12px);
+    grid-auto-columns: min(100%, 340px);
+    justify-content: start;
+    width: 100%;
+    max-width: 100%;
     gap: 12px;
     padding-inline: 0;
+  }
+
+  .players-carousel > * {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .player-card {
+    max-width: 100%;
   }
 
   .next-match-ticket {
@@ -7481,9 +7601,61 @@ textarea {
     transform: scale(1.28);
   }
 
+  .match-archive-shell-header,
+  .today-fixtures {
+    padding: 12px;
+  }
+
+  .match-archive-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .match-archive-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .match-archive-title-row,
+  .match-archive-pagination,
+  .today-fixtures-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .match-archive-card {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .match-archive-card-header {
+    flex-direction: column;
+  }
+
+  .match-archive-card-header strong {
+    align-self: flex-start;
+  }
+
+  .match-archive-scores div,
+  .match-scorecard-scoreboard div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .match-archive-pagination-controls {
+    justify-content: flex-start;
+  }
+
   .scorecard-innings-header,
   .match-scorecard-header {
     flex-direction: column;
+  }
+
+  .match-scorecard-header h1 {
+    max-width: 100%;
+    font-size: clamp(1.85rem, 8vw, 2.3rem);
+    line-height: 1;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+    white-space: normal;
   }
 
   .scorecard-innings-header div:last-child {
@@ -7500,6 +7672,8 @@ textarea {
   .scorecard-table td {
     display: block;
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .scorecard-table tr {
@@ -7514,12 +7688,15 @@ textarea {
   }
 
   .scorecard-table td {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 3px;
     border-bottom: 0;
-    padding: 5px 0;
-    text-align: right;
+    padding: 6px 0;
+    text-align: left;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .scorecard-batting-table td:nth-child(1)::before {
@@ -7561,6 +7738,24 @@ textarea {
   .scorecard-table td::before {
     color: #46dfff;
     font-size: 0.68rem;
+    font-weight: 950;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .scorecard-cell-value {
+    display: block;
+    justify-self: start;
+    min-width: 0;
+    max-width: 100%;
+    color: #f8f1d6;
+    font-weight: 900;
+    overflow-wrap: anywhere;
+    text-align: left;
+  }
+
+  .scorecard-table td:first-child .scorecard-cell-value {
+    color: #fff5d8;
     font-weight: 950;
     text-transform: uppercase;
   }
