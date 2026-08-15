@@ -334,6 +334,33 @@ export function deriveQuickScoringInnings({
       continue;
     }
 
+    if (event.wicket) {
+      const activeBatterIds = [
+        event.strikerId,
+        pairRequired ? event.nonStrikerId : ""
+      ].filter(Boolean);
+
+      if (!event.wicket.dismissedPlayerId) {
+        missingInformation.push(`Missing dismissed batter for event ${event.sequence}.`);
+        continue;
+      }
+
+      if (!battingPlayerIds.includes(event.wicket.dismissedPlayerId)) {
+        missingInformation.push(`Event ${event.sequence} has an ineligible dismissed batter.`);
+        continue;
+      }
+
+      if (dismissedPlayerIds.has(event.wicket.dismissedPlayerId)) {
+        missingInformation.push(`Event ${event.sequence} dismisses a batter who is already out.`);
+        continue;
+      }
+
+      if (!activeBatterIds.includes(event.wicket.dismissedPlayerId)) {
+        missingInformation.push(`Event ${event.sequence} dismisses a batter who is not active.`);
+        continue;
+      }
+    }
+
     if (
       legalBalls > 0 &&
       legalBalls % 6 === 0 &&

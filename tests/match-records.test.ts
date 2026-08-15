@@ -1171,6 +1171,606 @@ test("Quick Scoring single-batter mode brings the next batter after a wicket", (
   assert.deepEqual(derived.missingInformation, []);
 });
 
+test("Quick Scoring two-batter mode keeps a four-player innings alive after three wickets", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput(
+      [
+        quickEvent(1, {
+          wicket: {
+            type: "bowled",
+            dismissedPlayerId: "naim",
+            fielderId: null,
+            newBatterId: "soman",
+            completedRuns: 0
+          }
+        }),
+        quickEvent(2, {
+          strikerId: "soman",
+          nonStrikerId: "saurav",
+          wicket: {
+            type: "caught",
+            dismissedPlayerId: "soman",
+            fielderId: "aninda",
+            newBatterId: "rohit",
+            completedRuns: 0
+          }
+        }),
+        quickEvent(3, {
+          strikerId: "rohit",
+          nonStrikerId: "saurav",
+          wicket: {
+            type: "bowled",
+            dismissedPlayerId: "rohit",
+            fielderId: null,
+            newBatterId: null,
+            completedRuns: 0
+          }
+        })
+      ],
+      {
+        battingPlayerIds: ["naim", "saurav", "soman", "rohit"],
+        battingMode: "two_batter"
+      }
+    )
+  );
+  const state = getInningsState({
+    battingTeamId: "teamB",
+    bowlingTeamId: "teamA",
+    battingPlayerCount: 4,
+    bowlingOvers: derived.bowlingOvers,
+    scheduledOvers: 2,
+    runs: derived.runs
+  });
+
+  assert.equal(derived.wicketsLost, 3);
+  assert.equal(derived.isLastBatterSolo, true);
+  assert.equal(state.isComplete, false);
+});
+
+test("Quick Scoring two-batter mode ends a four-player innings on the fourth wicket", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput(
+      [
+        quickEvent(1, {
+          wicket: {
+            type: "bowled",
+            dismissedPlayerId: "naim",
+            fielderId: null,
+            newBatterId: "soman",
+            completedRuns: 0
+          }
+        }),
+        quickEvent(2, {
+          strikerId: "soman",
+          nonStrikerId: "saurav",
+          wicket: {
+            type: "caught",
+            dismissedPlayerId: "soman",
+            fielderId: "aninda",
+            newBatterId: "rohit",
+            completedRuns: 0
+          }
+        }),
+        quickEvent(3, {
+          strikerId: "rohit",
+          nonStrikerId: "saurav",
+          wicket: {
+            type: "bowled",
+            dismissedPlayerId: "rohit",
+            fielderId: null,
+            newBatterId: null,
+            completedRuns: 0
+          }
+        }),
+        quickEvent(4, {
+          strikerId: "saurav",
+          nonStrikerId: "",
+          wicket: {
+            type: "run_out",
+            dismissedPlayerId: "saurav",
+            fielderId: "aninda",
+            newBatterId: null,
+            completedRuns: 0
+          }
+        })
+      ],
+      {
+        battingPlayerIds: ["naim", "saurav", "soman", "rohit"],
+        battingMode: "two_batter"
+      }
+    )
+  );
+  const state = getInningsState({
+    battingTeamId: "teamB",
+    bowlingTeamId: "teamA",
+    battingPlayerCount: 4,
+    bowlingOvers: derived.bowlingOvers,
+    scheduledOvers: 2,
+    runs: derived.runs
+  });
+
+  assert.equal(derived.wicketsLost, 4);
+  assert.equal(state.isAllOut, true);
+  assert.equal(state.isComplete, true);
+  assert.equal(state.endReason, "all_out");
+});
+
+test("Quick Scoring single-batter mode ends a four-player innings only after four wickets", () => {
+  const firstThree = [
+    quickEvent(1, {
+      nonStrikerId: "",
+      wicket: {
+        type: "bowled",
+        dismissedPlayerId: "naim",
+        fielderId: null,
+        newBatterId: "saurav",
+        completedRuns: 0
+      }
+    }),
+    quickEvent(2, {
+      strikerId: "saurav",
+      nonStrikerId: "",
+      wicket: {
+        type: "bowled",
+        dismissedPlayerId: "saurav",
+        fielderId: null,
+        newBatterId: "soman",
+        completedRuns: 0
+      }
+    }),
+    quickEvent(3, {
+      strikerId: "soman",
+      nonStrikerId: "",
+      wicket: {
+        type: "bowled",
+        dismissedPlayerId: "soman",
+        fielderId: null,
+        newBatterId: "rohit",
+        completedRuns: 0
+      }
+    })
+  ];
+  const input = {
+    battingPlayerIds: ["naim", "saurav", "soman", "rohit"],
+    battingMode: "single_batter" as const
+  };
+  const afterThree = deriveQuickScoringInnings(quickInput(firstThree, input));
+  const allOut = deriveQuickScoringInnings(
+    quickInput(
+      [
+        ...firstThree,
+        quickEvent(4, {
+          strikerId: "rohit",
+          nonStrikerId: "",
+          wicket: {
+            type: "run_out",
+            dismissedPlayerId: "rohit",
+            fielderId: "aninda",
+            newBatterId: null,
+            completedRuns: 1
+          }
+        })
+      ],
+      input
+    )
+  );
+
+  assert.equal(getInningsState({
+    battingTeamId: "teamB",
+    bowlingTeamId: "teamA",
+    battingPlayerCount: 4,
+    bowlingOvers: afterThree.bowlingOvers,
+    scheduledOvers: 2,
+    runs: afterThree.runs
+  }).isComplete, false);
+  assert.equal(getInningsState({
+    battingTeamId: "teamB",
+    bowlingTeamId: "teamA",
+    battingPlayerCount: 4,
+    bowlingOvers: allOut.bowlingOvers,
+    scheduledOvers: 2,
+    runs: allOut.runs
+  }).endReason, "all_out");
+});
+
+test("Quick Scoring rejects duplicate dismissed-player events without inflating wickets", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      quickEvent(1, {
+        wicket: {
+          type: "bowled",
+          dismissedPlayerId: "naim",
+          fielderId: null,
+          newBatterId: "soman",
+          completedRuns: 0
+        }
+      }),
+      quickEvent(2, {
+        strikerId: "soman",
+        nonStrikerId: "saurav",
+        wicket: {
+          type: "run_out",
+          dismissedPlayerId: "naim",
+          fielderId: "aninda",
+          newBatterId: "rohit",
+          completedRuns: 0
+        }
+      })
+    ])
+  );
+
+  assert.equal(derived.wicketsLost, 1);
+  assert.match(derived.missingInformation.join(" "), /already out|not active/);
+});
+
+test("three-player innings ends only after three unique dismissals", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput(
+      [
+        quickEvent(1, {
+          wicket: {
+            type: "bowled",
+            dismissedPlayerId: "naim",
+            fielderId: null,
+            newBatterId: "soman",
+            completedRuns: 0
+          }
+        }),
+        quickEvent(2, {
+          strikerId: "soman",
+          nonStrikerId: "saurav",
+          wicket: {
+            type: "caught",
+            dismissedPlayerId: "soman",
+            fielderId: "aninda",
+            newBatterId: null,
+            completedRuns: 0
+          }
+        }),
+        quickEvent(3, {
+          strikerId: "saurav",
+          nonStrikerId: "",
+          wicket: {
+            type: "bowled",
+            dismissedPlayerId: "saurav",
+            fielderId: null,
+            newBatterId: null,
+            completedRuns: 0
+          }
+        })
+      ],
+      {
+        battingPlayerIds: ["naim", "saurav", "soman"],
+        battingMode: "two_batter"
+      }
+    )
+  );
+
+  assert.equal(getInningsState({
+    battingTeamId: "teamB",
+    bowlingTeamId: "teamA",
+    battingPlayerCount: 3,
+    bowlingOvers: derived.bowlingOvers,
+    scheduledOvers: 2,
+    runs: derived.runs
+  }).endReason, "all_out");
+});
+
+test("second innings two-batter final wicket undo reopens all-out innings", () => {
+  const events = [
+    quickEvent(1, {
+      wicket: {
+        type: "bowled",
+        dismissedPlayerId: "naim",
+        fielderId: null,
+        newBatterId: "soman",
+        completedRuns: 0
+      }
+    }),
+    quickEvent(2, {
+      strikerId: "soman",
+      nonStrikerId: "saurav",
+      wicket: {
+        type: "caught",
+        dismissedPlayerId: "soman",
+        fielderId: "aninda",
+        newBatterId: "rohit",
+        completedRuns: 0
+      }
+    }),
+    quickEvent(3, {
+      strikerId: "rohit",
+      nonStrikerId: "saurav",
+      wicket: {
+        type: "bowled",
+        dismissedPlayerId: "rohit",
+        fielderId: null,
+        newBatterId: null,
+        completedRuns: 0
+      }
+    }),
+    quickEvent(4, {
+      strikerId: "saurav",
+      nonStrikerId: "",
+      wicket: {
+        type: "caught",
+        dismissedPlayerId: "saurav",
+        fielderId: "aninda",
+        newBatterId: null,
+        completedRuns: 0
+      }
+    })
+  ];
+  const quickScoring = {
+    ...createEmptyQuickScoringMetadata(),
+    inningsPhase: "second_innings" as const,
+    inningsBEvents: events
+  };
+  const complete = deriveQuickScoringInnings(
+    quickInput(quickScoring.inningsBEvents, {
+      battingPlayerIds: ["naim", "saurav", "soman", "rohit"],
+      battingMode: "two_batter"
+    })
+  );
+  const reopenedMetadata = undoLastQuickScoringEvent(quickScoring, "teamB");
+  const reopened = deriveQuickScoringInnings(
+    quickInput(reopenedMetadata.inningsBEvents, {
+      battingPlayerIds: ["naim", "saurav", "soman", "rohit"],
+      battingMode: "two_batter"
+    })
+  );
+
+  assert.equal(getInningsState({
+    battingTeamId: "teamB",
+    bowlingTeamId: "teamA",
+    battingPlayerCount: 4,
+    bowlingOvers: complete.bowlingOvers,
+    scheduledOvers: 2,
+    runs: complete.runs
+  }).endReason, "all_out");
+  assert.equal(reopenedMetadata.inningsPhase, "second_innings");
+  assert.equal(reopened.wicketsLost, 3);
+  assert.equal(reopened.currentStrikerId, "saurav");
+  assert.equal(reopened.currentNonStrikerId, null);
+  assert.equal(reopened.isLastBatterSolo, true);
+  assert.equal(getInningsState({
+    battingTeamId: "teamB",
+    bowlingTeamId: "teamA",
+    battingPlayerCount: 4,
+    bowlingOvers: reopened.bowlingOvers,
+    scheduledOvers: 2,
+    runs: reopened.runs
+  }).isComplete, false);
+});
+
+test("second innings single-batter final wicket undo restores the active batter", () => {
+  const input = {
+    battingPlayerIds: ["naim", "saurav", "soman", "rohit"],
+    battingMode: "single_batter" as const
+  };
+  const events = [
+    quickEvent(1, {
+      nonStrikerId: "",
+      wicket: {
+        type: "bowled",
+        dismissedPlayerId: "naim",
+        fielderId: null,
+        newBatterId: "saurav",
+        completedRuns: 0
+      }
+    }),
+    quickEvent(2, {
+      strikerId: "saurav",
+      nonStrikerId: "",
+      wicket: {
+        type: "bowled",
+        dismissedPlayerId: "saurav",
+        fielderId: null,
+        newBatterId: "soman",
+        completedRuns: 0
+      }
+    }),
+    quickEvent(3, {
+      strikerId: "soman",
+      nonStrikerId: "",
+      wicket: {
+        type: "bowled",
+        dismissedPlayerId: "soman",
+        fielderId: null,
+        newBatterId: "rohit",
+        completedRuns: 0
+      }
+    }),
+    quickEvent(4, {
+      strikerId: "rohit",
+      nonStrikerId: "",
+      wicket: {
+        type: "run_out",
+        dismissedPlayerId: "rohit",
+        fielderId: "aninda",
+        newBatterId: null,
+        completedRuns: 0
+      }
+    })
+  ];
+  const quickScoring = {
+    ...createEmptyQuickScoringMetadata(),
+    inningsPhase: "second_innings" as const,
+    battingMode: "single_batter" as const,
+    inningsBEvents: events
+  };
+  const reopened = deriveQuickScoringInnings(
+    quickInput(undoLastQuickScoringEvent(quickScoring, "teamB").inningsBEvents, input)
+  );
+
+  assert.equal(reopened.wicketsLost, 3);
+  assert.equal(reopened.currentStrikerId, "rohit");
+  assert.equal(reopened.currentNonStrikerId, null);
+  assert.equal(reopened.battingMode, "single_batter");
+  assert.equal(getInningsState({
+    battingTeamId: "teamB",
+    bowlingTeamId: "teamA",
+    battingPlayerCount: 4,
+    bowlingOvers: reopened.bowlingOvers,
+    scheduledOvers: 2,
+    runs: reopened.runs
+  }).isComplete, false);
+});
+
+test("second innings final scheduled legal ball undo reopens the over", () => {
+  const quickScoring = {
+    ...createEmptyQuickScoringMetadata(),
+    inningsPhase: "second_innings" as const,
+    inningsBEvents: [
+      ...quickLegalOver(1, "aninda"),
+      ...quickLegalOver(7, "dipanjan").slice(0, 5),
+      quickEvent(12, {
+        strikerId: "saurav",
+        nonStrikerId: "naim",
+        bowlerId: "dipanjan",
+        batterRuns: 0
+      })
+    ]
+  };
+  const complete = deriveQuickScoringInnings(quickInput(quickScoring.inningsBEvents));
+  const reopened = deriveQuickScoringInnings(
+    quickInput(undoLastQuickScoringEvent(quickScoring, "teamB").inningsBEvents)
+  );
+
+  assert.equal(getInningsState({
+    battingTeamId: "teamB",
+    bowlingTeamId: "teamA",
+    battingPlayerCount: 4,
+    bowlingOvers: complete.bowlingOvers,
+    scheduledOvers: 2,
+    runs: complete.runs
+  }).endReason, "overs_completed");
+  assert.equal(reopened.legalBalls, 11);
+  assert.equal(formatCricketOversFromLegalBalls(reopened.legalBalls), "1.5");
+  assert.equal(reopened.currentBowlerId, "dipanjan");
+  assert.equal(getInningsState({
+    battingTeamId: "teamB",
+    bowlingTeamId: "teamA",
+    battingPlayerCount: 4,
+    bowlingOvers: reopened.bowlingOvers,
+    scheduledOvers: 2,
+    runs: reopened.runs
+  }).isComplete, false);
+});
+
+test("second innings target-reaching delivery undo restores chase below target", () => {
+  const quickScoring = {
+    ...createEmptyQuickScoringMetadata(),
+    inningsPhase: "second_innings" as const,
+    inningsBEvents: [
+      quickEvent(1, { batterRuns: 4 }),
+      quickEvent(2, { strikerId: "naim", nonStrikerId: "saurav", batterRuns: 3 }),
+      quickEvent(3, { strikerId: "saurav", nonStrikerId: "naim", batterRuns: 4 }),
+      quickEvent(4, { strikerId: "saurav", nonStrikerId: "naim", batterRuns: 1 })
+    ]
+  };
+  const complete = deriveQuickScoringInnings(quickInput(quickScoring.inningsBEvents));
+  const reopened = deriveQuickScoringInnings(
+    quickInput(undoLastQuickScoringEvent(quickScoring, "teamB").inningsBEvents)
+  );
+
+  assert.equal(complete.runs, 12);
+  assert.equal(getInningsState({
+    battingTeamId: "teamB",
+    bowlingTeamId: "teamA",
+    battingPlayerCount: 4,
+    bowlingOvers: complete.bowlingOvers,
+    scheduledOvers: 2,
+    runs: complete.runs,
+    target: 12
+  }).endReason, "target_reached");
+  assert.equal(reopened.runs, 11);
+  assert.equal(getInningsState({
+    battingTeamId: "teamB",
+    bowlingTeamId: "teamA",
+    battingPlayerCount: 4,
+    bowlingOvers: reopened.bowlingOvers,
+    scheduledOvers: 2,
+    runs: reopened.runs,
+    target: 12
+  }).isComplete, false);
+  assert.equal(getLiveResultPreview({
+    firstInnings: innings("teamA", 11, 3, 4),
+    secondInnings: innings("teamB", reopened.runs, reopened.wicketsLost, 4),
+    chasingTeamName: "Team B",
+    matchStatus: "in_progress",
+    firstInningsIsComplete: true
+  }).headline, "TEAM B NEEDS 1 RUN");
+});
+
+test("undoing the final wicket reverses bowler catcher run-out and score credits", () => {
+  const caughtEvents = [
+    quickEvent(1, { batterRuns: 2 }),
+    quickEvent(2, {
+      strikerId: "naim",
+      nonStrikerId: "saurav",
+      wicket: {
+        type: "caught",
+        dismissedPlayerId: "naim",
+        fielderId: "aninda",
+        newBatterId: "soman",
+        completedRuns: 0
+      }
+    })
+  ];
+  const caughtComplete = deriveQuickScoringInnings(quickInput(caughtEvents));
+  const caughtReopened = deriveQuickScoringInnings(
+    quickInput(
+      undoLastQuickScoringEvent({
+        ...createEmptyQuickScoringMetadata(),
+        inningsPhase: "second_innings",
+        inningsBEvents: caughtEvents
+      }, "teamB").inningsBEvents
+    )
+  );
+  const runOutEvents = [
+    quickEvent(1, { batterRuns: 2 }),
+    quickEvent(2, {
+      strikerId: "naim",
+      nonStrikerId: "saurav",
+      batterRuns: 1,
+      wicket: {
+        type: "run_out",
+        dismissedPlayerId: "saurav",
+        fielderId: "aninda",
+        newBatterId: "soman",
+        completedRuns: 1
+      }
+    })
+  ];
+  const runOutComplete = deriveQuickScoringInnings(quickInput(runOutEvents));
+  const runOutReopened = deriveQuickScoringInnings(
+    quickInput(
+      undoLastQuickScoringEvent({
+        ...createEmptyQuickScoringMetadata(),
+        inningsPhase: "second_innings",
+        inningsBEvents: runOutEvents
+      }, "teamB").inningsBEvents
+    )
+  );
+
+  assert.equal(caughtComplete.runs, 2);
+  assert.equal(caughtComplete.wicketsLost, 1);
+  assert.equal(calculateBowlerWickets("aninda", caughtComplete.bowlingOvers), 1);
+  assert.equal(calculatePlayerCatches("aninda", caughtComplete.bowlingOvers), 1);
+  assert.equal(caughtReopened.runs, 2);
+  assert.equal(caughtReopened.wicketsLost, 0);
+  assert.equal(calculateBowlerWickets("aninda", caughtReopened.bowlingOvers), 0);
+  assert.equal(calculatePlayerCatches("aninda", caughtReopened.bowlingOvers), 0);
+  assert.equal(runOutComplete.runs, 3);
+  assert.equal(runOutComplete.wicketsLost, 1);
+  assert.equal(calculatePlayerRunOuts("aninda", runOutComplete.bowlingOvers), 1);
+  assert.equal(calculateBowlerWickets("aninda", runOutComplete.bowlingOvers), 0);
+  assert.equal(runOutReopened.runs, 2);
+  assert.equal(runOutReopened.wicketsLost, 0);
+  assert.equal(calculatePlayerRunOuts("aninda", runOutReopened.bowlingOvers), 0);
+});
+
 test("first delivery can be recorded after selecting required two-batter players", () => {
   const derived = deriveQuickScoringInnings(
     quickInput(
@@ -2076,7 +2676,7 @@ test("Quick Scoring remains editable for admin after Start Match locks setup", (
 test("Quick Scoring editability does not depend on setup team-control state", () => {
   const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
   const quickScoringEditableBlock =
-    form.match(/const quickScoringCanBeEdited = canEditQuickScoring\(\{[\s\S]*?\}\);/)?.[0] ?? "";
+    form.match(/const quickScoringBaseCanBeEdited = canEditQuickScoring\(\{[\s\S]*?\}\);/)?.[0] ?? "";
 
   assert.equal(
     canEditQuickScoring({
@@ -2089,14 +2689,15 @@ test("Quick Scoring editability does not depend on setup team-control state", ()
     true
   );
   assert.match(form, /const canUseTeamControls =/);
-  assert.match(form, /const quickScoringCanBeEdited = canEditQuickScoring/);
+  assert.match(form, /const quickScoringBaseCanBeEdited = canEditQuickScoring/);
+  assert.match(form, /quickScoringBaseCanBeEdited && !quickActiveInningsState\.isComplete/);
   assert.doesNotMatch(quickScoringEditableBlock, /canUseTeamControls/);
 });
 
 test("Quick Scoring selector disabled state uses scoring editability not roster lock", () => {
   const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
 
-  assert.match(form, /const quickScoringCanBeEdited = canEditQuickScoring/);
+  assert.match(form, /const quickScoringBaseCanBeEdited = canEditQuickScoring/);
   assert.match(form, /disabled=\{!quickScoringCanBeEdited\}/);
   assert.match(form, /if \(!quickScoringCanBeEdited \|\| errorCount > 0\)/);
   assert.doesNotMatch(
@@ -2199,6 +2800,89 @@ test("detailed bowling and player records are collapsed by default but remain mo
   assert.match(form, /detailedRecordsExpanded \? "Hide Records" : "View Records"/);
   assert.match(form, /<TeamBowlingSection/);
   assert.match(form, /<TeamPlayerRecordsSection/);
+});
+
+test("player of the match uses automatic recommendation until manually overridden", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const playerOfMatch = readFileSync("lib/player-of-match.ts", "utf8");
+
+  assert.match(form, /const \[playerOfMatchSelectionMode, setPlayerOfMatchSelectionMode\] = useState/);
+  assert.match(form, /playerOfMatchSelectionMode !== "auto"/);
+  assert.match(form, /playerOfMatchRecommendation\.recommendedPlayerId/);
+  assert.match(form, /performance\.playerId === recommendedPlayerId/);
+  assert.match(form, /performance\.playerOfMatch/);
+  assert.match(form, /setPlayerOfMatchSelectionMode\("manual"\)/);
+  assert.match(playerOfMatch, /calculatePrePomPlayerMatchXP/);
+  assert.match(playerOfMatch, /calculatePrePomSharedPlayerMatchXP/);
+  assert.match(playerOfMatch, /playerOfMatch:\s*false/);
+  assert.match(playerOfMatch, /const isTie = leaders\.length > 1/);
+  assert.match(playerOfMatch, /recommendedPlayerId: isTie \? null : leaders\[0\]\?\.playerId \?\? null/);
+});
+
+test("completed quick-scoring innings locks scoring controls but keeps undo available", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.match(form, /quickScoringBaseCanBeEdited && !quickActiveInningsState\.isComplete/);
+  assert.match(form, /const canUndoQuickScoring =\s*!isLocked && status === "in_progress" && quickActiveEvents\.length > 0/);
+  assert.match(form, /canUndo=\{canUndoQuickScoring\}/);
+  assert.match(form, /const inningsIsComplete = inningsState\.isComplete/);
+  assert.match(form, /const scoringDisabled = disabled \|\| inningsIsComplete/);
+  assert.match(form, /inningsCompleteMessage \?\? "Innings Complete"/);
+  assert.match(form, /Review the innings before continuing\./);
+  assert.match(form, /onClick=\{onUndo\}/);
+  assert.match(form, /disabled=\{!canUndo\}/);
+  assert.match(form, /\{!inningsIsComplete \? \(/);
+  assert.match(form, /className="quick-completion-undo"/);
+  assert.match(css, /\.quick-completion-undo\s*{[\s\S]*?min-height:\s*48px;/);
+  assert.match(css, /\.quick-completion-undo\s*{[\s\S]*?width:\s*min\(100%, 280px\);/);
+  assert.match(css, /\.quick-completion-undo\s*{[\s\S]*?border:\s*2px solid/);
+  assert.doesNotMatch(form, /Undo Last Ball[\s\S]{0,120}disabled=\{disabled\}/);
+});
+
+test("first-innings break exposes protected Undo without enabling normal scoring", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const inningsBreakBlock = form.slice(
+    form.indexOf("function InningsBreakPanel"),
+    form.indexOf("function QuickScoringPanel")
+  );
+
+  assert.match(inningsBreakBlock, /onStartSecondInnings/);
+  assert.match(inningsBreakBlock, /canUndo: boolean/);
+  assert.match(inningsBreakBlock, /onUndo: \(\) => void/);
+  assert.match(inningsBreakBlock, /START SECOND INNINGS/);
+  assert.match(inningsBreakBlock, /UNDO LAST BALL/);
+  assert.match(inningsBreakBlock, /disabled=\{!canUndo\}/);
+});
+
+test("single-batter and last-batter-solo run outs dismiss the active batter automatically", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+
+  assert.match(form, /const effectiveRunOutDismissedPlayerId =\s*requiresNonStriker\s*\?\s*wicketDraft\.dismissedPlayerId\s*:\s*selection\.strikerId/);
+  assert.match(form, /event\.target\.value === "run_out"[\s\S]*?\? requiresNonStriker[\s\S]*?\? ""[\s\S]*?: selection\.strikerId/);
+  assert.match(form, /Batter being run out: <strong>\{effectiveRunOutBatterName\}<\/strong>/);
+  assert.match(form, /quickWicketDraft\.type === "run_out"[\s\S]*?quickRequiresNonStriker[\s\S]*?\? quickWicketDraft\.dismissedPlayerId[\s\S]*?: quickSelection\.strikerId/);
+});
+
+test("quick scoring autosave remains immediate and records every quick-scoring state update", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const autosaveBlock = form.slice(
+    form.indexOf("async function autosaveQuickScoring"),
+    form.indexOf("function resetQuickDeliveryEditors")
+  );
+  const updateBlock = form.slice(
+    form.indexOf("function updateQuickScoring"),
+    form.indexOf("function resetQuickDeliveryEditors")
+  );
+
+  assert.match(autosaveBlock, /setQuickSaveStatus\("Saving\.\.\."\)/);
+  assert.match(autosaveBlock, /persistNonFinalisedMatch/);
+  assert.match(autosaveBlock, /buildCurrentMatchRecord\([\s\S]*?nextQuickScoring/);
+  assert.match(autosaveBlock, /setQuickSaveStatus\(saved \? "Saved" : "Save needed"\)/);
+  assert.match(updateBlock, /setQuickScoring\(nextQuickScoring\)/);
+  assert.match(updateBlock, /void autosaveQuickScoring\(nextQuickScoring\)/);
+  assert.doesNotMatch(autosaveBlock, /setTimeout|setInterval/);
+  assert.doesNotMatch(updateBlock, /setTimeout|setInterval/);
 });
 
 test("mobile live scoring uses compact score and keeps detailed score cards secondary", () => {
@@ -3232,6 +3916,42 @@ test("draft live preview never announces a winner or margin", () => {
     detail: "RESULT WILL BE CONFIRMED AFTER FINALISATION"
   });
   assert.doesNotMatch(preview.headline, /WINS|BY \d+ WICKETS|BY \d+ RUNS|MATCH TIED/);
+});
+
+test("live result preview uses target minus chasing score for runs needed", () => {
+  const first = innings("teamA", 11, 3, 4);
+
+  assert.equal(getLiveResultPreview({
+    firstInnings: first,
+    secondInnings: innings("teamB", 0, 0, 4),
+    chasingTeamName: "Team B",
+    matchStatus: "in_progress",
+    firstInningsIsComplete: true
+  }).headline, "TEAM B NEEDS 12 RUNS");
+  assert.equal(getLiveResultPreview({
+    firstInnings: first,
+    secondInnings: innings("teamB", 7, 0, 4),
+    chasingTeamName: "Team B",
+    matchStatus: "in_progress",
+    firstInningsIsComplete: true
+  }).headline, "TEAM B NEEDS 5 RUNS");
+  assert.equal(getLiveResultPreview({
+    firstInnings: first,
+    secondInnings: innings("teamB", 11, 0, 4),
+    chasingTeamName: "Team B",
+    matchStatus: "in_progress",
+    firstInningsIsComplete: true
+  }).headline, "TEAM B NEEDS 1 RUN");
+  assert.deepEqual(getLiveResultPreview({
+    firstInnings: first,
+    secondInnings: innings("teamB", 12, 0, 4),
+    chasingTeamName: "Team B",
+    matchStatus: "in_progress",
+    firstInningsIsComplete: true
+  }), {
+    headline: "TARGET REACHED",
+    detail: "FINALISE THE MATCH TO CONFIRM THE RESULT"
+  });
 });
 
 test("target reached before finalisation stays neutral", () => {
