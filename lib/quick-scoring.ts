@@ -25,6 +25,7 @@ export type QuickScoringInningsInput = {
   bowlingTeamId: TeamId;
   battingPlayerIds: string[];
   bowlingPlayerIds?: string[];
+  fieldingPlayerIds?: string[];
   events: QuickScoringEvent[];
   battingMode?: BattingMode | null;
 };
@@ -267,6 +268,7 @@ export function deriveQuickScoringInnings({
   bowlingTeamId,
   battingPlayerIds,
   bowlingPlayerIds,
+  fieldingPlayerIds,
   events,
   battingMode: inputBattingMode
 }: QuickScoringInningsInput): QuickScoringDerivedInnings {
@@ -276,6 +278,7 @@ export function deriveQuickScoringInnings({
   const oversByNumber = new Map<number, BowlingOver>();
   const eventsByOverNumber = new Map<number, QuickScoringEvent[]>();
   const missingInformation: string[] = [];
+  const eligibleFieldingPlayerIds = fieldingPlayerIds ?? bowlingPlayerIds ?? [];
   const dismissedPlayerIds = new Set<string>();
   let runs = 0;
   let extras = 0;
@@ -449,9 +452,9 @@ export function deriveQuickScoringInnings({
       }
 
       if (
-        bowlingPlayerIds &&
+        (fieldingPlayerIds || bowlingPlayerIds) &&
         event.wicket.fielderId &&
-        !bowlingPlayerIds.includes(event.wicket.fielderId)
+        !eligibleFieldingPlayerIds.includes(event.wicket.fielderId)
       ) {
         missingInformation.push(`Event ${event.sequence} has an ineligible fielder.`);
       }

@@ -243,6 +243,7 @@ function collectTeamPlayerIds(team: TeamMatchData): string[] {
 function collectMatchPlayerIds(match: MatchRecord): string[] {
   return [
     match.sharedPlayerId ?? "",
+    ...(match.fieldingHelperIds ?? []),
     ...collectTeamPlayerIds(match.teams.teamA),
     ...collectTeamPlayerIds(match.teams.teamB),
     ...match.innings.first.battingPerformances.flatMap(collectPerformancePlayerIds),

@@ -228,6 +228,7 @@ export type MatchRecord = {
   battingFirstTeamId: TeamId | null;
   chasingTeamId: TeamId | null;
   sharedPlayerId?: string | null;
+  fieldingHelperIds?: string[];
   teams: {
     teamA: TeamMatchData;
     teamB: TeamMatchData;

@@ -41,6 +41,8 @@ import {
   calculatePlayerStumpings,
   applySharedPlayerToRosters,
   getFinalResultHeadline,
+  getEligibleFieldingPlayerIds,
+  getFieldingHelperIds,
   calculateMatchResult,
   formatInningsScore,
   getDismissedBatterIds,
@@ -376,6 +378,93 @@ function ErrorText({ children }: { children?: string }) {
   );
 }
 
+function FieldingHelperControls({
+  players,
+  sharedPlayerId,
+  selectedHelperIds,
+  disabled,
+  onToggle,
+  onSelectAll,
+  onClear
+}: {
+  players: Player[];
+  sharedPlayerId: string | null;
+  selectedHelperIds: string[];
+  disabled: boolean;
+  onToggle: (playerId: string, selected: boolean) => void;
+  onSelectAll: () => void;
+  onClear: () => void;
+}) {
+  const selectedIds = new Set(selectedHelperIds);
+  const selectablePlayers = players.filter((player) => player.id !== sharedPlayerId);
+
+  return (
+    <section className="mt-4 rounded-lg border border-neon-green/30 bg-neon-green/10 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h4 className="text-lg font-black uppercase text-neon-green">
+            Fielding Helpers - Optional
+          </h4>
+          <p className="text-sm font-bold text-green-100/85">
+            Select players who may help field for either side. Fielding helpers can take catches and run-outs for either team, but cannot bowl for the opposite side.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={disabled || selectablePlayers.length === 0}
+            onClick={onSelectAll}
+          >
+            SELECT ALL
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={disabled || selectedHelperIds.length === 0}
+            onClick={onClear}
+          >
+            CLEAR HELPERS
+          </Button>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {players.length === 0 ? (
+          <p className="rounded-md border border-white/10 bg-black/25 p-3 text-sm font-bold text-stone-300 sm:col-span-2 lg:col-span-4">
+            Mark players Available Today before choosing helpers.
+          </p>
+        ) : null}
+        {players.map((player) => {
+          const isShared = player.id === sharedPlayerId;
+
+          return (
+            <label
+              key={`fielding-helper-${player.id}`}
+              className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-stone-100 hover:bg-white/10 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
+            >
+              <span className="flex flex-wrap items-center gap-2">
+                {player.name}
+                {isShared ? (
+                  <b className="rounded border border-neon-yellow/35 bg-neon-yellow/10 px-2 py-0.5 text-[10px] font-black uppercase text-neon-yellow">
+                    Auto eligible
+                  </b>
+                ) : null}
+              </span>
+              <input
+                type="checkbox"
+                checked={isShared || selectedIds.has(player.id)}
+                disabled={disabled || isShared}
+                onChange={(event) => onToggle(player.id, event.target.checked)}
+                className="h-5 w-5 accent-neon-green"
+              />
+            </label>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export function MockMatchEntryForm({
   initialMatch = null,
   matches: suppliedMatches,
@@ -408,6 +497,13 @@ export function MockMatchEntryForm({
   );
   const [sharedPlayerId, setSharedPlayerId] = useState<string | null>(
     () => initialMatch?.sharedPlayerId ?? null
+  );
+  const [fieldingHelperIds, setFieldingHelperIds] = useState<string[]>(() =>
+    getFieldingHelperIds({
+      availablePlayerIds: initialMatch ? getAvailablePlayerIdsFromMatch(initialMatch) : [],
+      sharedPlayerId: initialMatch?.sharedPlayerId ?? null,
+      fieldingHelperIds: initialMatch?.fieldingHelperIds
+    })
   );
   const [battingFirstTeamId, setBattingFirstTeamId] = useState<TeamId | "">(
     () => initialMatch?.battingFirstTeamId ?? ""
@@ -475,6 +571,8 @@ export function MockMatchEntryForm({
   const [playerUpdateAssignments, setPlayerUpdateAssignments] = useState<
     Record<string, PlayerAssignment>
   >({});
+  const [playerUpdateFieldingHelperIds, setPlayerUpdateFieldingHelperIds] =
+    useState<string[]>([]);
   const [playerUpdateErrors, setPlayerUpdateErrors] = useState<string[]>([]);
   const [cancelConfirmationOpen, setCancelConfirmationOpen] = useState(false);
   const [restartSetupNoticeOpen, setRestartSetupNoticeOpen] = useState(false);
@@ -503,6 +601,7 @@ export function MockMatchEntryForm({
     teamA.length === 0 &&
     teamB.length === 0 &&
     sharedPlayerId === null &&
+    fieldingHelperIds.length === 0 &&
     bowlingOvers.teamA.length === 0 &&
     bowlingOvers.teamB.length === 0 &&
     Object.keys(performances).length === 0;
@@ -587,6 +686,13 @@ export function MockMatchEntryForm({
     setTeamA(initialMatch.teams.teamA.playerIds);
     setTeamB(initialMatch.teams.teamB.playerIds);
     setSharedPlayerId(initialMatch.sharedPlayerId ?? null);
+    setFieldingHelperIds(
+      getFieldingHelperIds({
+        availablePlayerIds: getAvailablePlayerIdsFromMatch(initialMatch),
+        sharedPlayerId: initialMatch.sharedPlayerId ?? null,
+        fieldingHelperIds: initialMatch.fieldingHelperIds
+      })
+    );
     setBattingFirstTeamId(initialMatch.battingFirstTeamId ?? "");
     setQuickScoring(initialMatch.quickScoring ?? createEmptyQuickScoringMetadata());
     setSetupExpanded(
@@ -647,6 +753,35 @@ export function MockMatchEntryForm({
     () => activePlayers.filter((player) => availablePlayerIds.includes(player.id)),
     [availablePlayerIds]
   );
+  const normalisedFieldingHelperIds = useMemo(
+    () =>
+      getFieldingHelperIds({
+        availablePlayerIds,
+        sharedPlayerId,
+        fieldingHelperIds
+      }),
+    [availablePlayerIds, fieldingHelperIds, sharedPlayerId]
+  );
+  const fieldingHelperPlayers = useMemo(
+    () =>
+      activePlayers.filter((player) =>
+        normalisedFieldingHelperIds.includes(player.id)
+      ),
+    [normalisedFieldingHelperIds]
+  );
+  const allAvailablePlayersCanFieldBothWays =
+    availablePlayerIds.length > 0 &&
+    availablePlayerIds.every(
+      (playerId) =>
+        playerId === sharedPlayerId || normalisedFieldingHelperIds.includes(playerId)
+    );
+  const fieldingHelperSummary = allAvailablePlayersCanFieldBothWays
+    ? "ALL AVAILABLE PLAYERS"
+    : fieldingHelperPlayers.length > 0
+      ? fieldingHelperPlayers.map((player) => player.name).join(", ")
+      : sharedPlayerId
+        ? `${getPlayerDisplayName(activePlayers, sharedPlayerId)} auto eligible`
+        : "No extra helpers";
   const unassignedPlayers = useMemo(
     () =>
       availablePlayers.filter(
@@ -665,6 +800,18 @@ export function MockMatchEntryForm({
     () => activePlayers.filter((player) => teamB.includes(player.id)),
     [teamB]
   );
+  const teamAFieldingPlayers = getPlayerOptionsByIds(
+    getEligibleFieldingPlayerIds({
+      bowlingPlayerIds: teamA,
+      fieldingHelperIds: normalisedFieldingHelperIds
+    })
+  );
+  const teamBFieldingPlayers = getPlayerOptionsByIds(
+    getEligibleFieldingPlayerIds({
+      bowlingPlayerIds: teamB,
+      fieldingHelperIds: normalisedFieldingHelperIds
+    })
+  );
   const activeBattingMode: BattingMode =
     values.battingMode || quickScoring.battingMode || DEFAULT_BATTING_MODE;
   const validationBattingMode =
@@ -676,10 +823,14 @@ export function MockMatchEntryForm({
         bowlingTeamId: "teamB",
         battingPlayerIds: teamA,
         bowlingPlayerIds: teamB,
+        fieldingPlayerIds: getEligibleFieldingPlayerIds({
+          bowlingPlayerIds: teamB,
+          fieldingHelperIds: normalisedFieldingHelperIds
+        }),
         events: quickScoring.inningsAEvents,
         battingMode: activeBattingMode
       }),
-    [activeBattingMode, quickScoring.inningsAEvents, teamA, teamB]
+    [activeBattingMode, normalisedFieldingHelperIds, quickScoring.inningsAEvents, teamA, teamB]
   );
   const quickTeamBDerived = useMemo(
     () =>
@@ -688,10 +839,14 @@ export function MockMatchEntryForm({
         bowlingTeamId: "teamA",
         battingPlayerIds: teamB,
         bowlingPlayerIds: teamA,
+        fieldingPlayerIds: getEligibleFieldingPlayerIds({
+          bowlingPlayerIds: teamA,
+          fieldingHelperIds: normalisedFieldingHelperIds
+        }),
         events: quickScoring.inningsBEvents,
         battingMode: activeBattingMode
       }),
-    [activeBattingMode, quickScoring.inningsBEvents, teamA, teamB]
+    [activeBattingMode, normalisedFieldingHelperIds, quickScoring.inningsBEvents, teamA, teamB]
   );
   const hasQuickScoringEvents =
     quickScoring.inningsAEvents.length + quickScoring.inningsBEvents.length > 0;
@@ -760,6 +915,7 @@ export function MockMatchEntryForm({
     teamBSize: teamB.length,
     sharedSlots: sharedPlayerId ? 1 : 0
   };
+
   const canEditLockedSetup =
     setupIsLocked && !isFinalised && !hasQuickScoringEvents;
   const setupErrors = useMemo<SetupValidationErrors>(() => {
@@ -848,9 +1004,10 @@ export function MockMatchEntryForm({
         "teamA",
         performances,
         bowlingOvers.teamA,
-        bowlingOvers.teamB
+        bowlingOvers.teamB,
+        normalisedFieldingHelperIds
       ),
-    [bowlingOvers.teamA, bowlingOvers.teamB, performances, teamAPlayers]
+    [bowlingOvers.teamA, bowlingOvers.teamB, normalisedFieldingHelperIds, performances, teamAPlayers]
   );
   const teamBPerformances = useMemo(
     () =>
@@ -859,9 +1016,10 @@ export function MockMatchEntryForm({
         "teamB",
         performances,
         bowlingOvers.teamB,
-        bowlingOvers.teamA
+        bowlingOvers.teamA,
+        normalisedFieldingHelperIds
       ),
-    [bowlingOvers.teamA, bowlingOvers.teamB, performances, teamBPlayers]
+    [bowlingOvers.teamA, bowlingOvers.teamB, normalisedFieldingHelperIds, performances, teamBPlayers]
   );
   const performanceList = useMemo(
     () => [...teamAPerformances, ...teamBPerformances],
@@ -968,6 +1126,18 @@ export function MockMatchEntryForm({
       ),
     [bowlingOvers, performanceList, quickScoring]
   );
+  const playerUpdateSharedPlayerId =
+    activePlayers.find(
+      (player) => playerUpdateAssignments[player.id] === "shared"
+    )?.id ?? null;
+  const playerUpdateAvailablePlayers = activePlayers.filter(
+    (player) => (playerUpdateAssignments[player.id] ?? "unassigned") !== "unassigned"
+  );
+  const normalisedPlayerUpdateFieldingHelperIds = getFieldingHelperIds({
+    availablePlayerIds: playerUpdateAvailablePlayers.map((player) => player.id),
+    sharedPlayerId: playerUpdateSharedPlayerId,
+    fieldingHelperIds: playerUpdateFieldingHelperIds
+  });
   const target = firstInnings.runs + 1;
   const teamABowlingInningsState = useMemo(
     () =>
@@ -1053,6 +1223,13 @@ export function MockMatchEntryForm({
     quickActiveBattingTeamId === "teamA" ? teamAPlayers : teamBPlayers;
   const quickActiveBowlingPlayers =
     quickActiveBowlingTeamId === "teamA" ? teamAPlayers : teamBPlayers;
+  const quickActiveFieldingPlayers = getPlayerOptionsByIds(
+    getEligibleFieldingPlayerIds({
+      bowlingPlayerIds:
+        quickActiveBowlingTeamId === "teamA" ? teamA : teamB,
+      fieldingHelperIds: normalisedFieldingHelperIds
+    })
+  );
   const quickActiveDerived =
     quickActiveBattingTeamId === "teamA" ? quickTeamADerived : quickTeamBDerived;
   const quickActiveEvents = getQuickScoringEventsForTeam(
@@ -1198,6 +1375,9 @@ export function MockMatchEntryForm({
     const battingPlayerIds = new Set(
       quickActiveBattingPlayers.map((player) => player.id)
     );
+    const fieldingPlayerIds = new Set(
+      quickActiveFieldingPlayers.map((player) => player.id)
+    );
     const activeBatterIds = [
       quickSelection.strikerId,
       quickRequiresNonStriker ? quickSelection.nonStrikerId : ""
@@ -1238,6 +1418,12 @@ export function MockMatchEntryForm({
         quickWicketDraft.type === "caught"
           ? "Please select the catcher."
           : "Please select the run-out fielder.";
+    } else if (
+      (quickWicketDraft.type === "caught" ||
+        quickWicketDraft.type === "run_out") &&
+      !fieldingPlayerIds.has(quickWicketDraft.fielderId)
+    ) {
+      errors.fielder = "Select a player from the fielding side or Fielding Helpers.";
     }
 
     if (
@@ -1256,6 +1442,7 @@ export function MockMatchEntryForm({
   }, [
     quickActiveBattingPlayers,
     quickActiveDerived,
+    quickActiveFieldingPlayers,
     quickRequiresNonStriker,
     quickSelection.nonStrikerId,
     quickSelection.strikerId,
@@ -1401,6 +1588,7 @@ export function MockMatchEntryForm({
     setCancelConfirmationOpen(false);
     setSetupExpanded(false);
     setPlayerUpdateAssignments(createAssignmentStateFromCurrentRosters());
+    setPlayerUpdateFieldingHelperIds(normalisedFieldingHelperIds);
     setPlayerUpdateErrors([]);
     setPlayerUpdateOpen(true);
     setMessage("Quick Scoring paused. Update players, then save or discard.");
@@ -1411,6 +1599,7 @@ export function MockMatchEntryForm({
     setPlayerUpdateOpen(false);
     setPlayerUpdateErrors([]);
     setPlayerUpdateAssignments({});
+    setPlayerUpdateFieldingHelperIds([]);
     setSetupExpanded(true);
   }
 
@@ -1427,6 +1616,7 @@ export function MockMatchEntryForm({
     setPlayerUpdateOpen(false);
     setPlayerUpdateErrors([]);
     setPlayerUpdateAssignments({});
+    setPlayerUpdateFieldingHelperIds([]);
     setSetupExpanded(false);
     setCancelConfirmationOpen(true);
   }
@@ -1435,6 +1625,7 @@ export function MockMatchEntryForm({
     setPlayerUpdateOpen(false);
     setPlayerUpdateErrors([]);
     setPlayerUpdateAssignments({});
+    setPlayerUpdateFieldingHelperIds([]);
     setMessage("Player update discarded. Quick Scoring is unchanged.");
   }
 
@@ -1449,6 +1640,47 @@ export function MockMatchEntryForm({
     }
 
     return `${playerName} has already participated in the match and cannot be reassigned.`;
+  }
+
+  function hasHelperOnlyFieldingActivity(playerId: string) {
+    const currentAssignment = getPlayerAssignment(playerId, {
+      teamAPlayerIds: teamA,
+      teamBPlayerIds: teamB,
+      sharedPlayerId
+    });
+
+    if (currentAssignment === "shared" || currentAssignment === "unassigned") {
+      return false;
+    }
+
+    const helperOnlyQuickEvent = [
+      ...quickScoring.inningsAEvents,
+      ...quickScoring.inningsBEvents
+    ].some(
+      (event) =>
+        event.wicket &&
+        (event.wicket.type === "caught" || event.wicket.type === "run_out") &&
+        event.wicket.fielderId === playerId &&
+        event.bowlingTeamId !== currentAssignment
+    );
+
+    if (helperOnlyQuickEvent) return true;
+
+    return allBowlingOvers.some(
+      (over) =>
+        over.bowlingTeamId !== currentAssignment &&
+        over.dismissals.some(
+          (dismissal) =>
+            (dismissal.type === "caught" || dismissal.type === "run_out") &&
+            dismissal.fielderId === playerId
+        )
+    );
+  }
+
+  function getLockedFieldingHelperMessage(playerId: string) {
+    const playerName = getPlayerDisplayName(activePlayers, playerId);
+
+    return `${playerName} has already helped in the field. To change that helper safely, restart this match.`;
   }
 
   function changePlayerUpdateAssignment(
@@ -1492,6 +1724,59 @@ export function MockMatchEntryForm({
 
       return next;
     });
+  }
+
+  function changePlayerUpdateFieldingHelper(
+    playerId: string,
+    selected: boolean
+  ) {
+    if (playerId === playerUpdateSharedPlayerId) return;
+
+    if (
+      !selected &&
+      playerUpdateFieldingHelperIds.includes(playerId) &&
+      hasHelperOnlyFieldingActivity(playerId)
+    ) {
+      setPlayerUpdateErrors([getLockedFieldingHelperMessage(playerId)]);
+      return;
+    }
+
+    setPlayerUpdateErrors([]);
+    setPlayerUpdateFieldingHelperIds((current) =>
+      selected
+        ? Array.from(new Set([...current, playerId]))
+        : current.filter((id) => id !== playerId)
+    );
+  }
+
+  function selectAllPlayerUpdateFieldingHelpers() {
+    const assignedPlayerIds = activePlayers
+      .filter(
+        (player) =>
+          (playerUpdateAssignments[player.id] ?? "unassigned") !== "unassigned" &&
+          player.id !== playerUpdateSharedPlayerId
+      )
+      .map((player) => player.id);
+
+    setPlayerUpdateErrors([]);
+    setPlayerUpdateFieldingHelperIds(assignedPlayerIds);
+  }
+
+  function clearPlayerUpdateFieldingHelpers() {
+    const lockedHelperIds = playerUpdateFieldingHelperIds.filter((playerId) =>
+      hasHelperOnlyFieldingActivity(playerId)
+    );
+
+    if (lockedHelperIds.length > 0) {
+      setPlayerUpdateErrors([
+        getLockedFieldingHelperMessage(lockedHelperIds[0])
+      ]);
+      setPlayerUpdateFieldingHelperIds(lockedHelperIds);
+      return;
+    }
+
+    setPlayerUpdateErrors([]);
+    setPlayerUpdateFieldingHelperIds([]);
   }
 
   function getRostersFromAssignments(assignments: Record<string, PlayerAssignment>) {
@@ -1565,10 +1850,16 @@ export function MockMatchEntryForm({
   }
 
   function validatePlayerUpdateAssignments(
-    assignments: Record<string, PlayerAssignment>
+    assignments: Record<string, PlayerAssignment>,
+    helperIds: string[]
   ) {
     const errors: string[] = [];
     const next = getRostersFromAssignments(assignments);
+    const nextFieldingHelperIds = getFieldingHelperIds({
+      availablePlayerIds: next.availablePlayerIds,
+      sharedPlayerId: next.sharedPlayerId,
+      fieldingHelperIds: helperIds
+    });
     const nextAssignmentByPlayer = new Map(
       activePlayers.map((player) => [
         player.id,
@@ -1594,6 +1885,15 @@ export function MockMatchEntryForm({
       }
     }
 
+    for (const playerId of normalisedFieldingHelperIds) {
+      if (
+        !nextFieldingHelperIds.includes(playerId) &&
+        hasHelperOnlyFieldingActivity(playerId)
+      ) {
+        errors.push(getLockedFieldingHelperMessage(playerId));
+      }
+    }
+
     const validationErrors = validateReadyToStart({
       matchDate: values.matchDate,
       matchNumber: getMatchNumberValue(values.matchNumber),
@@ -1608,6 +1908,7 @@ export function MockMatchEntryForm({
       ),
       battingMode: activeBattingMode,
       battingFirstTeamId: effectiveBattingFirstTeamId,
+      fieldingHelperIds: nextFieldingHelperIds,
       inningsExtras,
       availablePlayerIds: next.availablePlayerIds,
       teamAPlayerIds: next.teamAPlayerIds,
@@ -1621,6 +1922,7 @@ export function MockMatchEntryForm({
 
     return {
       ...next,
+      fieldingHelperIds: nextFieldingHelperIds,
       errors: [...new Set([...errors, ...validationErrors])]
     };
   }
@@ -1628,7 +1930,10 @@ export function MockMatchEntryForm({
   async function savePlayerUpdates() {
     if (!canEditMatch || status !== "in_progress") return;
 
-    const validation = validatePlayerUpdateAssignments(playerUpdateAssignments);
+    const validation = validatePlayerUpdateAssignments(
+      playerUpdateAssignments,
+      playerUpdateFieldingHelperIds
+    );
 
     if (validation.errors.length > 0) {
       setPlayerUpdateErrors(validation.errors);
@@ -1662,6 +1967,8 @@ export function MockMatchEntryForm({
         teamAPlayerIds: validation.teamAPlayerIds,
         teamBPlayerIds: validation.teamBPlayerIds,
         sharedPlayerId: validation.sharedPlayerId,
+        availablePlayerIds: validation.availablePlayerIds,
+        fieldingHelperIds: validation.fieldingHelperIds,
         performances: nextPerformances,
         bowlingOvers: nextBowlingOvers
       }
@@ -1678,6 +1985,7 @@ export function MockMatchEntryForm({
       setTeamA(validation.teamAPlayerIds);
       setTeamB(validation.teamBPlayerIds);
       setSharedPlayerId(validation.sharedPlayerId);
+      setFieldingHelperIds(validation.fieldingHelperIds);
       setPerformances(nextPerformances);
       setBowlingOvers(nextBowlingOvers);
       setQuickSelection((current) => {
@@ -1702,6 +2010,7 @@ export function MockMatchEntryForm({
       });
       setPlayerUpdateOpen(false);
       setPlayerUpdateAssignments({});
+      setPlayerUpdateFieldingHelperIds([]);
       setPlayerUpdateErrors([]);
       setQuickValidationAttempted(false);
       setWicketValidationAttempted(false);
@@ -1734,6 +2043,30 @@ export function MockMatchEntryForm({
     if (isRosterLocked) return;
     applyRosters(availablePlayerIds, [], [], sharedPlayerId);
     setMessage("Teams cleared. Available players are unchanged.");
+  }
+
+  function toggleFieldingHelper(playerId: string, selected: boolean) {
+    if (isRosterLocked || playerId === sharedPlayerId) return;
+
+    setFieldingHelperIds((current) =>
+      selected
+        ? Array.from(new Set([...current, playerId]))
+        : current.filter((id) => id !== playerId)
+    );
+  }
+
+  function selectAllFieldingHelpers() {
+    if (isRosterLocked) return;
+
+    setFieldingHelperIds(
+      availablePlayerIds.filter((playerId) => playerId !== sharedPlayerId)
+    );
+  }
+
+  function clearFieldingHelpers() {
+    if (isRosterLocked) return;
+
+    setFieldingHelperIds([]);
   }
 
   function toggleAvailability(playerId: string, isAvailable: boolean) {
@@ -2305,6 +2638,11 @@ export function MockMatchEntryForm({
           quickActiveBattingTeamId === "teamA" ? teamA : teamB,
         bowlingPlayerIds:
           quickActiveBowlingTeamId === "teamA" ? teamA : teamB,
+        fieldingPlayerIds: getEligibleFieldingPlayerIds({
+          bowlingPlayerIds:
+            quickActiveBowlingTeamId === "teamA" ? teamA : teamB,
+          fieldingHelperIds: normalisedFieldingHelperIds
+        }),
         events: nextEvents,
         battingMode: activeBattingMode
       });
@@ -2479,21 +2817,29 @@ export function MockMatchEntryForm({
     overrides: {
       matchId?: string;
       formValues?: MockMatchFormValues;
+      availablePlayerIds?: string[];
       teamAPlayerIds?: string[];
       teamBPlayerIds?: string[];
       sharedPlayerId?: string | null;
+      fieldingHelperIds?: string[];
       performances?: Record<string, PlayerMatchPerformance>;
       bowlingOvers?: TeamBowlingState;
       inningsExtras?: Record<TeamId, number>;
     } = {}
   ): MatchRecord {
     const recordValues = overrides.formValues ?? values;
+    const recordAvailablePlayerIds = overrides.availablePlayerIds ?? availablePlayerIds;
     const recordTeamA = overrides.teamAPlayerIds ?? teamA;
     const recordTeamB = overrides.teamBPlayerIds ?? teamB;
     const recordSharedPlayerId =
       overrides.sharedPlayerId === undefined
         ? sharedPlayerId
         : overrides.sharedPlayerId;
+    const recordFieldingHelperIds = getFieldingHelperIds({
+      availablePlayerIds: recordAvailablePlayerIds,
+      sharedPlayerId: recordSharedPlayerId,
+      fieldingHelperIds: overrides.fieldingHelperIds ?? fieldingHelperIds
+    });
     const recordPerformancesState = overrides.performances ?? performances;
     const recordBowlingOvers = overrides.bowlingOvers ?? bowlingOvers;
     const recordInningsExtras = overrides.inningsExtras ?? inningsExtras;
@@ -2508,14 +2854,16 @@ export function MockMatchEntryForm({
       "teamA",
       recordPerformancesState,
       recordBowlingOvers.teamA,
-      recordBowlingOvers.teamB
+      recordBowlingOvers.teamB,
+      recordFieldingHelperIds
     );
     const recordTeamBPerformances = buildPerformanceList(
       recordTeamBPlayers,
       "teamB",
       recordPerformancesState,
       recordBowlingOvers.teamB,
-      recordBowlingOvers.teamA
+      recordBowlingOvers.teamA,
+      recordFieldingHelperIds
     );
     const recordPerformanceList = [
       ...recordTeamAPerformances,
@@ -2625,6 +2973,7 @@ export function MockMatchEntryForm({
             : null
           : chasingTeamId,
       sharedPlayerId: recordSharedPlayerId,
+      fieldingHelperIds: recordFieldingHelperIds,
       quickScoring: persistedQuickScoring,
       teams: {
         teamA: {
@@ -2841,6 +3190,7 @@ export function MockMatchEntryForm({
           ),
           battingMode: validationBattingMode,
           battingFirstTeamId: battingFirstTeamId || null,
+          fieldingHelperIds: normalisedFieldingHelperIds,
           inningsExtras,
           availablePlayerIds,
           teamAPlayerIds: teamA,
@@ -3074,6 +3424,7 @@ export function MockMatchEntryForm({
         teamAPlayerIds: teamA,
         teamBPlayerIds: teamB,
         sharedPlayerId,
+        fieldingHelperIds: normalisedFieldingHelperIds,
         performances: restartPerformances,
         bowlingOvers: restartBowlingOvers,
         inningsExtras: { teamA: 0, teamB: 0 }
@@ -3108,6 +3459,7 @@ export function MockMatchEntryForm({
       setTeamA(teamA);
       setTeamB(teamB);
       setSharedPlayerId(sharedPlayerId);
+      setFieldingHelperIds(normalisedFieldingHelperIds);
       setBattingFirstTeamId(battingFirstTeamId);
       setQuickScoring(restartQuickScoring);
       setSetupExpanded(true);
@@ -3144,6 +3496,7 @@ export function MockMatchEntryForm({
     setTeamA([]);
     setTeamB([]);
     setSharedPlayerId(null);
+    setFieldingHelperIds([]);
     setBattingFirstTeamId("");
     setQuickScoring(createEmptyQuickScoringMetadata());
     setSetupExpanded(true);
@@ -3348,6 +3701,16 @@ export function MockMatchEntryForm({
                   })}
                 </div>
 
+                <FieldingHelperControls
+                  players={playerUpdateAvailablePlayers}
+                  sharedPlayerId={playerUpdateSharedPlayerId}
+                  selectedHelperIds={normalisedPlayerUpdateFieldingHelperIds}
+                  disabled={isSavingMatch}
+                  onToggle={changePlayerUpdateFieldingHelper}
+                  onSelectAll={selectAllPlayerUpdateFieldingHelpers}
+                  onClear={clearPlayerUpdateFieldingHelpers}
+                />
+
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button
                     type="button"
@@ -3526,6 +3889,9 @@ export function MockMatchEntryForm({
                 <div className="locked-setup-item rounded-md border border-neon-yellow/25 bg-black/25 p-3 text-sm font-black uppercase text-neon-yellow">
                   {getBattingModeLabel(activeBattingMode)}
                 </div>
+                <div className="locked-setup-item rounded-md border border-neon-green/25 bg-black/25 p-3 text-sm font-black uppercase text-neon-green md:col-span-2">
+                  Fielding Helpers: {fieldingHelperSummary}
+                </div>
               </div>
               </>
             ) : (
@@ -3681,6 +4047,15 @@ export function MockMatchEntryForm({
                     {renderUnassignedPlayers()}
                     {renderAssignedTeam("B", teamB)}
                   </div>
+                  <FieldingHelperControls
+                    players={availablePlayers}
+                    sharedPlayerId={sharedPlayerId}
+                    selectedHelperIds={normalisedFieldingHelperIds}
+                    disabled={isRosterLocked}
+                    onToggle={toggleFieldingHelper}
+                    onSelectAll={selectAllFieldingHelpers}
+                    onClear={clearFieldingHelpers}
+                  />
                 </section>
 
                 <section className="rounded-lg border border-white/12 bg-black/20 p-4">
@@ -3896,6 +4271,7 @@ export function MockMatchEntryForm({
             }
             battingPlayers={quickActiveBattingPlayers}
             bowlingPlayers={quickActiveBowlingPlayers}
+            fieldingPlayers={quickActiveFieldingPlayers}
             battingMode={activeBattingMode}
             requiresNonStriker={quickRequiresNonStriker}
             isLastBatterSolo={quickActiveDerived.isLastBatterSolo}
@@ -3997,6 +4373,7 @@ export function MockMatchEntryForm({
                 teamId="teamA"
                 teamName={values.teamAName}
                 players={teamAPlayers}
+                fieldingPlayers={teamAFieldingPlayers}
                 battingPlayers={teamBPlayers}
                 battingTeamPlayerCount={teamB.length}
                 overs={bowlingOvers.teamA}
@@ -4018,6 +4395,7 @@ export function MockMatchEntryForm({
             teamId="teamA"
             teamName={values.teamAName}
             players={teamAPlayers}
+            fieldingPlayers={teamAFieldingPlayers}
             battingPlayers={teamBPlayers}
             battingTeamPlayerCount={teamB.length}
             overs={bowlingOvers.teamA}
@@ -4045,6 +4423,7 @@ export function MockMatchEntryForm({
                 teamId="teamB"
                 teamName={values.teamBName}
                 players={teamBPlayers}
+                fieldingPlayers={teamBFieldingPlayers}
                 battingPlayers={teamAPlayers}
                 battingTeamPlayerCount={teamA.length}
                 overs={bowlingOvers.teamB}
@@ -4066,6 +4445,7 @@ export function MockMatchEntryForm({
             teamId="teamB"
             teamName={values.teamBName}
             players={teamBPlayers}
+            fieldingPlayers={teamBFieldingPlayers}
             battingPlayers={teamAPlayers}
             battingTeamPlayerCount={teamA.length}
             overs={bowlingOvers.teamB}
@@ -4479,9 +4859,11 @@ function buildPerformanceList(
   teamId: TeamId,
   performances: Record<string, PlayerMatchPerformance>,
   ownBowlingOvers: BowlingOver[],
-  opposingBowlingOvers: BowlingOver[]
+  opposingBowlingOvers: BowlingOver[],
+  fieldingHelperIds: string[]
 ): PlayerMatchPerformance[] {
   const dismissedBatterIds = new Set(getDismissedBatterIds(opposingBowlingOvers));
+  const helperIdSet = new Set(fieldingHelperIds);
 
   return teamPlayers.map((player) => {
     const key = getPerformanceKey(player.id, teamId);
@@ -4501,8 +4883,14 @@ function buildPerformanceList(
       wasOut: wasDismissed,
       wickets: calculateBowlerWickets(player.id, ownBowlingOvers),
       hatTricks: calculatePlayerHatTricks(player.id, ownBowlingOvers),
-      catches: calculatePlayerCatches(player.id, ownBowlingOvers),
-      runOuts: calculatePlayerRunOuts(player.id, ownBowlingOvers),
+      catches: calculatePlayerCatches(player.id, ownBowlingOvers) +
+        (helperIdSet.has(player.id)
+          ? calculatePlayerCatches(player.id, opposingBowlingOvers)
+          : 0),
+      runOuts: calculatePlayerRunOuts(player.id, ownBowlingOvers) +
+        (helperIdSet.has(player.id)
+          ? calculatePlayerRunOuts(player.id, opposingBowlingOvers)
+          : 0),
       stumpings: calculatePlayerStumpings(player.id, ownBowlingOvers)
     };
   });
@@ -4639,6 +5027,12 @@ function formatQuickOverBalls(legalBalls: number): string {
 
 function getPlayerDisplayName(players: Player[], playerId: string): string {
   return players.find((player) => player.id === playerId)?.name ?? "Select player";
+}
+
+function getPlayerOptionsByIds(playerIds: string[]): Player[] {
+  const idSet = new Set(playerIds);
+
+  return activePlayers.filter((player) => idSet.has(player.id));
 }
 
 function getFriendlyWorkflowStatus(status: MatchStatus, saveStatus: string): string {
@@ -4912,6 +5306,7 @@ function QuickScoringPanel({
   bowlingTeamName,
   battingPlayers,
   bowlingPlayers,
+  fieldingPlayers,
   battingMode,
   requiresNonStriker,
   isLastBatterSolo,
@@ -4943,6 +5338,7 @@ function QuickScoringPanel({
   bowlingTeamName: string;
   battingPlayers: Player[];
   bowlingPlayers: Player[];
+  fieldingPlayers: Player[];
   battingMode: BattingMode;
   requiresNonStriker: boolean;
   isLastBatterSolo: boolean;
@@ -5386,7 +5782,7 @@ function QuickScoringPanel({
                 }
               >
                 <option value="">Select fielder</option>
-                {bowlingPlayers.map((player) => (
+                {fieldingPlayers.map((player) => (
                   <option key={`quick-fielder-${player.id}`} value={player.id}>
                     {player.name}
                   </option>
@@ -5511,6 +5907,7 @@ function TeamBowlingSection({
   teamId,
   teamName,
   players: teamPlayers,
+  fieldingPlayers,
   battingPlayers,
   battingTeamPlayerCount,
   overs,
@@ -5527,6 +5924,7 @@ function TeamBowlingSection({
   teamId: TeamId;
   teamName: string;
   players: Player[];
+  fieldingPlayers: Player[];
   battingPlayers: Player[];
   battingTeamPlayerCount: number;
   overs: BowlingOver[];
@@ -5758,6 +6156,7 @@ function TeamBowlingSection({
                     over={over}
                     battingPlayers={battingPlayers}
                     bowlingPlayers={teamPlayers}
+                    fieldingPlayers={fieldingPlayers}
                     dismissedBatterIds={
                       new Set([
                         ...dismissedBatterIdsInOtherOvers,
@@ -5789,6 +6188,7 @@ function DismissalEditor({
   over,
   battingPlayers,
   bowlingPlayers,
+  fieldingPlayers,
   dismissedBatterIds,
   isLocked,
   onUpdate,
@@ -5799,6 +6199,7 @@ function DismissalEditor({
   over: BowlingOver;
   battingPlayers: Player[];
   bowlingPlayers: Player[];
+  fieldingPlayers: Player[];
   dismissedBatterIds: Set<string>;
   isLocked: boolean;
   onUpdate: (updates: Partial<DismissalEvent>) => void;
@@ -5838,7 +6239,7 @@ function DismissalEditor({
   const fielderOptions =
     dismissal.type === "stumped"
       ? bowlingPlayers.filter((player) => player.id !== over.bowlerId)
-      : bowlingPlayers;
+      : fieldingPlayers;
   const safeFielderOptions = fielderOptions.filter(
     (player) => player.id !== dismissal.dismissedBatterId
   );

@@ -71,7 +71,8 @@ function getAvailablePlayerIds(match: MatchRecord): string[] {
     new Set([
       ...match.teams.teamA.playerIds,
       ...match.teams.teamB.playerIds,
-      match.sharedPlayerId ?? ""
+      match.sharedPlayerId ?? "",
+      ...(match.fieldingHelperIds ?? [])
     ].filter(Boolean))
   );
 }
@@ -101,6 +102,7 @@ function validationInputFromMatch(match: MatchRecord): MatchValidationInput {
     teamAPlayerIds: match.teams.teamA.playerIds,
     teamBPlayerIds: match.teams.teamB.playerIds,
     sharedPlayerId: match.sharedPlayerId,
+    fieldingHelperIds: match.fieldingHelperIds ?? [],
     performances: [
       ...match.teams.teamA.playerPerformances,
       ...match.teams.teamB.playerPerformances

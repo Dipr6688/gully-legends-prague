@@ -22,6 +22,8 @@ import {
   getInningsCompleteMessage,
   getInningsState,
   getFinalResultHeadline,
+  getEligibleFieldingPlayerIds,
+  getFieldingHelperIds,
   getLiveInningsScore,
   getLiveResultPreview,
   getMaximumRunsForPlayer,
@@ -1113,6 +1115,62 @@ test("Quick Scoring reducer reports an opposite-team run-out fielder", () => {
   assert.match(derived.missingInformation.join(" "), /ineligible fielder/);
 });
 
+test("Quick Scoring reducer accepts Fielding Helper catches and run-outs without making them bowlers", () => {
+  const helperRunOut = deriveQuickScoringInnings(
+    quickInput(
+      [
+        quickEvent(1, {
+          wicket: {
+            type: "run_out",
+            dismissedPlayerId: "naim",
+            fielderId: "rohit",
+            newBatterId: "soman",
+            completedRuns: 0,
+            nextStrikerId: "soman",
+            nextNonStrikerId: "saurav"
+          }
+        })
+      ],
+      {
+        fieldingPlayerIds: [
+          "aninda",
+          "dipanjan",
+          "utpal",
+          "dheeraj",
+          "chaitanya",
+          "biplab",
+          "rohit"
+        ]
+      }
+    )
+  );
+  const helperBowler = deriveQuickScoringInnings(
+    quickInput(
+      [
+        quickEvent(1, {
+          bowlerId: "saurav",
+          batterRuns: 1
+        })
+      ],
+      {
+        fieldingPlayerIds: [
+          "aninda",
+          "dipanjan",
+          "utpal",
+          "dheeraj",
+          "chaitanya",
+          "biplab",
+          "saurav"
+        ]
+      }
+    )
+  );
+
+  assert.deepEqual(helperRunOut.missingInformation, []);
+  assert.equal(helperRunOut.bowlingOvers[0]?.dismissals[0]?.fielderId, "rohit");
+  assert.match(helperBowler.missingInformation.join(" "), /ineligible bowler/);
+});
+
 test("Quick Scoring reducer requires a new batter before all-out", () => {
   const derived = deriveQuickScoringInnings(
     quickInput([
@@ -2135,6 +2193,149 @@ test("Team B Bowling accepts only Team B players", () => {
   assert.equal(errors.includes("Every selected bowler must belong to that bowling team."), true);
 });
 
+test("server validation allows Fielding Helper catch and run-out credits only for selected helpers", () => {
+  const helperCatchErrors = validateMatchRecordInput(
+    validationInput({
+      status: "finalised",
+      stage: "finalise",
+      availablePlayerIds: ["aninda", "dipanjan", "biplab", "saurav"],
+      teamAPlayerIds: ["aninda", "dipanjan"],
+      teamBPlayerIds: ["biplab", "saurav"],
+      fieldingHelperIds: ["biplab"],
+      performances: [
+        performance("aninda", "teamA", 0),
+        performance("dipanjan", "teamA", 0),
+        performance("biplab", "teamB", 0),
+        performance("saurav", "teamB", 0)
+      ],
+      bowlingOvers: {
+        teamA: [
+          over("teamA", "aninda", 1, {
+            dismissals: [
+              dismissal({
+                overId: "teamA-1",
+                battingTeamId: "teamB",
+                bowlingTeamId: "teamA",
+                dismissedBatterId: "saurav",
+                type: "caught",
+                creditedBowlerId: "aninda",
+                fielderId: "biplab"
+              })
+            ]
+          })
+        ],
+        teamB: []
+      }
+    })
+  );
+  const nonHelperCatchErrors = validateMatchRecordInput(
+    validationInput({
+      status: "finalised",
+      stage: "finalise",
+      availablePlayerIds: ["aninda", "dipanjan", "biplab", "saurav"],
+      teamAPlayerIds: ["aninda", "dipanjan"],
+      teamBPlayerIds: ["biplab", "saurav"],
+      fieldingHelperIds: [],
+      performances: [
+        performance("aninda", "teamA", 0),
+        performance("dipanjan", "teamA", 0),
+        performance("biplab", "teamB", 0),
+        performance("saurav", "teamB", 0)
+      ],
+      bowlingOvers: {
+        teamA: [
+          over("teamA", "aninda", 1, {
+            dismissals: [
+              dismissal({
+                overId: "teamA-1",
+                battingTeamId: "teamB",
+                bowlingTeamId: "teamA",
+                dismissedBatterId: "saurav",
+                type: "caught",
+                creditedBowlerId: "aninda",
+                fielderId: "biplab"
+              })
+            ]
+          })
+        ],
+        teamB: []
+      }
+    })
+  );
+  const helperRunOutErrors = validateMatchRecordInput(
+    validationInput({
+      status: "finalised",
+      stage: "finalise",
+      availablePlayerIds: ["aninda", "dipanjan", "biplab", "saurav"],
+      teamAPlayerIds: ["aninda", "dipanjan"],
+      teamBPlayerIds: ["biplab", "saurav"],
+      fieldingHelperIds: ["biplab"],
+      performances: [
+        performance("aninda", "teamA", 0),
+        performance("dipanjan", "teamA", 0),
+        performance("biplab", "teamB", 0),
+        performance("saurav", "teamB", 0)
+      ],
+      bowlingOvers: {
+        teamA: [
+          over("teamA", "aninda", 1, {
+            dismissals: [
+              dismissal({
+                overId: "teamA-1",
+                battingTeamId: "teamB",
+                bowlingTeamId: "teamA",
+                dismissedBatterId: "saurav",
+                type: "run_out",
+                creditedBowlerId: null,
+                fielderId: "biplab"
+              })
+            ]
+          })
+        ],
+        teamB: []
+      }
+    })
+  );
+
+  assert.equal(
+    helperCatchErrors.includes("Every catcher must belong to the bowling team or Fielding Helpers."),
+    false
+  );
+  assert.equal(
+    nonHelperCatchErrors.includes("Every catcher must belong to the bowling team or Fielding Helpers."),
+    true
+  );
+  assert.equal(
+    helperRunOutErrors.includes("Every run-out fielder must belong to the bowling team or Fielding Helpers."),
+    false
+  );
+});
+
+test("Fielding Helper IDs normalise from legacy records and require Available Today membership", () => {
+  assert.deepEqual(
+    getFieldingHelperIds({
+      availablePlayerIds: ["aninda", "biplab"],
+      sharedPlayerId: "aninda"
+    }),
+    []
+  );
+  assert.deepEqual(
+    getFieldingHelperIds({
+      availablePlayerIds: ["aninda", "biplab", "saurav"],
+      sharedPlayerId: "aninda",
+      fieldingHelperIds: ["aninda", "biplab", "biplab", "missing"]
+    }),
+    ["biplab"]
+  );
+  assert.deepEqual(
+    getEligibleFieldingPlayerIds({
+      bowlingPlayerIds: ["aninda"],
+      fieldingHelperIds: ["biplab", "aninda"]
+    }),
+    ["aninda", "biplab"]
+  );
+});
+
 test("completed overs are calculated separately", () => {
   assert.equal(calculateCompletedBowlingOvers([over("teamA", "aninda", 1)]), 1);
   assert.equal(calculateCompletedBowlingOvers([over("teamB", "biplab", 1), over("teamB", "biplab", 2)]), 2);
@@ -2843,6 +3044,47 @@ test("batting mode persists through Quick Scoring saves undo innings break and f
   assert.match(form, /function undoQuickScoringEvent\(\)[\s\S]*updateQuickScoring/);
   assert.match(saveRoute, /battingMode:\s*match\.battingMode \?\? match\.quickScoring\?\.battingMode \?\? "two_batter"/);
   assert.match(finaliseRoute, /battingMode:\s*match\.battingMode \?\? match\.quickScoring\?\.battingMode \?\? "two_batter"/);
+});
+
+test("Fielding Helpers persist through setup save active updates restart and API validation", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const saveRoute = readFileSync("app/api/admin/matches/route.ts", "utf8");
+  const finaliseRoute = readFileSync("app/api/admin/matches/finalize/route.ts", "utf8");
+
+  assert.match(form, /Fielding Helpers - Optional/);
+  assert.match(form, /selectedHelperIds=\{normalisedFieldingHelperIds\}/);
+  assert.match(form, /fieldingHelperIds:\s*recordFieldingHelperIds/);
+  assert.match(form, /fieldingHelperIds:\s*normalisedFieldingHelperIds/);
+  assert.match(form, /setPlayerUpdateFieldingHelperIds\(normalisedFieldingHelperIds\)/);
+  assert.match(form, /fieldingHelperIds:\s*validation\.fieldingHelperIds/);
+  assert.match(form, /setFieldingHelperIds\(validation\.fieldingHelperIds\)/);
+  assert.match(form, /fieldingHelperIds:\s*normalisedFieldingHelperIds,[\s\S]*performances:\s*restartPerformances/);
+  assert.match(saveRoute, /fieldingHelperIds:\s*match\.fieldingHelperIds \?\? \[\]/);
+  assert.match(finaliseRoute, /fieldingHelperIds:\s*match\.fieldingHelperIds \?\? \[\]/);
+});
+
+test("Fielding Helpers use separate fielder options and do not expand bowler eligibility", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const quickScoring = readFileSync("lib/quick-scoring.ts", "utf8");
+
+  assert.match(form, /bowlingPlayers=\{quickActiveBowlingPlayers\}/);
+  assert.match(form, /fieldingPlayers=\{quickActiveFieldingPlayers\}/);
+  assert.match(form, /const bowlerOptions = bowlingPlayers\.filter/);
+  assert.match(form, /fieldingPlayers\.map\(\(player\) => \(/);
+  assert.match(form, /const fielderOptions =[\s\S]*\? bowlingPlayers\.filter[\s\S]*: fieldingPlayers/);
+  assert.match(quickScoring, /bowlingPlayerIds && !bowlingPlayerIds\.includes\(event\.bowlerId\)/);
+  assert.match(quickScoring, /const eligibleFieldingPlayerIds = fieldingPlayerIds \?\? bowlingPlayerIds \?\? \[\]/);
+});
+
+test("Fielding Helper fielding credits are counted without changing Shared Player behavior", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+
+  assert.match(form, /const helperIdSet = new Set\(fieldingHelperIds\)/);
+  assert.match(form, /calculatePlayerCatches\(player\.id, ownBowlingOvers\) \+/);
+  assert.match(form, /calculatePlayerCatches\(player\.id, opposingBowlingOvers\)/);
+  assert.match(form, /calculatePlayerRunOuts\(player\.id, ownBowlingOvers\) \+/);
+  assert.match(form, /calculatePlayerRunOuts\(player\.id, opposingBowlingOvers\)/);
+  assert.match(form, /xpBreakdown: isSharedPlayerRecord\s*\?\s*calculateSharedPlayerMatchXP/);
 });
 
 test("Quick Scoring undo and cancel reset transient wicket and no-ball editors", () => {
@@ -3898,7 +4140,7 @@ test("server rejects duplicate dismissed batters in an innings", () => {
   assert.equal(errors.includes("A batter cannot be dismissed twice in the same innings."), true);
 });
 
-test("server rejects caught dismissals when catcher is not from bowling team", () => {
+test("server rejects caught dismissals when catcher is not from bowling team or Fielding Helpers", () => {
   const errors = validateMatchRecordInput(validationInput({
     availablePlayerIds: ["aninda", "arunabha", "biplab", "dipanjan"],
     teamAPlayerIds: ["aninda", "arunabha"],
@@ -3923,10 +4165,13 @@ test("server rejects caught dismissals when catcher is not from bowling team", (
     }
   }));
 
-  assert.equal(errors.includes("Every catcher must belong to the bowling team."), true);
+  assert.equal(
+    errors.includes("Every catcher must belong to the bowling team or Fielding Helpers."),
+    true
+  );
 });
 
-test("server rejects run-outs when fielder is not from bowling team", () => {
+test("server rejects run-outs when fielder is not from bowling team or Fielding Helpers", () => {
   const errors = validateMatchRecordInput(validationInput({
     availablePlayerIds: ["aninda", "arunabha", "biplab", "dipanjan"],
     teamAPlayerIds: ["aninda", "arunabha"],
@@ -3951,7 +4196,10 @@ test("server rejects run-outs when fielder is not from bowling team", () => {
     }
   }));
 
-  assert.equal(errors.includes("Every run-out fielder must belong to the bowling team."), true);
+  assert.equal(
+    errors.includes("Every run-out fielder must belong to the bowling team or Fielding Helpers."),
+    true
+  );
 });
 
 test("server rejects incomplete dismissal rows when finalising", () => {
@@ -4583,6 +4831,7 @@ function validationInput(
     teamAPlayerIds: string[];
     teamBPlayerIds: string[];
     sharedPlayerId: string | null;
+    fieldingHelperIds: string[];
     inningsExtras: Record<TeamId, number>;
     performances: PlayerMatchPerformance[];
     bowlingOvers: {
@@ -4602,6 +4851,7 @@ function validationInput(
     teamAPlayerIds: ["aninda"],
     teamBPlayerIds: ["biplab"],
     sharedPlayerId: null,
+    fieldingHelperIds: [],
     inningsExtras: {
       teamA: 0,
       teamB: 0
@@ -4675,6 +4925,7 @@ function quickInput(
   overrides: Partial<{
     battingPlayerIds: string[];
     bowlingPlayerIds: string[];
+    fieldingPlayerIds: string[];
     battingMode: BattingMode;
   }> = {}
 ) {

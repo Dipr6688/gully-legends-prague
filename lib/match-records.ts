@@ -72,6 +72,7 @@ export type MatchValidationInput = TeamSelectionState & {
   scheduledOversPerInnings?: number | null;
   battingMode?: BattingMode | null;
   battingFirstTeamId?: TeamId | null;
+  fieldingHelperIds?: string[];
   inningsExtras?: Record<TeamId, number>;
   performances: PlayerMatchPerformance[];
   bowlingOvers: TeamBowlingOvers;
@@ -98,6 +99,33 @@ export function hasOddAvailablePlayers(availablePlayerIds: string[]): boolean {
 
 export function isSharedPlayer(playerId: string, rosters: TeamRosters): boolean {
   return getSharedPlayerId(rosters) === playerId;
+}
+
+export function getFieldingHelperIds(
+  match: Pick<MatchValidationInput, "fieldingHelperIds" | "availablePlayerIds"> & {
+    sharedPlayerId?: string | null;
+  }
+): string[] {
+  const availableIds = new Set(match.availablePlayerIds);
+  const sharedPlayerId = match.sharedPlayerId ?? null;
+
+  return Array.from(
+    new Set(
+      (match.fieldingHelperIds ?? []).filter(
+        (playerId) => playerId && playerId !== sharedPlayerId && availableIds.has(playerId)
+      )
+    )
+  );
+}
+
+export function getEligibleFieldingPlayerIds({
+  bowlingPlayerIds,
+  fieldingHelperIds = []
+}: {
+  bowlingPlayerIds: string[];
+  fieldingHelperIds?: string[];
+}): string[] {
+  return Array.from(new Set([...bowlingPlayerIds, ...fieldingHelperIds].filter(Boolean)));
 }
 
 export function applySharedPlayerToRosters(
@@ -1178,6 +1206,7 @@ export function validateMatchRecordInput(input: MatchValidationInput): string[] 
   const stage = input.stage ?? "finalise";
   const availableIds = new Set(input.availablePlayerIds);
   const sharedPlayerId = getSharedPlayerId(input);
+  const fieldingHelperIds = getFieldingHelperIds(input);
   const selectedIds = new Set([
     ...input.teamAPlayerIds,
     ...input.teamBPlayerIds
@@ -1202,6 +1231,20 @@ export function validateMatchRecordInput(input: MatchValidationInput): string[] 
   for (const playerId of selectedIds) {
     if (!availableIds.has(playerId)) {
       errors.push("Every selected player must be marked available.");
+      break;
+    }
+  }
+
+  for (const playerId of input.fieldingHelperIds ?? []) {
+    if (!availableIds.has(playerId)) {
+      errors.push("Every Fielding Helper must be marked Available Today.");
+      break;
+    }
+  }
+
+  for (const playerId of fieldingHelperIds) {
+    if (!selectedIds.has(playerId)) {
+      errors.push("Every Fielding Helper must belong to Team A or Team B.");
       break;
     }
   }
@@ -1285,6 +1328,10 @@ export function validateMatchRecordInput(input: MatchValidationInput): string[] 
     "teamB",
     input.teamAPlayerIds,
     input.teamBPlayerIds,
+    getEligibleFieldingPlayerIds({
+      bowlingPlayerIds: input.teamAPlayerIds,
+      fieldingHelperIds
+    }),
     input.teamBPlayerIds.length,
     input.scheduledOversPerInnings ?? 0,
     teamBChaseTarget,
@@ -1297,6 +1344,10 @@ export function validateMatchRecordInput(input: MatchValidationInput): string[] 
     "teamA",
     input.teamBPlayerIds,
     input.teamAPlayerIds,
+    getEligibleFieldingPlayerIds({
+      bowlingPlayerIds: input.teamBPlayerIds,
+      fieldingHelperIds
+    }),
     input.teamAPlayerIds.length,
     input.scheduledOversPerInnings ?? 0,
     teamAChaseTarget,
@@ -1349,6 +1400,7 @@ export function validateReadyToStart(
 ): string[] {
   const availableIds = new Set(input.availablePlayerIds);
   const sharedPlayerId = getSharedPlayerId(input);
+  const fieldingHelperIds = getFieldingHelperIds(input);
   const selectedIds = new Set([
     ...input.teamAPlayerIds,
     ...input.teamBPlayerIds
@@ -1413,6 +1465,20 @@ export function validateReadyToStart(
     }
   }
 
+  for (const playerId of input.fieldingHelperIds ?? []) {
+    if (!availableIds.has(playerId)) {
+      errors.push("Every Fielding Helper must be marked Available Today.");
+      break;
+    }
+  }
+
+  for (const playerId of fieldingHelperIds) {
+    if (!selectedIds.has(playerId)) {
+      errors.push("Every Fielding Helper must belong to Team A or Team B.");
+      break;
+    }
+  }
+
   for (const playerId of input.availablePlayerIds) {
     const inTeamA = input.teamAPlayerIds.includes(playerId);
     const inTeamB = input.teamBPlayerIds.includes(playerId);
@@ -1437,6 +1503,7 @@ function validateBowlingOvers(
   battingTeamId: TeamId,
   bowlingPlayerIds: string[],
   battingPlayerIds: string[],
+  fieldingPlayerIds: string[],
   battingPlayerCount: number,
   scheduledOvers: number,
   chaseTarget: number | undefined,
@@ -1554,8 +1621,8 @@ function validateBowlingOvers(
           break;
         }
 
-        if (!dismissal.fielderId || !bowlingPlayerIds.includes(dismissal.fielderId)) {
-          errors.push("Every run-out fielder must belong to the bowling team.");
+        if (!dismissal.fielderId || !fieldingPlayerIds.includes(dismissal.fielderId)) {
+          errors.push("Every run-out fielder must belong to the bowling team or Fielding Helpers.");
           break;
         }
       } else {
@@ -1565,8 +1632,8 @@ function validateBowlingOvers(
         }
 
         if (dismissal.type === "caught") {
-          if (!dismissal.fielderId || !bowlingPlayerIds.includes(dismissal.fielderId)) {
-            errors.push("Every catcher must belong to the bowling team.");
+          if (!dismissal.fielderId || !fieldingPlayerIds.includes(dismissal.fielderId)) {
+            errors.push("Every catcher must belong to the bowling team or Fielding Helpers.");
             break;
           }
         } else if (dismissal.type === "stumped") {
