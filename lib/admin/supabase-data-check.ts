@@ -47,6 +47,11 @@ const leaderboardCategories: LeaderboardCategory[] = [
   "runs",
   "wickets",
   "catches",
+  "strikeRate",
+  "economy",
+  "sixes",
+  "boundaries",
+  "ducks",
   "xp",
   "level"
 ];

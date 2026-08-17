@@ -16,6 +16,7 @@ import {
 } from "../lib/data/navigation";
 import {
   getMatchResultHeadline,
+  getMatchScoreRowsInInningsOrder,
   getMatchTeamScore
 } from "../lib/match-display";
 import {
@@ -594,6 +595,12 @@ test("Dashboard Top Performer cards preserve tie and zero states", () => {
   const source = topPerformersSource();
 
   assert.match(source, /JOINT LEADERS/);
+  assert.match(source, /isJointLeader/);
+  assert.match(source, /performer-portrait-stack-joint/);
+  assert.match(source, /className="performer-joint-badge"/);
+  assert.match(source, /JOINT #1/);
+  assert.match(source, /aria-label="Joint all-time leaders"/);
+  assert.match(source, /!isJointLeader\s*\?/);
   assert.match(source, /RACE NOT STARTED/);
   assert.match(source, /No catches recorded yet/);
   assert.match(source, /leaderCount > 1 \? `\$\{baseValue\} EACH` : baseValue/);
@@ -1490,7 +1497,7 @@ test("Scorecard totals and bowling figures are derived from finalised innings sn
   assert.equal(arunabhaFigures.overs, "2.0");
   assert.equal(arunabhaFigures.runsConceded, 25);
   assert.equal(arunabhaFigures.wickets, 2);
-  assert.equal(arunabhaFigures.economy, "12.5");
+  assert.equal(arunabhaFigures.economy, "12.50");
   assert.equal(formatOneDecimal(8), "8.0");
   assert.equal(secondScorecard.bowlingTeamName, "Team A");
   assert.equal(anindaFigures.wickets, 0);
@@ -1769,7 +1776,11 @@ test("Scorecard page renders read-only cricket tables and no editing controls", 
   assert.doesNotMatch(playerOfMatchImageRule, /transform|object-fit:\s*cover/);
   assert.match(scorecard, /<th>Batter<\/th>/);
   assert.match(scorecard, /<th>Dismissal<\/th>/);
-  assert.match(scorecard, /<th>Runs<\/th>/);
+  assert.match(scorecard, /<th>R<\/th>/);
+  assert.match(scorecard, /<th>B<\/th>/);
+  assert.match(scorecard, /<th>4s<\/th>/);
+  assert.match(scorecard, /<th>6s<\/th>/);
+  assert.match(scorecard, /<th>SR<\/th>/);
   assert.match(scorecard, /<th>Bowler<\/th>/);
   assert.match(scorecard, /<th>O<\/th>/);
   assert.match(scorecard, /<th>M<\/th>/);
@@ -1927,8 +1938,115 @@ test("Archive and Recent Matches use identical score and result helpers", () => 
   assert.equal(getMatchResultHeadline(match), "TEAM A WINS BY 8 RUNS");
   assert.match(recent, /getMatchTeamScore\(match, "teamA"\)/);
   assert.match(recent, /getMatchResultHeadline\(match\)/);
-  assert.match(archive, /getMatchTeamScore\(match, "teamA"\)/);
+  assert.match(archive, /getMatchScoreRowsInInningsOrder\(match\)/);
   assert.match(archive, /getMatchResultHeadline\(match\)/);
+});
+
+test("Match archive score rows follow actual innings order without changing result", () => {
+  const teamAFirst = matchRecord({ id: "team-a-first", matchDate: "2026-08-05" });
+  const teamBFirst = {
+    ...matchRecord({ id: "team-b-first", matchDate: "2026-08-06" }),
+    battingFirstTeamId: "teamB" as const,
+    chasingTeamId: "teamA" as const,
+    innings: {
+      first: {
+        ...matchRecord({ id: "team-b-first-base", matchDate: "2026-08-06" }).innings.first,
+        battingTeamId: "teamB" as const,
+        bowlingTeamId: "teamA" as const,
+        runs: 116,
+        wicketsLost: 2
+      },
+      second: {
+        ...matchRecord({ id: "team-b-first-base", matchDate: "2026-08-06" }).innings.second,
+        battingTeamId: "teamA" as const,
+        bowlingTeamId: "teamB" as const,
+        runs: 84,
+        wicketsLost: 5
+      }
+    },
+    result: {
+      type: "win_by_runs" as const,
+      winnerTeamId: "teamB" as const,
+      loserTeamId: "teamA" as const,
+      marginRuns: 32
+    }
+  } satisfies MatchRecord;
+  const tiedTeamBFirst = {
+    ...teamBFirst,
+    id: "team-b-first-tie",
+    innings: {
+      ...teamBFirst.innings,
+      second: {
+        ...teamBFirst.innings.second,
+        runs: 116,
+        wicketsLost: 5
+      }
+    },
+    result: { type: "tie" as const }
+  } satisfies MatchRecord;
+  const chasingTeamAWin = {
+    ...teamBFirst,
+    id: "team-a-chase",
+    innings: {
+      ...teamBFirst.innings,
+      second: {
+        ...teamBFirst.innings.second,
+        runs: 117,
+        wicketsLost: 3
+      }
+    },
+    result: {
+      type: "win_by_wickets" as const,
+      winnerTeamId: "teamA" as const,
+      loserTeamId: "teamB" as const,
+      wicketsRemaining: 2
+    }
+  } satisfies MatchRecord;
+  const legacyWithoutReliableOrder = {
+    ...matchRecord({ id: "legacy-order", matchDate: "2026-08-07" }),
+    battingFirstTeamId: null,
+    chasingTeamId: null,
+    innings: {
+      first: {
+        ...matchRecord({ id: "legacy-order-base", matchDate: "2026-08-07" }).innings.first,
+        battingTeamId: "teamA" as const
+      },
+      second: {
+        ...matchRecord({ id: "legacy-order-base", matchDate: "2026-08-07" }).innings.second,
+        battingTeamId: "teamA" as const
+      }
+    }
+  } satisfies MatchRecord;
+
+  assert.deepEqual(
+    getMatchScoreRowsInInningsOrder(teamAFirst).map((row) => [row.teamId, row.score]),
+    [
+      ["teamA", "20/2"],
+      ["teamB", "12/1"]
+    ]
+  );
+  assert.deepEqual(
+    getMatchScoreRowsInInningsOrder(teamBFirst).map((row) => [row.teamId, row.score]),
+    [
+      ["teamB", "116/2"],
+      ["teamA", "84/5"]
+    ]
+  );
+  assert.equal(getMatchResultHeadline(teamBFirst), "TEAM B WINS BY 32 RUNS");
+  assert.deepEqual(
+    getMatchScoreRowsInInningsOrder(tiedTeamBFirst).map((row) => row.teamId),
+    ["teamB", "teamA"]
+  );
+  assert.equal(getMatchResultHeadline(tiedTeamBFirst), "MATCH TIED");
+  assert.deepEqual(
+    getMatchScoreRowsInInningsOrder(chasingTeamAWin).map((row) => row.teamId),
+    ["teamB", "teamA"]
+  );
+  assert.equal(getMatchResultHeadline(chasingTeamAWin), "TEAM A WINS BY 2 WICKETS");
+  assert.deepEqual(
+    getMatchScoreRowsInInningsOrder(legacyWithoutReliableOrder).map((row) => row.teamId),
+    ["teamA", "teamB"]
+  );
 });
 
 test("Match archive filters search sorts and groups finalised matches", () => {
@@ -2832,6 +2950,9 @@ test("Dashboard Top Performer spotlight CSS is scoped and responsive", () => {
   assert.match(css, /\.performer-portrait\s*{[\s\S]*?width:\s*88px/);
   assert.match(css, /\.performer-portrait-image\s*{[\s\S]*?object-fit:\s*cover/);
   assert.match(css, /\.performer-watermark\s*{[\s\S]*?opacity:\s*0\.11/);
+  assert.match(css, /\.performer-portrait-stack-joint\s*{[\s\S]*?padding-top:\s*22px/);
+  assert.match(css, /\.performer-joint-badge\s*{[\s\S]*?left:\s*50%/);
+  assert.match(css, /\.performer-joint-badge\s*{[\s\S]*?transform:\s*translateX\(-50%\)/);
   assert.match(css, /\.top-performer-card:hover[\s\S]*?transform:\s*translateY\(-4px\)/);
   assert.match(css, /@media \(max-width:\s*760px\)[\s\S]*?\.top-performer-grid\s*{[\s\S]*?grid-template-columns:\s*1fr/);
 });

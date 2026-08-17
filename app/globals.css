@@ -199,13 +199,71 @@ textarea {
   object-fit: contain;
   object-position: center;
   padding: 0;
-  transform: scale(var(--icon-scale, 1.5));
+  transform: scale(var(--icon-scale, 0.92));
   transform-origin: center;
 }
 
 .leader-quick-icon img {
   object-fit: contain;
   filter: drop-shadow(0 0 8px color-mix(in srgb, var(--leader-accent) 28%, transparent));
+}
+
+.leader-quick-card[data-category="runs"] .leader-quick-icon,
+.leaderboard-tabs button[data-category="runs"] img {
+  filter: drop-shadow(0 0 12px rgba(255, 143, 31, 0.58));
+}
+
+.leader-quick-card[data-category="wickets"] .leader-quick-icon,
+.leaderboard-tabs button[data-category="wickets"] img {
+  filter: drop-shadow(0 0 12px rgba(197, 87, 255, 0.56));
+}
+
+.leader-quick-card[data-category="catches"] .leader-quick-icon,
+.leaderboard-tabs button[data-category="catches"] img {
+  filter: drop-shadow(0 0 12px rgba(156, 255, 36, 0.52));
+}
+
+.leader-quick-card[data-category="strikeRate"] .leader-quick-icon,
+.leaderboard-tabs button[data-category="strikeRate"] img {
+  filter: drop-shadow(0 0 10px rgba(255, 143, 31, 0.55));
+}
+
+.leader-quick-card[data-category="economy"] .leader-quick-icon,
+.leaderboard-tabs button[data-category="economy"] img {
+  filter: drop-shadow(0 0 10px rgba(197, 87, 255, 0.5));
+}
+
+.leader-quick-card[data-category="sixes"] .leader-quick-icon,
+.leaderboard-tabs button[data-category="sixes"] img {
+  filter: drop-shadow(0 0 12px rgba(255, 109, 20, 0.62));
+}
+
+.leader-quick-card[data-category="boundaries"] .leader-quick-icon,
+.leaderboard-tabs button[data-category="boundaries"] img {
+  filter: drop-shadow(0 0 12px rgba(70, 223, 255, 0.55));
+}
+
+.leader-quick-card[data-category="ducks"] {
+  background:
+    linear-gradient(135deg, rgba(247, 199, 52, 0.13), rgba(0, 0, 0, 0.74)),
+    rgba(6, 8, 12, 0.84);
+}
+
+.leader-quick-card[data-category="ducks"] .leader-quick-icon {
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255, 245, 170, 0.24), transparent 62%),
+    rgba(13, 8, 3, 0.3);
+  filter: drop-shadow(0 0 14px rgba(247, 199, 52, 0.58));
+}
+
+.leader-quick-card[data-category="xp"] .leader-quick-icon,
+.leaderboard-tabs button[data-category="xp"] img {
+  filter: drop-shadow(0 0 12px rgba(70, 223, 255, 0.64));
+}
+
+.leader-quick-card[data-category="level"] .leader-quick-icon,
+.leaderboard-tabs button[data-category="level"] img {
+  filter: drop-shadow(0 0 13px rgba(247, 199, 52, 0.6));
 }
 
 .leader-quick-card strong {
@@ -235,6 +293,75 @@ textarea {
   font-weight: 850;
   line-height: 1.25;
   text-transform: uppercase;
+}
+
+.duck-collector-tease {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  border: 2px solid rgba(247, 199, 52, 0.64);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(255, 237, 127, 0.22), rgba(247, 199, 52, 0.1)),
+    rgba(17, 12, 3, 0.84);
+  box-shadow:
+    inset 0 -3px 0 rgba(0, 0, 0, 0.28),
+    0 0 18px rgba(247, 199, 52, 0.2);
+  color: #ffe97a;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: clamp(1rem, 1.8vw, 1.28rem);
+  font-style: normal;
+  font-weight: 950;
+  letter-spacing: 0;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 #05080d;
+}
+
+.leader-quick-card em {
+  display: block;
+  margin-top: 10px;
+  font-style: normal;
+}
+
+.duck-collector-tease::after {
+  position: absolute;
+  bottom: -8px;
+  left: 24px;
+  width: 14px;
+  height: 14px;
+  border-right: 2px solid rgba(247, 199, 52, 0.64);
+  border-bottom: 2px solid rgba(247, 199, 52, 0.64);
+  background: rgba(17, 12, 3, 0.92);
+  content: "";
+  transform: rotate(45deg);
+}
+
+.duck-collector-tease > span {
+  font-family: "Segoe UI Emoji", "Apple Color Emoji", sans-serif;
+  font-size: 1.05em;
+  line-height: 1;
+  filter: drop-shadow(0 0 5px rgba(247, 199, 52, 0.48));
+}
+
+.duck-collector-tease strong {
+  margin: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-style: inherit;
+  line-height: inherit;
+  text-shadow: inherit;
+}
+
+.leader-quick-card .duck-collector-tease {
+  padding: 10px 12px;
+  font-size: clamp(0.92rem, 1.35vw, 1.08rem);
 }
 
 .leader-quick-card:hover,
@@ -304,6 +431,17 @@ textarea {
 .leaderboard-podium-section .leaderboard-section-heading {
   z-index: 2;
   margin-bottom: 60px;
+}
+
+.leaderboard-podium-section[data-category="ducks"] {
+  background:
+    radial-gradient(circle at top right, rgba(247, 199, 52, 0.16), transparent 34%),
+    linear-gradient(145deg, rgba(247, 199, 52, 0.08), rgba(0, 0, 0, 0.08));
+}
+
+.leaderboard-section-heading .duck-collector-tease {
+  margin-top: 12px;
+  padding: 10px 13px;
 }
 
 .leaderboard-section-heading h2,
@@ -4678,7 +4816,8 @@ textarea {
   text-transform: uppercase;
 }
 
-.scorecard-batting-table td:last-child,
+.scorecard-batting-table th:nth-child(n + 3),
+.scorecard-batting-table td:nth-child(n + 3),
 .scorecard-bowling-table th:not(:first-child),
 .scorecard-bowling-table td:not(:first-child) {
   text-align: right;
@@ -4912,6 +5051,12 @@ textarea {
   justify-content: center;
   min-height: 94px;
   margin-top: 14px;
+  padding-top: 0;
+}
+
+.performer-portrait-stack-joint {
+  min-height: 116px;
+  padding-top: 22px;
 }
 
 .performer-portrait {
@@ -4942,7 +5087,8 @@ textarea {
 }
 
 .performer-extra-count,
-.performer-leader-badge {
+.performer-leader-badge,
+.performer-joint-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4972,6 +5118,27 @@ textarea {
   color: var(--performer-accent);
   font-size: 0.72rem;
   box-shadow: 0 0 14px color-mix(in srgb, var(--performer-accent) 22%, transparent);
+}
+
+.performer-joint-badge {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 3;
+  gap: 4px;
+  min-width: 86px;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, var(--performer-accent) 72%, rgba(255, 255, 255, 0.22));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--performer-accent) 18%, #07100e), #07100e);
+  color: var(--performer-accent);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  box-shadow:
+    0 0 0 3px rgba(0, 0, 0, 0.36),
+    0 0 16px color-mix(in srgb, var(--performer-accent) 28%, transparent);
+  transform: translateX(-50%);
 }
 
 .performer-copy {
@@ -7110,6 +7277,78 @@ textarea {
   line-height: 0.9;
 }
 
+.career-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.career-detail-grid article {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.28);
+  padding: 16px;
+}
+
+.career-detail-grid h3 {
+  color: var(--player-accent);
+  font-size: clamp(0.95rem, 1.4vw, 1.08rem);
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.career-detail-grid h4 {
+  margin-top: 14px;
+  color: rgba(255, 245, 216, 0.9);
+  font-size: 0.82rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.career-detail-grid dl {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.career-detail-grid div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.career-detail-grid dt {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.8rem;
+  font-weight: 900;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.career-detail-grid dd {
+  color: #fff5d8;
+  font-size: 0.95rem;
+  font-weight: 950;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.career-tracked-note {
+  margin-top: 12px;
+  color: rgba(216, 210, 192, 0.78);
+  font-size: 0.76rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
 .hero-ratings {
   display: grid;
   gap: 12px;
@@ -7152,7 +7391,7 @@ textarea {
   object-fit: contain;
   object-position: center;
   padding: 0;
-  transform: scale(var(--artwork-scale, 1.9));
+  transform: scale(var(--artwork-scale, 1.08));
   transform-origin: center;
 }
 
@@ -7359,6 +7598,10 @@ textarea {
   .career-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+  }
+
+  .career-detail-grid {
+    grid-template-columns: 1fr;
   }
 
   .hero-stat-tile {
@@ -7902,7 +8145,23 @@ textarea {
   }
 
   .scorecard-batting-table td:nth-child(3)::before {
-    content: "Runs";
+    content: "R";
+  }
+
+  .scorecard-batting-table td:nth-child(4)::before {
+    content: "B";
+  }
+
+  .scorecard-batting-table td:nth-child(5)::before {
+    content: "4s";
+  }
+
+  .scorecard-batting-table td:nth-child(6)::before {
+    content: "6s";
+  }
+
+  .scorecard-batting-table td:nth-child(7)::before {
+    content: "SR";
   }
 
   .scorecard-bowling-table td:nth-child(1)::before {

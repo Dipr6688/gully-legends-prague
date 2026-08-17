@@ -4,6 +4,13 @@ import {
   sortBattingPerformances,
   sanitizeRuns
 } from "./match-records";
+import {
+  calculateBowlingEconomy,
+  deriveAdvancedMatchStats,
+  formatEconomy,
+  formatStrikeRate,
+  type AdvancedInningsStats
+} from "./advanced-cricket-stats";
 import type {
   BowlingOver,
   DismissalEvent,
@@ -23,6 +30,10 @@ export type ScorecardBattingRow = {
   batter: string;
   dismissal: string;
   runs: string;
+  balls: string;
+  fours: string;
+  sixes: string;
+  strikeRate: string;
 };
 
 export type ScorecardBowlingFigure = {
@@ -76,6 +87,10 @@ export function formatCompletedOvers(overs: number): string {
   const safeOvers = Math.max(0, Number.isFinite(overs) ? overs : 0);
 
   return formatCricketOversFromLegalBalls(safeOvers * 6);
+}
+
+function getOverLegalBalls(over: BowlingOver): number {
+  return typeof over.legalBalls === "number" ? sanitizeRuns(over.legalBalls) : 6;
 }
 
 function pluralise(value: number, singular: string, plural: string): string {
@@ -146,18 +161,39 @@ export function formatDismissalText(
 
 export function buildBattingRows(
   innings: TeamInnings,
-  resolvePlayerName: PlayerNameResolver
+  resolvePlayerName: PlayerNameResolver,
+  advancedStats?: AdvancedInningsStats
 ): ScorecardBattingRow[] {
   const dismissals = innings.bowlingOvers.flatMap((over) => over.dismissals);
 
-  return sortBattingPerformances(innings.battingPerformances).map((performance) => ({
-    key: `${performance.playerId}:${performance.representingTeamId ?? performance.teamId}`,
-    playerId: performance.playerId,
-    teamId: performance.representingTeamId ?? performance.teamId,
-    batter: resolvePlayerName(performance.playerId),
-    dismissal: formatDismissalText(performance, dismissals, resolvePlayerName),
-    runs: performance.didBat ? String(sanitizeRuns(performance.runs)) : "-"
-  }));
+  return sortBattingPerformances(innings.battingPerformances).map((performance) => {
+    const trackedBatting = advancedStats?.battingByPlayer.get(performance.playerId);
+
+    return {
+      key: `${performance.playerId}:${performance.representingTeamId ?? performance.teamId}`,
+      playerId: performance.playerId,
+      teamId: performance.representingTeamId ?? performance.teamId,
+      batter: resolvePlayerName(performance.playerId),
+      dismissal: formatDismissalText(performance, dismissals, resolvePlayerName),
+      runs: performance.didBat ? String(sanitizeRuns(performance.runs)) : "-",
+      balls:
+        performance.didBat && advancedStats?.hasEventHistory
+          ? String(trackedBatting?.ballsFaced ?? 0)
+          : "-",
+      fours:
+        performance.didBat && advancedStats?.hasEventHistory
+          ? String(trackedBatting?.fours ?? 0)
+          : "-",
+      sixes:
+        performance.didBat && advancedStats?.hasEventHistory
+          ? String(trackedBatting?.sixes ?? 0)
+          : "-",
+      strikeRate:
+        performance.didBat && advancedStats?.hasEventHistory
+          ? formatStrikeRate(trackedBatting?.strikeRate ?? null)
+          : "-"
+    };
+  });
 }
 
 export function buildBowlingFigures(
@@ -170,10 +206,13 @@ export function buildBowlingFigures(
 
   return bowlerIds.map((playerId) => {
     const playerOvers = bowlingOvers.filter((over) => over.bowlerId === playerId);
-    const overs = playerOvers.length;
     const maidens = playerOvers.filter(
       (over) => over.maiden && Number(over.runsConceded) === 0
     ).length;
+    const legalBalls = playerOvers.reduce(
+      (total, over) => total + getOverLegalBalls(over),
+      0
+    );
     const runsConceded = playerOvers.reduce(
       (total, over) => total + sanitizeRuns(over.runsConceded),
       0
@@ -181,16 +220,16 @@ export function buildBowlingFigures(
     const wickets = playerOvers
       .flatMap((over) => over.dismissals)
       .filter((dismissal) => dismissal.creditedBowlerId === playerId).length;
-    const economy = overs > 0 ? runsConceded / overs : 0;
+    const economy = calculateBowlingEconomy({ runsConceded, legalBalls });
 
     return {
       playerId,
       bowler: resolvePlayerName(playerId),
-      overs: formatCompletedOvers(overs),
+      overs: formatCricketOversFromLegalBalls(legalBalls),
       maidens,
       runsConceded,
       wickets,
-      economy: formatOneDecimal(economy)
+      economy: formatEconomy(economy)
     };
   });
 }
@@ -223,6 +262,10 @@ export function buildScorecardInnings(
     innings.runs,
     innings.battingPerformances
   );
+  const advancedMatchStats = deriveAdvancedMatchStats(match);
+  const advancedInningsStats = advancedMatchStats.innings.find(
+    (item) => item.battingTeamId === innings.battingTeamId
+  );
 
   return {
     innings,
@@ -231,7 +274,7 @@ export function buildScorecardInnings(
     score: `${sanitizeRuns(innings.runs)}/${sanitizeRuns(innings.wicketsLost)}`,
     overs: `${formatCompletedOvers(innings.completedOvers)} overs`,
     endLabel: getInningsEndLabel(match, innings),
-    battingRows: buildBattingRows(innings, resolvePlayerName),
+    battingRows: buildBattingRows(innings, resolvePlayerName, advancedInningsStats),
     bowlingFigures: buildBowlingFigures(innings.bowlingOvers, resolvePlayerName),
     extras: allocation.extras,
     total: `${sanitizeRuns(innings.runs)}/${sanitizeRuns(innings.wicketsLost)}`

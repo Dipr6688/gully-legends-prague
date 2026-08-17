@@ -43,12 +43,26 @@ const accentColors = {
 } as const;
 
 const LEADER_QUICK_ICON_SCALE = {
-  runs: 1.55,
-  wickets: 1.5,
-  catches: 1.5,
-  xp: 1.35,
-  level: 1.45
+  runs: 0.92,
+  wickets: 0.92,
+  catches: 0.92,
+  strikeRate: 0.92,
+  economy: 0.92,
+  sixes: 0.92,
+  boundaries: 0.92,
+  ducks: 0.92,
+  xp: 0.92,
+  level: 0.92
 } as const satisfies Record<LeaderboardCategory, number>;
+
+const DUCK_COLLECTOR_QUOTES = [
+  "Quack quack... another early walk back.",
+  "Straight to the pond.",
+  "No runs, only drama.",
+  "Certified member of the Duck Club.",
+  "Golden duck energy detected.",
+  "The bat stayed silent. The duck did the talking."
+] as const;
 
 function isLeaderboardCategory(value: string | null): value is LeaderboardCategory {
   return categories.includes(value as LeaderboardCategory);
@@ -101,6 +115,17 @@ function getSupportLine(entry: PlayerLeaderboardEntry) {
   if (entry.category === "runs") return `HIGH SCORE ${entry.supporting.highScore ?? "-"}`;
   if (entry.category === "wickets") return `BEST ${entry.supporting.bestBowling ?? "-"}`;
   if (entry.category === "catches") return `${entry.supporting.runOuts} RUN-OUTS`;
+  if (entry.category === "strikeRate") {
+    return `${entry.supporting.ballsFaced} BALLS FACED`;
+  }
+  if (entry.category === "economy") {
+    return `${entry.supporting.legalBallsBowled} LEGAL BALLS`;
+  }
+  if (entry.category === "sixes") return `${entry.supporting.fours} FOURS`;
+  if (entry.category === "boundaries") {
+    return `${entry.supporting.fours} FOURS - ${entry.supporting.sixes} SIXES`;
+  }
+  if (entry.category === "ducks") return "ZERO RUNS. MAXIMUM MEMORIES.";
   if (entry.category === "xp") return `LEVEL ${entry.supporting.level}`;
 
   return `${entry.supporting.totalXP} XP`;
@@ -117,8 +142,29 @@ function getMedalText(rank: number) {
   if (rank === 1) return "First place";
   if (rank === 2) return "Second place";
   if (rank === 3) return "Third place";
+  if (rank <= 0) return "Not qualified yet";
 
   return `Rank ${rank}`;
+}
+
+function getDuckCollectorQuote(summary: LeaderSummary) {
+  const seed =
+    summary.leaders[0]?.player.id
+      .split("")
+      .reduce((total, letter) => total + letter.charCodeAt(0), summary.value) ??
+    0;
+
+  return DUCK_COLLECTOR_QUOTES[seed % DUCK_COLLECTOR_QUOTES.length];
+}
+
+function DuckCollectorTease({ quote }: { quote: string }) {
+  return (
+    <span className="duck-collector-tease">
+      <span aria-hidden="true">🥲</span>
+      <strong>{quote}</strong>
+      <span aria-hidden="true">🦆</span>
+    </span>
+  );
 }
 
 function getPodiumPlacement(entry: PlayerLeaderboardEntry) {
@@ -143,7 +189,8 @@ function LeaderboardHero({
         </p>
         <h1 className="comic-title">HALL OF LEGENDS</h1>
         <p>
-          The greatest run-makers, wicket-hunters, fielding heroes and XP
+          The greatest run-makers, wicket-hunters, fielding heroes, strike-rate
+          rockets, economy artists, six machines, boundary bandits and XP
           warriors of Gully Legends Prague.
         </p>
       </div>
@@ -183,6 +230,7 @@ function LeaderQuickCards({
             key={summary.category}
             type="button"
             className="leader-quick-card"
+            data-category={summary.category}
             data-active={activeCategory === summary.category}
             style={
               {
@@ -212,6 +260,11 @@ function LeaderQuickCards({
             <strong>{copy.headline}</strong>
             {copy.value ? <b>{copy.value}</b> : null}
             <small>{copy.detail}</small>
+            {summary.category === "ducks" && summary.status !== "race-not-started" ? (
+              <em>
+                <DuckCollectorTease quote={getDuckCollectorQuote(summary)} />
+              </em>
+            ) : null}
           </button>
         );
       })}
@@ -261,6 +314,7 @@ function LeaderboardCategoryTabs({
                 "--leader-accent": accentColors[meta.accent]
               } as CSSProperties
             }
+            data-category={category}
             onClick={() => onChange(category)}
           >
             <Image src={meta.icon} alt="" width={38} height={38} />
@@ -409,6 +463,7 @@ function LeaderboardPodium({
       role="tabpanel"
       aria-labelledby={`${category}-leaderboard-tab`}
       className="leaderboard-podium-section"
+      data-category={category}
       style={
         {
           "--leader-accent": accentColors[meta.accent]
@@ -418,6 +473,9 @@ function LeaderboardPodium({
       <div className="leaderboard-section-heading">
         <p>{meta.label}</p>
         <h2>{meta.crownTitle}</h2>
+        {category === "ducks" ? (
+          <DuckCollectorTease quote={getDuckCollectorQuote(summary)} />
+        ) : null}
       </div>
       {hasJointFirstPlace ? (
         <div
@@ -452,7 +510,11 @@ function CategoryStatValue({ entry }: { entry: PlayerLeaderboardEntry }) {
 }
 
 function RankBadge({ rank }: { rank: number }) {
-  return <span className={`rank-badge rank-badge-${getRankTone(rank)}`}>#{rank}</span>;
+  return (
+    <span className={`rank-badge rank-badge-${getRankTone(rank)}`}>
+      {rank > 0 ? `#${rank}` : "--"}
+    </span>
+  );
 }
 
 function LeaderboardRankRow({ entry }: { entry: PlayerLeaderboardEntry }) {
@@ -481,11 +543,41 @@ function LeaderboardRankRow({ entry }: { entry: PlayerLeaderboardEntry }) {
                 ["XP TO NEXT", entry.supporting.xpToNextLevel],
                 ["XP PROGRESS", formatPercentage(entry.supporting.xpProgressPercentage)]
               ]
-            : [
-                ["TOTAL XP", entry.supporting.totalXP],
-                ["XP TO NEXT", entry.supporting.xpToNextLevel],
-                ["PROGRESS", formatPercentage(entry.supporting.xpProgressPercentage)]
-              ];
+            : entry.category === "strikeRate"
+              ? [
+                  ["BALLS FACED", entry.supporting.ballsFaced],
+                  ["TRACKED INNINGS", entry.supporting.trackedBattingInnings],
+                  ["RUNS TRACKED", entry.supporting.trackedBattingRuns]
+                ]
+              : entry.category === "economy"
+                ? [
+                    ["LEGAL BALLS", entry.supporting.legalBallsBowled],
+                    ["TRACKED MATCHES", entry.supporting.trackedBowlingMatches],
+                    ["RUNS CONCEDED", entry.supporting.trackedRunsConceded]
+                  ]
+                : entry.category === "ducks"
+                  ? [
+                      ["DUCKS", entry.supporting.ducks],
+                      ["INNINGS", entry.supporting.matches],
+                      ["NOTE", "GOLDEN ZERO CLUB"]
+                    ]
+                  : entry.category === "sixes"
+                    ? [
+                        ["SIXES", entry.supporting.sixes],
+                        ["FOURS", entry.supporting.fours],
+                        ["BALLS FACED", entry.supporting.ballsFaced]
+                      ]
+                    : entry.category === "boundaries"
+                      ? [
+                          ["BOUNDARIES", entry.supporting.boundaries],
+                          ["FOURS", entry.supporting.fours],
+                          ["SIXES", entry.supporting.sixes]
+                        ]
+                  : [
+                      ["TOTAL XP", entry.supporting.totalXP],
+                      ["XP TO NEXT", entry.supporting.xpToNextLevel],
+                      ["PROGRESS", formatPercentage(entry.supporting.xpProgressPercentage)]
+                    ];
 
   return (
     <Link

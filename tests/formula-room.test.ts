@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import {
   calculatePlayerMatchXP,
@@ -8,7 +8,11 @@ import {
   RATING_STATUS_RULES,
   XP_RULES
 } from "../lib/progression";
-import { PLAYER_POWER_ICONS } from "../lib/data/player-power-icons";
+import {
+  PLAYER_FILE_ICONS,
+  PLAYER_POWER_ICONS,
+  PLAYER_PROFILE_POWER_ICONS
+} from "../lib/data/player-power-icons";
 import { calculateBattingAllocation, calculateMatchResult } from "../lib/match-records";
 import type { PlayerMatchPerformance, TeamInnings } from "../lib/types/match";
 
@@ -98,6 +102,38 @@ test("Formula Room does not duplicate Leaderboard categories", () => {
   assert.doesNotMatch(formulaRoom, /Highest XP/);
   assert.doesNotMatch(formulaRoom, /Highest-Level/);
   assert.doesNotMatch(formulaRoom, /top-three/i);
+});
+
+test("Formula Room documents shared advanced boundary calculations without duplicating rankings", () => {
+  const formulaRoom = formulaRoomSource();
+
+  assert.match(formulaRoom, /Fours/);
+  assert.match(formulaRoom, /Exactly 4 batter runs from one delivery/);
+  assert.match(formulaRoom, /Sixes/);
+  assert.match(formulaRoom, /Exactly 6 batter runs from one delivery/);
+  assert.match(formulaRoom, /Boundary Count/);
+  assert.match(formulaRoom, /Career fours \+ career sixes from event-backed matches/);
+  assert.match(formulaRoom, /Six Machine/);
+  assert.match(formulaRoom, /Most career sixes from event-backed finalised matches/);
+  assert.match(formulaRoom, /Boundary Bandit/);
+  assert.match(formulaRoom, /Tracked Runs \/ Tracked Balls Faced x 100/);
+  assert.match(formulaRoom, /Tracked Runs Conceded x 6 \/ Tracked Legal Balls/);
+  assert.match(
+    formulaRoom,
+    /Some historical Gully Legends matches were played before ball-by-ball\s+tracking was introduced/
+  );
+  assert.match(
+    formulaRoom,
+    /Career totals such as runs and wickets still\s+include those matches where reliable data exists/
+  );
+  assert.match(
+    formulaRoom,
+    /Balls faced, strike\s+rate, economy, fours and sixes are calculated only from matches with\s+reliable ball-by-ball event history/
+  );
+  assert.match(
+    formulaRoom,
+    /Older values are shown as\s+unavailable rather than estimated/
+  );
 });
 
 test("XP Engine displays values from shared XP rules and utility examples", () => {
@@ -297,13 +333,16 @@ test("Player Power surfaces use the approved shared icon configuration", () => {
   assert.match(formulaRoom, /PLAYER_POWER_ICONS\.bowling/);
   assert.match(formulaRoom, /PLAYER_POWER_ICONS\.fielding/);
   assert.match(playerProfile, /PLAYER_PROFILE_ICON_SCALE/);
-  assert.match(playerProfile, /batting:\s*1\.9/);
-  assert.match(playerProfile, /bowling:\s*1\.85/);
-  assert.match(playerProfile, /fielding:\s*1\.85/);
+  assert.match(playerProfile, /batting:\s*1\.08/);
+  assert.match(playerProfile, /bowling:\s*1\.08/);
+  assert.match(playerProfile, /fielding:\s*1\.08/);
   assert.match(playerProfile, /function PlayerProfileIcon/);
-  assert.match(playerProfile, /PLAYER_POWER_ICONS\.batting/);
-  assert.match(playerProfile, /PLAYER_POWER_ICONS\.bowling/);
-  assert.match(playerProfile, /PLAYER_POWER_ICONS\.fielding/);
+  assert.match(playerProfile, /PLAYER_PROFILE_POWER_ICONS\.batting/);
+  assert.match(playerProfile, /PLAYER_PROFILE_POWER_ICONS\.bowling/);
+  assert.match(playerProfile, /PLAYER_PROFILE_POWER_ICONS\.fielding/);
+  assert.match(playerProfile, /PLAYER_FILE_ICONS\.batting/);
+  assert.match(playerProfile, /PLAYER_FILE_ICONS\.bowling/);
+  assert.match(playerProfile, /PLAYER_FILE_ICONS\.fielding/);
   assert.match(playerProfile, /value: player\.ratings\.batting/);
   assert.match(playerProfile, /value: player\.ratings\.bowling/);
   assert.match(playerProfile, /value: player\.ratings\.fielding/);
@@ -316,7 +355,38 @@ test("Player Power surfaces use the approved shared icon configuration", () => {
   assert.match(css, /\.player-profile-icon-artwork\s*{[\s\S]*?width:\s*100%/);
   assert.match(css, /\.player-profile-icon-artwork\s*{[\s\S]*?height:\s*100%/);
   assert.match(css, /\.player-profile-icon-artwork\s*{[\s\S]*?padding:\s*0/);
-  assert.match(css, /\.player-profile-icon-artwork\s*{[\s\S]*?transform:\s*scale\(var\(--artwork-scale,\s*1\.9\)\)/);
+  assert.match(css, /\.player-profile-icon-artwork\s*{[\s\S]*?transform:\s*scale\(var\(--artwork-scale,\s*1\.08\)\)/);
+});
+
+test("Player Profile uses separate polished icon families for power and file traits", () => {
+  const playerProfile = playerProfileSource();
+  const iconConfig = playerPowerIconConfigSource();
+  const css = cssSource();
+
+  assert.deepEqual(PLAYER_PROFILE_POWER_ICONS, {
+    batting: "/ui/player-profile/blade-power.png",
+    bowling: "/ui/player-profile/delivery-threat.png",
+    fielding: "/ui/player-profile/field-reflex.png"
+  });
+  assert.deepEqual(PLAYER_FILE_ICONS, {
+    batting: "/ui/player-profile/batting-dna.png",
+    bowling: "/ui/player-profile/bowling-arsenal.png",
+    fielding: "/ui/player-profile/fielding-instinct.png"
+  });
+  assert.notDeepEqual(PLAYER_PROFILE_POWER_ICONS, PLAYER_FILE_ICONS);
+  for (const iconPath of [
+    ...Object.values(PLAYER_PROFILE_POWER_ICONS),
+    ...Object.values(PLAYER_FILE_ICONS)
+  ]) {
+    assert.equal(existsSync(`public${iconPath}`), true, `${iconPath} should exist`);
+  }
+  assert.match(iconConfig, /PLAYER_PROFILE_POWER_ICONS/);
+  assert.match(iconConfig, /PLAYER_FILE_ICONS/);
+  assert.match(playerProfile, /label:\s*"Blade Power"[\s\S]*?PLAYER_PROFILE_POWER_ICONS\.batting/);
+  assert.match(playerProfile, /label:\s*"Batting DNA"[\s\S]*?PLAYER_FILE_ICONS\.batting/);
+  assert.match(css, /\.career-detail-grid h3\s*{[\s\S]*?font-size:\s*clamp\(0\.95rem,\s*1\.4vw,\s*1\.08rem\)/);
+  assert.match(css, /\.career-detail-grid dt\s*{[\s\S]*?font-size:\s*0\.8rem/);
+  assert.match(css, /\.career-detail-grid dd\s*{[\s\S]*?font-size:\s*0\.95rem/);
 });
 
 test("Formula Room large heading icons use requested responsive holder sizes", () => {

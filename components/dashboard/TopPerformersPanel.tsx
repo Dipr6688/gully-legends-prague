@@ -78,9 +78,11 @@ function getDisplayValue({
 }
 
 function TopPerformerPortraits({
+  isJointLeader,
   leaders,
   value
 }: {
+  isJointLeader: boolean;
   leaders: PlayerLeaderboardEntry[];
   value: number;
 }) {
@@ -90,7 +92,17 @@ function TopPerformerPortraits({
   if (value <= 0) return null;
 
   return (
-    <div className="performer-portrait-stack">
+    <div
+      className={`performer-portrait-stack${
+        isJointLeader ? " performer-portrait-stack-joint" : ""
+      }`}
+    >
+      {isJointLeader ? (
+        <span className="performer-joint-badge" aria-label="Joint all-time leaders">
+          <Crown className="h-4 w-4" aria-hidden="true" />
+          <b>JOINT #1</b>
+        </span>
+      ) : null}
       {visibleLeaders.map((entry) => (
         <div className="performer-portrait" key={entry.player.id}>
           <Image
@@ -105,10 +117,12 @@ function TopPerformerPortraits({
         </div>
       ))}
       {extraCount > 0 ? <span className="performer-extra-count">+{extraCount}</span> : null}
-      <span className="performer-leader-badge" aria-label="All-time leader">
-        <Crown className="h-4 w-4" aria-hidden="true" />
-        <b>#1</b>
-      </span>
+      {!isJointLeader ? (
+        <span className="performer-leader-badge" aria-label="All-time leader">
+          <Crown className="h-4 w-4" aria-hidden="true" />
+          <b>#1</b>
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -152,7 +166,11 @@ function TopPerformerCard({
       <span className="performer-category">{meta.label}</span>
       {hasLeader ? (
         <>
-          <TopPerformerPortraits leaders={leaders} value={value} />
+          <TopPerformerPortraits
+            isJointLeader={status === "joint-leaders"}
+            leaders={leaders}
+            value={value}
+          />
           <div className="performer-copy">
             <h3>{title}</h3>
             {status === "joint-leaders" ? <p>{names}</p> : null}

@@ -3,12 +3,22 @@ import type { CSSProperties, ReactNode } from "react";
 import { Flame, ShieldCheck, Swords, Trophy, Zap } from "lucide-react";
 import type { Player } from "@/lib/types/player";
 import { formatPercentage, getLevelProgress } from "@/lib/progression";
-import { PLAYER_POWER_ICONS } from "@/lib/data/player-power-icons";
+import {
+  PLAYER_FILE_ICONS,
+  PLAYER_PROFILE_POWER_ICONS
+} from "@/lib/data/player-power-icons";
+import {
+  formatEconomy,
+  formatHighestScore,
+  formatLegalBallsAsOvers,
+  formatStrikeRate,
+  type AdvancedCareerStats
+} from "@/lib/advanced-cricket-stats";
 
 const PLAYER_PROFILE_ICON_SCALE = {
-  batting: 1.9,
-  bowling: 1.85,
-  fielding: 1.85
+  batting: 1.08,
+  bowling: 1.08,
+  fielding: 1.08
 } as const;
 
 type PlayerProfileIconType = keyof typeof PLAYER_PROFILE_ICON_SCALE;
@@ -29,6 +39,21 @@ function StatTile({
       </div>
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function CareerMiniStat({
+  label,
+  value
+}: {
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
     </div>
   );
 }
@@ -136,8 +161,45 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-export function PlayerProfile({ player }: { player: Player }) {
+export function PlayerProfile({
+  advancedStats,
+  player
+}: {
+  player: Player;
+  advancedStats?: AdvancedCareerStats;
+}) {
   const levelProgress = getLevelProgress(player.xp);
+  const exactStats =
+    advancedStats ??
+    ({
+      playerId: player.id,
+      inningsBatted: 0,
+      trackedBattingInnings: 0,
+      trackedBattingRuns: 0,
+      ballsFaced: 0,
+      fours: 0,
+      sixes: 0,
+      boundaries: 0,
+      strikeRate: null,
+      highestScore: null,
+      highestScoreNotOut: false,
+      ducks: 0,
+      matchesBowled: 0,
+      trackedBowlingMatches: 0,
+      trackedRunsConceded: 0,
+      legalBallsBowled: 0,
+      economy: null,
+      matchesWithEventHistory: 0,
+      legacyFinalisedMatchesWithoutEvents: 0
+    } satisfies AdvancedCareerStats);
+  const coverageTotal = Math.max(
+    player.stats.matches,
+    exactStats.matchesWithEventHistory + exactStats.legacyFinalisedMatchesWithoutEvents
+  );
+  const trackedCoverageText =
+    coverageTotal > 0
+      ? `${exactStats.matchesWithEventHistory} of ${coverageTotal} matches`
+      : "0 of 0 matches";
   const heroSummary =
     player.heroSummary ??
     `${player.role} with a distinctive style in every department.`;
@@ -151,19 +213,19 @@ export function PlayerProfile({ player }: { player: Player }) {
     {
       key: "batting",
       label: "Blade Power",
-      icon: PLAYER_POWER_ICONS.batting,
+      icon: PLAYER_PROFILE_POWER_ICONS.batting,
       value: player.ratings.batting
     },
     {
       key: "bowling",
       label: "Delivery Threat",
-      icon: PLAYER_POWER_ICONS.bowling,
+      icon: PLAYER_PROFILE_POWER_ICONS.bowling,
       value: player.ratings.bowling
     },
     {
       key: "fielding",
       label: "Field Reflex",
-      icon: PLAYER_POWER_ICONS.fielding,
+      icon: PLAYER_PROFILE_POWER_ICONS.fielding,
       value: player.ratings.fielding
     }
   ] as const;
@@ -172,19 +234,19 @@ export function PlayerProfile({ player }: { player: Player }) {
     {
       key: "batting",
       label: "Batting DNA",
-      icon: PLAYER_POWER_ICONS.batting,
+      icon: PLAYER_FILE_ICONS.batting,
       text: player.battingProfile
     },
     {
       key: "bowling",
       label: "Bowling Arsenal",
-      icon: PLAYER_POWER_ICONS.bowling,
+      icon: PLAYER_FILE_ICONS.bowling,
       text: player.bowlingProfile
     },
     {
       key: "fielding",
       label: "Fielding Instinct",
-      icon: PLAYER_POWER_ICONS.fielding,
+      icon: PLAYER_FILE_ICONS.fielding,
       text: player.fieldingProfile
     }
   ] as const;
@@ -254,6 +316,67 @@ export function PlayerProfile({ player }: { player: Player }) {
                 value={player.stats.catches}
               />
             </div>
+            <div className="career-detail-grid">
+              <article>
+                <h3>Career Batting Totals</h3>
+                <dl>
+                  <CareerMiniStat label="Innings" value={exactStats.inningsBatted} />
+                  <CareerMiniStat label="Runs" value={player.stats.runs} />
+                  <CareerMiniStat
+                    label="Highest Score"
+                    value={formatHighestScore(exactStats)}
+                  />
+                </dl>
+                <h4>Ball-by-ball tracked</h4>
+                <dl>
+                  <CareerMiniStat
+                    label="Tracked Innings"
+                    value={`${exactStats.trackedBattingInnings} of ${exactStats.inningsBatted}`}
+                  />
+                  <CareerMiniStat
+                    label="Tracked Runs"
+                    value={exactStats.trackedBattingRuns}
+                  />
+                  <CareerMiniStat label="Balls Faced" value={exactStats.ballsFaced} />
+                  <CareerMiniStat
+                    label="Tracked Strike Rate"
+                    value={formatStrikeRate(exactStats.strikeRate)}
+                  />
+                  <CareerMiniStat label="Fours" value={exactStats.fours} />
+                  <CareerMiniStat label="Sixes" value={exactStats.sixes} />
+                </dl>
+              </article>
+              <article>
+                <h3>Career Bowling Totals</h3>
+                <dl>
+                  <CareerMiniStat label="Wickets" value={player.stats.wickets} />
+                </dl>
+                <h4>Ball-by-ball tracked</h4>
+                <dl>
+                  <CareerMiniStat
+                    label="Tracked Bowling Matches"
+                    value={exactStats.trackedBowlingMatches}
+                  />
+                  <CareerMiniStat
+                    label="Tracked Overs"
+                    value={formatLegalBallsAsOvers(exactStats.legalBallsBowled)}
+                  />
+                  <CareerMiniStat
+                    label="Tracked Runs Conceded"
+                    value={exactStats.trackedRunsConceded}
+                  />
+                  <CareerMiniStat
+                    label="Tracked Economy"
+                    value={formatEconomy(exactStats.economy)}
+                  />
+                </dl>
+              </article>
+            </div>
+            <p className="career-tracked-note">
+              Ball-by-ball coverage: {trackedCoverageText}. Strike rate, balls
+              faced, economy and boundary statistics use ball-by-ball tracked
+              matches only.
+            </p>
             <div className="mt-4 rounded-md border border-white/12 bg-black/30 p-3">
               <div className="flex items-center justify-between gap-3 text-xs font-black uppercase text-stone-300">
                 <span>Next Level Progress</span>

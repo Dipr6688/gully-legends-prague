@@ -178,7 +178,11 @@ function ScorecardInningsSection({ innings }: { innings: ScorecardInnings }) {
               <tr>
                 <th>Batter</th>
                 <th>Dismissal</th>
-                <th>Runs</th>
+                <th>R</th>
+                <th>B</th>
+                <th>4s</th>
+                <th>6s</th>
+                <th>SR</th>
               </tr>
             </thead>
             <tbody>
@@ -192,6 +196,18 @@ function ScorecardInningsSection({ innings }: { innings: ScorecardInnings }) {
                   </td>
                   <td>
                     <span className="scorecard-cell-value">{row.runs}</span>
+                  </td>
+                  <td>
+                    <span className="scorecard-cell-value">{row.balls}</span>
+                  </td>
+                  <td>
+                    <span className="scorecard-cell-value">{row.fours}</span>
+                  </td>
+                  <td>
+                    <span className="scorecard-cell-value">{row.sixes}</span>
+                  </td>
+                  <td>
+                    <span className="scorecard-cell-value">{row.strikeRate}</span>
                   </td>
                 </tr>
               ))}

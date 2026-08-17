@@ -23,6 +23,11 @@ import {
   formatInningsScore,
   MATCH_RULES
 } from "@/lib/match-records";
+import {
+  ADVANCED_CRICKET_STAT_RULES,
+  calculateBattingStrikeRate,
+  calculateBowlingEconomy
+} from "@/lib/advanced-cricket-stats";
 import type {
   MatchResult,
   PlayerMatchPerformance,
@@ -807,6 +812,14 @@ function MatchMathsPanel() {
     makeInnings("teamA", 14, 2),
     makeInnings("teamB", 14, 3)
   );
+  const strikeRateExample = calculateBattingStrikeRate({
+    runs: 31,
+    ballsFaced: 17
+  });
+  const economyExample = calculateBowlingEconomy({
+    runsConceded: 15,
+    legalBalls: 11
+  });
 
   return (
     <section
@@ -881,6 +894,78 @@ function MatchMathsPanel() {
           <CreditCard title="Stumped" bowler={MATCH_RULES.dismissalCredits.stumped.bowler} fielder={MATCH_RULES.dismissalCredits.stumped.fielder} innings={MATCH_RULES.dismissalCredits.stumped.innings} />
         </div>
         <p>The bowler cannot be selected as the stumper.</p>
+      </FormulaCard>
+
+      <FormulaCard
+        eyebrow="Advanced Cricket Stats"
+        title="Balls, Blades and Economy"
+        accent="cyan"
+      >
+        <dl className="formula-rule-list">
+          <div>
+            <dt>Balls Faced</dt>
+            <dd>Normal balls count. Wides do not. No-balls count for the batter.</dd>
+          </div>
+          <div>
+            <dt>Strike Rate</dt>
+            <dd>Tracked Runs / Tracked Balls Faced x 100</dd>
+          </div>
+          <div>
+            <dt>Best Strike Rate</dt>
+            <dd>
+              Minimum{" "}
+              {ADVANCED_CRICKET_STAT_RULES.minimumBallsFacedForStrikeRate} balls faced
+            </dd>
+          </div>
+          <div>
+            <dt>Economy</dt>
+            <dd>Tracked Runs Conceded x 6 / Tracked Legal Balls</dd>
+          </div>
+          <div>
+            <dt>Best Economy</dt>
+            <dd>
+              Minimum{" "}
+              {ADVANCED_CRICKET_STAT_RULES.minimumLegalBallsForEconomy} legal balls
+            </dd>
+          </div>
+          <div>
+            <dt>Fours</dt>
+            <dd>Exactly 4 batter runs from one delivery.</dd>
+          </div>
+          <div>
+            <dt>Sixes</dt>
+            <dd>Exactly 6 batter runs from one delivery.</dd>
+          </div>
+          <div>
+            <dt>Boundary Count</dt>
+            <dd>Career fours + career sixes from event-backed matches.</dd>
+          </div>
+          <div>
+            <dt>Six Machine</dt>
+            <dd>Most career sixes from event-backed finalised matches.</dd>
+          </div>
+          <div>
+            <dt>Boundary Bandit</dt>
+            <dd>Most career fours plus sixes from event-backed finalised matches.</dd>
+          </div>
+          <div>
+            <dt>Duck</dt>
+            <dd>Batted, dismissed, and scored zero.</dd>
+          </div>
+        </dl>
+        <div className="formula-score-example">
+          <span>31 off 17 = <strong>{strikeRateExample?.toFixed(1)} SR</strong></span>
+          <span>15 runs / 11 legal balls = <strong>{economyExample?.toFixed(2)} ECO</strong></span>
+          <strong>Wide: 0 BF, 0 legal balls. No-ball: +1 BF, 0 legal balls.</strong>
+        </div>
+        <p>
+          Some historical Gully Legends matches were played before ball-by-ball
+          tracking was introduced. Career totals such as runs and wickets still
+          include those matches where reliable data exists. Balls faced, strike
+          rate, economy, fours and sixes are calculated only from matches with
+          reliable ball-by-ball event history. Older values are shown as
+          unavailable rather than estimated.
+        </p>
       </FormulaCard>
 
       <div className="formula-grid three">

@@ -906,7 +906,7 @@ test("Supabase diagnostics reuse Monthly Beast and Hall engines in memory", () =
   assert.equal(result.monthlyBeast.usesExistingEngine, true);
   assert.equal(result.hallOfLegends.usesExistingEngine, true);
   assert.equal(result.monthlyBeast.summaries.length, 3);
-  assert.equal(result.hallOfLegends.summaries.length, 5);
+  assert.equal(result.hallOfLegends.summaries.length, 10);
 });
 
 test("Phase 2C2 public read pages use Supabase loaders without requiring auth", () => {

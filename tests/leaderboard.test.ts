@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import { activePlayers } from "../lib/data/players";
 import {
@@ -198,7 +199,10 @@ test("Leaderboard page identity is Hall of Legends and not Formula Room", () => 
   const leaderboard = leaderboardSource();
 
   assert.match(leaderboard, /HALL OF LEGENDS/);
-  assert.match(leaderboard, /The greatest run-makers, wicket-hunters, fielding heroes and XP/);
+  assert.match(
+    leaderboard,
+    /strike-rate\s+rockets, economy artists, six machines, boundary bandits and XP\s+warriors/
+  );
   assert.match(leaderboard, /ALL TIME/);
   assert.match(leaderboard, /CURRENT MONTH/);
   assert.match(page, /max-w-\[1480px\]/);
@@ -230,13 +234,26 @@ test("Leaderboard renders required interactive sections and player links", () =>
   assert.match(leaderboard, /quality=\{100\}/);
   assert.match(leaderboard, /className="leader-quick-icon"/);
   assert.match(leaderboard, /className="leader-quick-icon-artwork"/);
+  assert.match(leaderboard, /DUCK_COLLECTOR_QUOTES/);
+  assert.match(leaderboard, /getDuckCollectorQuote/);
+  assert.match(leaderboard, /data-category=\{summary\.category\}/);
+  assert.match(leaderboard, /className="duck-collector-tease"/);
+  assert.match(leaderboard, /🥲/);
+  assert.match(leaderboard, /🦆/);
   assert.match(leaderboard, /className=\{`podium-medal podium-medal-\$\{rankTone\}`\}/);
   assert.match(leaderboard, /<Medal aria-hidden="true" \/>/);
   assert.match(leaderboard, /href=\{`\/players\/\$\{entry\.player\.slug\}`\}/);
   assert.match(css, /\.leaderboard-tabs\s*{[\s\S]*?overflow-x:\s*auto/);
   assert.match(css, /\.leaderboard-rank-row\s*{[\s\S]*?min-width:\s*0/);
   assert.match(css, /\.leader-quick-icon\s*{[\s\S]*?width:\s*84px/);
-  assert.match(css, /\.leader-quick-icon-artwork\s*{[\s\S]*?transform:\s*scale\(var\(--icon-scale,\s*1\.5\)\)/);
+  assert.match(css, /\.leader-quick-icon-artwork\s*{[\s\S]*?transform:\s*scale\(var\(--icon-scale,\s*0\.92\)\)/);
+  assert.match(css, /\.leader-quick-card\[data-category="ducks"\]/);
+  assert.match(css, /\.leader-quick-card\[data-category="runs"\]/);
+  assert.match(css, /\.leader-quick-card\[data-category="wickets"\]/);
+  assert.match(css, /\.leader-quick-card\[data-category="catches"\]/);
+  assert.match(css, /\.leader-quick-card\[data-category="level"\]/);
+  assert.match(css, /\.duck-collector-tease/);
+  assert.match(css, /\.duck-collector-tease::after/);
   assert.match(css, /\.podium-grid\s*{[\s\S]*?minmax\(0,\s*1\.08fr\)/);
   assert.match(css, /\.podium-card-first\s*{[\s\S]*?translateY\(-38px\)\s*scale\(1\.07\)/);
   assert.match(leaderboard, /const hasJointFirstPlace = firstPlaceEntries\.length > 1/);
@@ -248,19 +265,90 @@ test("Leaderboard renders required interactive sections and player links", () =>
   assert.match(css, /@media \(max-width:\s*540px\)[\s\S]*?\.leaderboard-podium-section \.leaderboard-section-heading\s*{[\s\S]*?margin-bottom:\s*32px/);
 });
 
-test("Leaderboard categories and quick-card summaries cover the five crowns", () => {
+test("Leaderboard categories and quick-card summaries cover all Hall crowns", () => {
   assert.deepEqual(Object.keys(LEADERBOARD_CATEGORIES), [
     "runs",
     "wickets",
     "catches",
+    "strikeRate",
+    "economy",
+    "sixes",
+    "boundaries",
+    "ducks",
     "xp",
     "level"
   ]);
   assert.equal(LEADERBOARD_CATEGORIES.runs.label, "MOST RUNS");
+  assert.equal(LEADERBOARD_CATEGORIES.runs.icon, "/ui/leaderboard/most-runs.png");
   assert.equal(LEADERBOARD_CATEGORIES.wickets.label, "MOST WICKETS");
+  assert.equal(
+    LEADERBOARD_CATEGORIES.wickets.icon,
+    "/ui/leaderboard/most-wickets.png"
+  );
   assert.equal(LEADERBOARD_CATEGORIES.catches.label, "MOST CATCHES");
+  assert.equal(
+    LEADERBOARD_CATEGORIES.catches.icon,
+    "/ui/leaderboard/most-catches.png"
+  );
+  assert.equal(LEADERBOARD_CATEGORIES.strikeRate.label, "BEST STRIKE RATE");
+  assert.equal(
+    LEADERBOARD_CATEGORIES.strikeRate.icon,
+    "/ui/leaderboard/best-strike-rate.png"
+  );
+  assert.equal(LEADERBOARD_CATEGORIES.economy.label, "BEST ECONOMY");
+  assert.equal(
+    LEADERBOARD_CATEGORIES.economy.icon,
+    "/ui/leaderboard/best-economy.png"
+  );
+  assert.equal(LEADERBOARD_CATEGORIES.sixes.label, "SIX MACHINE");
+  assert.equal(
+    LEADERBOARD_CATEGORIES.sixes.icon,
+    "/ui/leaderboard/six-machine.png"
+  );
+  assert.equal(LEADERBOARD_CATEGORIES.boundaries.label, "BOUNDARY BANDIT");
+  assert.equal(
+    LEADERBOARD_CATEGORIES.boundaries.icon,
+    "/ui/leaderboard/boundary-bandit.png"
+  );
+  assert.equal(LEADERBOARD_CATEGORIES.ducks.label, "DUCK COLLECTOR");
+  assert.equal(
+    LEADERBOARD_CATEGORIES.ducks.icon,
+    "/ui/leaderboard/duck-collector.png"
+  );
   assert.equal(LEADERBOARD_CATEGORIES.xp.label, "HIGHEST XP");
+  assert.equal(
+    LEADERBOARD_CATEGORIES.xp.icon,
+    "/ui/leaderboard/highest-xp.png"
+  );
   assert.equal(LEADERBOARD_CATEGORIES.level.label, "HIGHEST LEVEL");
+  assert.equal(
+    LEADERBOARD_CATEGORIES.level.icon,
+    "/ui/leaderboard/highest-level.png"
+  );
+
+  for (const category of [
+    "runs",
+    "wickets",
+    "catches",
+    "strikeRate",
+    "economy",
+    "sixes",
+    "boundaries",
+    "ducks",
+    "xp",
+    "level"
+  ] as const) {
+    assert.equal(
+      existsSync(
+        path.join(
+          process.cwd(),
+          "public",
+          LEADERBOARD_CATEGORIES[category].icon.replace(/^\//, "")
+        )
+      ),
+      true
+    );
+  }
 });
 
 test("Current Month filters by match date and excludes non-finalised statuses", () => {

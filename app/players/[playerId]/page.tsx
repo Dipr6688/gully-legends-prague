@@ -49,6 +49,7 @@ export default async function PlayerProfilePage({
     <CareerPlayerProfile
       player={player}
       players={players}
+      matches={data?.matches}
       careerResolved={Boolean(data)}
     />
   );

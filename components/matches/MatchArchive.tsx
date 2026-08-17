@@ -9,7 +9,7 @@ import { useMatchRepository } from "@/components/matches/useMatchRepository";
 import {
   formatMatchDisplayDate,
   getMatchResultHeadline,
-  getMatchTeamScore
+  getMatchScoreRowsInInningsOrder
 } from "@/lib/match-display";
 import {
   ARCHIVE_MONTH_OPTIONS,
@@ -84,6 +84,7 @@ function MatchArchiveCard({
   returnTo: string;
 }) {
   const scorecardHref = `/matches/${match.id}?returnTo=${encodeURIComponent(returnTo)}`;
+  const scoreRows = getMatchScoreRowsInInningsOrder(match);
 
   return (
     <Link href={scorecardHref} className="match-archive-card">
@@ -99,14 +100,12 @@ function MatchArchiveCard({
       </div>
 
       <div className="match-archive-scores" aria-label={`${match.matchName} score`}>
-        <div>
-          <span>{match.teams.teamA.teamName}</span>
-          <b>{getMatchTeamScore(match, "teamA")}</b>
-        </div>
-        <div>
-          <span>{match.teams.teamB.teamName}</span>
-          <b>{getMatchTeamScore(match, "teamB")}</b>
-        </div>
+        {scoreRows.map((row) => (
+          <div key={row.teamId}>
+            <span>{row.teamName}</span>
+            <b>{row.score}</b>
+          </div>
+        ))}
       </div>
 
       <p className="match-archive-result">{getMatchResultHeadline(match)}</p>
