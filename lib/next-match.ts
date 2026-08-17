@@ -67,6 +67,14 @@ function isDraftMatch(match: MatchRecord): boolean {
   return !isDeletedFixture(match) && match.status === "draft";
 }
 
+function isNumberedMatchAttempt(match: MatchRecord): boolean {
+  return (
+    !isDeletedFixture(match) &&
+    match.status !== "cancelled" &&
+    match.status !== "abandoned"
+  );
+}
+
 function startOfLocalDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -118,7 +126,7 @@ export function compactSameDayUnplayedMatchNumbers(
   matchDate: string
 ): MatchRecord[] {
   const sameDayVisibleMatches = matches.filter(
-    (match) => match.matchDate === matchDate && !isDeletedFixture(match)
+    (match) => match.matchDate === matchDate && isNumberedMatchAttempt(match)
   );
   const lockedNumbers = sameDayVisibleMatches
     .filter((match) => match.status !== "draft")
@@ -149,6 +157,7 @@ export function getNextAvailableMatchNumber(
 ): number {
   const usedNumbers = new Set(
     getSameDayFixtures(matches, matchDate)
+      .filter(isNumberedMatchAttempt)
       .map((match) => match.matchNumber)
       .filter((value): value is number => Number.isInteger(value))
   );
@@ -159,6 +168,24 @@ export function getNextAvailableMatchNumber(
   }
 
   return candidate;
+}
+
+export function getPragueMatchDate(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Prague",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(now);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    return now.toISOString().slice(0, 10);
+  }
+
+  return `${year}-${month}-${day}`;
 }
 
 export function hasDuplicateMatchNumber({
@@ -177,6 +204,7 @@ export function hasDuplicateMatchNumber({
   return matches.some(
     (match) =>
       !isDeletedFixture(match) &&
+      isNumberedMatchAttempt(match) &&
       match.id !== currentMatchId &&
       match.matchDate === matchDate &&
       match.matchNumber === matchNumber

@@ -32,6 +32,7 @@ import {
   getNextMatchAction,
   getNextMatchCountdownLabel,
   getNextMatchState,
+  getPragueMatchDate,
   getSameDayFixtures,
   getTeamPlayerCount,
   getTodaySlate,
@@ -789,6 +790,66 @@ test("same-day game number helpers suggest and reject duplicates", () => {
   );
 });
 
+test("automatic Prague date and game number support field-side match creation", () => {
+  const pragueNight = new Date("2026-08-16T22:30:00.000Z");
+  const fixtures = [
+    matchRecord({ id: "game-1", matchDate: "2026-08-17", matchNumber: 1 }),
+    matchRecord({
+      id: "cancelled-game-2",
+      matchDate: "2026-08-17",
+      matchNumber: 2,
+      status: "cancelled"
+    })
+  ];
+
+  assert.equal(getPragueMatchDate(pragueNight), "2026-08-17");
+  assert.equal(getNextAvailableMatchNumber(fixtures, "2026-08-17"), 2);
+  assert.equal(
+    hasDuplicateMatchNumber({
+      matches: fixtures,
+      matchDate: "2026-08-17",
+      matchNumber: 2,
+      currentMatchId: "replacement"
+    }),
+    false
+  );
+});
+
+test("cancelled restart attempts do not consume public game ordering", () => {
+  const fixtures = [
+    matchRecord({ id: "game-1", matchDate: "2026-08-17", matchNumber: 1 }),
+    matchRecord({
+      id: "cancelled-game-2-a",
+      matchDate: "2026-08-17",
+      matchNumber: 2,
+      status: "cancelled"
+    }),
+    matchRecord({
+      id: "cancelled-game-2-b",
+      matchDate: "2026-08-17",
+      matchNumber: 2,
+      status: "cancelled"
+    }),
+    matchRecord({
+      id: "abandoned-game-3",
+      matchDate: "2026-08-17",
+      matchNumber: 3,
+      status: "abandoned"
+    })
+  ];
+
+  assert.equal(getNextAvailableMatchNumber(fixtures, "2026-08-17"), 2);
+  assert.equal(
+    hasDuplicateMatchNumber({
+      matches: fixtures,
+      matchDate: "2026-08-17",
+      matchNumber: 2,
+      currentMatchId: "replacement"
+    }),
+    false
+  );
+});
+
 test("scheduled fixture deletion is limited to unstarted Draft Ready and Scheduled states", () => {
   const scheduleOnly = {
     ...matchRecord({
@@ -1180,6 +1241,22 @@ test("only one match can be in progress at a time", () => {
   assert.equal(getLiveMatchConflict([liveMatch, nextMatch], "live"), null);
 });
 
+test("cancelled active match releases the live-match lock for a replacement", () => {
+  const cancelledMatch = matchRecord({
+    id: "cancelled-live",
+    matchDate: "2026-08-06",
+    status: "cancelled"
+  });
+  const replacement = matchRecord({
+    id: "replacement",
+    matchDate: "2026-08-06",
+    status: "draft"
+  });
+
+  assert.equal(getLiveMatchConflict([cancelledMatch, replacement], "replacement"), null);
+  assert.equal(getNextMatchState([cancelledMatch], new Date(2026, 7, 6)).type, "empty");
+});
+
 test("Next Match live summary uses official innings snapshots", () => {
   const firstOnly = {
     ...matchRecord({ id: "live-score", matchDate: "2026-08-06", status: "in_progress" }),
@@ -1289,6 +1366,34 @@ test("Next Match ticket removes close control and uses shared repository data", 
   assert.match(css, /\.next-match-overflow-button/);
   assert.match(css, /\.next-match-overflow-delete/);
   assert.match(css, /@media \(max-width: 640px\)[\s\S]*?\.next-match-teams/);
+});
+
+test("match creation uses automatic date game number and active match controls", () => {
+  const form = matchFormSource();
+  const css = cssSource();
+
+  assert.match(form, /getPragueMatchDate/);
+  assert.match(form, /getNextAvailableMatchNumber/);
+  assert.match(form, /Automatic game/);
+  assert.match(form, /More Options/);
+  assert.match(form, /1\. Who&apos;s Playing\?/);
+  assert.match(form, /2\. Build the Teams/);
+  assert.match(form, /3\. Match Settings/);
+  assert.match(form, /UPDATE PLAYERS/);
+  assert.match(form, /CANCEL & RESTART MATCH/);
+  assert.match(form, /CANCEL & RESTART THIS MATCH\?/i);
+  assert.match(form, /SAVE PLAYER CHANGES/);
+  assert.match(form, /CANCEL & RESTART/);
+  assert.match(form, /restartValues/);
+  assert.match(form, /restartQuickScoring = createEmptyQuickScoringMetadata/);
+  assert.match(form, /restartBowlingOvers = \{ teamA: \[\], teamB: \[\] \}/);
+  assert.match(form, /buildFreshPerformanceStateForRosters\(teamA, teamB\)/);
+  assert.match(form, /Match Restart Setup/);
+  assert.doesNotMatch(form, /Start time\s*<input/);
+  assert.match(css, /\.match-control-action/);
+  assert.match(css, /\.active-player-update-row/);
+  assert.match(css, /\.start-match-primary/);
+  assert.match(css, /\.match-start-summary/);
 });
 
 test("Matches page keeps scheduled fixtures separate from archive", () => {

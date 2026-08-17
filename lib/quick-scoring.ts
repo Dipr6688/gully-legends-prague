@@ -291,7 +291,16 @@ export function deriveQuickScoringInnings({
   }
 
   for (const event of [...events].sort((left, right) => left.sequence - right.sequence)) {
-    const undismissedBeforeEvent = battingPlayerIds.filter(
+    const knownBatterIdsBeforeEvent = new Set(
+      battingOrder.length === 0 ? battingPlayerIds : battingOrder
+    );
+    if (event.strikerId) knownBatterIdsBeforeEvent.add(event.strikerId);
+    if (event.nonStrikerId) knownBatterIdsBeforeEvent.add(event.nonStrikerId);
+
+    const eligibleBatterIdsBeforeEvent = battingPlayerIds.filter((playerId) =>
+      knownBatterIdsBeforeEvent.has(playerId)
+    );
+    const undismissedBeforeEvent = eligibleBatterIdsBeforeEvent.filter(
       (playerId) => !dismissedPlayerIds.has(playerId)
     );
     const pairRequired =
@@ -466,7 +475,7 @@ export function deriveQuickScoringInnings({
         });
       }
 
-      const hasEligibleReplacementBatter = battingPlayerIds.some(
+      const hasEligibleReplacementBatter = eligibleBatterIdsBeforeEvent.some(
         (playerId) =>
           playerId !== event.strikerId &&
           (!pairRequired || playerId !== event.nonStrikerId) &&

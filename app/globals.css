@@ -5691,6 +5691,185 @@ textarea {
   overflow: hidden;
 }
 
+.match-controls-panel {
+  box-shadow: 0 0 24px rgba(83, 220, 255, 0.14);
+}
+
+.match-controls-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.match-control-action {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 0.9rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.match-control-action:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.match-control-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.match-control-action-update {
+  border: 1px solid rgba(83, 220, 255, 0.72);
+  background:
+    linear-gradient(135deg, rgba(83, 220, 255, 0.24), rgba(247, 199, 52, 0.15)),
+    rgba(3, 12, 18, 0.92);
+  color: #f8f1d6;
+  box-shadow: 0 0 18px rgba(83, 220, 255, 0.22);
+}
+
+.match-control-action-cancel {
+  border: 1px solid rgba(255, 75, 56, 0.78);
+  background:
+    linear-gradient(135deg, rgba(255, 75, 56, 0.34), rgba(255, 142, 39, 0.18), rgba(83, 8, 8, 0.3)),
+    rgba(17, 3, 3, 0.92);
+  color: #ffe8e4;
+  box-shadow: 0 0 20px rgba(255, 75, 56, 0.24);
+}
+
+.start-match-primary {
+  min-height: 56px;
+  padding-inline: 22px;
+  font-size: 1rem;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.75),
+    0 0 22px rgba(247, 199, 52, 0.28);
+}
+
+.match-start-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.match-start-summary span {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  border: 1px solid rgba(83, 220, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 7px 11px;
+  color: #f8f1d6;
+  font-size: 0.75rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.active-player-update-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.active-player-update-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(132px, 0.5fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 10px;
+}
+
+.active-player-update-row span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.active-player-update-row strong {
+  color: #f8f1d6;
+  font-size: 0.95rem;
+  font-weight: 950;
+}
+
+.active-player-update-row em {
+  color: #b9b3a1;
+  font-size: 0.75rem;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.active-player-update-row select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 10px 12px;
+  color: #f5f0df;
+  font-weight: 900;
+}
+
+.match-auto-metadata {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.match-auto-metadata div {
+  min-width: 0;
+  border: 1px solid rgba(83, 220, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  padding: 12px;
+}
+
+.match-auto-metadata span {
+  display: block;
+  color: #5ae2ff;
+  font-size: 0.72rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.match-auto-metadata strong {
+  display: block;
+  color: #f8f1d6;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.match-more-options {
+  margin-top: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 12px;
+}
+
+.match-more-options summary {
+  cursor: pointer;
+  color: #ffd719;
+  font-size: 0.8rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
 .quick-scoring-panel {
   box-shadow: 0 0 22px rgba(83, 220, 255, 0.13);
 }
@@ -6133,6 +6312,21 @@ textarea {
 @media (max-width: 700px) {
   .match-management-form {
     gap: 12px;
+  }
+
+  .match-controls-actions,
+  .match-control-action,
+  .start-match-primary {
+    width: 100%;
+  }
+
+  .active-player-update-grid,
+  .match-auto-metadata {
+    grid-template-columns: 1fr;
+  }
+
+  .active-player-update-row {
+    grid-template-columns: 1fr;
   }
 
   .live-result-full-preview {

@@ -23,6 +23,7 @@ import {
   Swords,
   Trash2,
   Trophy,
+  UserPlus,
   Users
 } from "lucide-react";
 import { activePlayers } from "@/lib/data/players";
@@ -59,13 +60,20 @@ import {
   setPlayerAvailability,
   sortBattingPerformances,
   getOrdinaryCrossTeamPlayerIds,
+  getPlayerAssignment,
   getPerformanceKey,
   getPerformanceRecordKey,
+  getRecordedActivityPlayerIds,
   hasOddAvailablePlayers,
   syncDismissalRows,
-  toggleTeamSelection
+  toggleTeamSelection,
+  validateReadyToStart
 } from "@/lib/match-records";
-import type { LiveInningsScore, MatchValidationStage } from "@/lib/match-records";
+import type {
+  LiveInningsScore,
+  MatchValidationStage,
+  PlayerAssignment
+} from "@/lib/match-records";
 import {
   DEFAULT_BATTING_MODE,
   createEmptyQuickScoringMetadata,
@@ -90,6 +98,7 @@ import { useMatchRepository } from "@/components/matches/useMatchRepository";
 import {
   getLiveMatchConflict,
   getNextAvailableMatchNumber,
+  getPragueMatchDate,
   hasDuplicateMatchNumber
 } from "@/lib/next-match";
 import {
@@ -189,6 +198,17 @@ const initialValues: MockMatchFormValues = {
 };
 
 const allPlayerIds = activePlayers.map((player) => player.id);
+
+function createInitialFormValues(matches: MatchRecord[] = []): MockMatchFormValues {
+  const matchDate = getPragueMatchDate();
+
+  return {
+    ...initialValues,
+    matchDate,
+    matchNumber: getNextAvailableMatchNumber(matches, matchDate),
+    startTime: ""
+  };
+}
 
 const initialQuickWicketDraft = {
   open: false,
@@ -300,6 +320,21 @@ function getMatchNumberValue(value: number | ""): number | null {
   return value === "" ? null : sanitizeRuns(value);
 }
 
+function formatAutomaticMatchDate(matchDate: string): string {
+  if (!matchDate) return "Today";
+
+  const [year, month, day] = matchDate.split("-").map(Number);
+
+  if (!year || !month || !day) return matchDate;
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    timeZone: "Europe/Prague"
+  }).format(new Date(Date.UTC(year, month - 1, day, 12)));
+}
+
 function getSetupValidationMessage(error: string) {
   if (error === "Scheduled overs per innings must be a positive integer.") {
     return "Please select the number of overs.";
@@ -360,7 +395,7 @@ export function MockMatchEntryForm({
     () => initialMatch?.supabaseUpdatedAt ?? null
   );
   const [values, setValues] = useState<MockMatchFormValues>(() =>
-    initialMatch ? getFormValuesFromMatch(initialMatch) : initialValues
+    initialMatch ? getFormValuesFromMatch(initialMatch) : createInitialFormValues(savedMatches)
   );
   const [availablePlayerIds, setAvailablePlayerIds] = useState<string[]>(() =>
     initialMatch ? getAvailablePlayerIdsFromMatch(initialMatch) : []
@@ -436,6 +471,13 @@ export function MockMatchEntryForm({
     "Match workflow ready. Enter team, innings and player records."
   );
   const [isSavingMatch, setIsSavingMatch] = useState(false);
+  const [playerUpdateOpen, setPlayerUpdateOpen] = useState(false);
+  const [playerUpdateAssignments, setPlayerUpdateAssignments] = useState<
+    Record<string, PlayerAssignment>
+  >({});
+  const [playerUpdateErrors, setPlayerUpdateErrors] = useState<string[]>([]);
+  const [cancelConfirmationOpen, setCancelConfirmationOpen] = useState(false);
+  const [restartSetupNoticeOpen, setRestartSetupNoticeOpen] = useState(false);
   const [liveConflictMatchId, setLiveConflictMatchId] = useState<string | null>(null);
   const [blockedCrownMonthKey, setBlockedCrownMonthKey] = useState<string | null>(
     null
@@ -454,8 +496,8 @@ export function MockMatchEntryForm({
   const isDemoMatch = initialMatch?.isDemo === true;
   const isDemoTestMatch = initialMatch?.isDemoTestMatch === true;
   const isNewMatch =
+    !initialMatch &&
     status === "draft" &&
-    values.matchDate === "" &&
     battingFirstTeamId === "" &&
     availablePlayerIds.length === 0 &&
     teamA.length === 0 &&
@@ -571,6 +613,35 @@ export function MockMatchEntryForm({
   useEffect(() => {
     document.title = `${matchPageTitle} | Gully Legends Prague`;
   }, [matchPageTitle]);
+
+  useEffect(() => {
+    if (!isNewMatch) return;
+
+    const refreshAutomaticSchedule = window.setTimeout(() => {
+      setValues((current) => {
+        const matchDate = current.matchDate || getPragueMatchDate();
+        const nextMatchNumber = getNextAvailableMatchNumber(
+          savedMatches,
+          matchDate
+        );
+
+        if (
+          current.matchDate === matchDate &&
+          current.matchNumber === nextMatchNumber
+        ) {
+          return current;
+        }
+
+        return {
+          ...current,
+          matchDate,
+          matchNumber: nextMatchNumber
+        };
+      });
+    }, 0);
+
+    return () => window.clearTimeout(refreshAutomaticSchedule);
+  }, [isNewMatch, savedMatches]);
 
   const availablePlayers = useMemo(
     () => activePlayers.filter((player) => availablePlayerIds.includes(player.id)),
@@ -886,6 +957,17 @@ export function MockMatchEntryForm({
       }),
     [allBowlingOvers, liveResult, performanceList, sharedPlayerId]
   );
+  const recordedActivityPlayerIds = useMemo(
+    () =>
+      new Set(
+        getRecordedActivityPlayerIds({
+          performances: performanceList,
+          bowlingOvers,
+          quickScoring
+        })
+      ),
+    [bowlingOvers, performanceList, quickScoring]
+  );
   const target = firstInnings.runs + 1;
   const teamABowlingInningsState = useMemo(
     () =>
@@ -935,24 +1017,26 @@ export function MockMatchEntryForm({
     effectiveBattingFirstTeamId === "teamA"
       ? teamBBowlingInningsState.isComplete
       : teamABowlingInningsState.isComplete;
+  const firstInningsWasCompleted =
+    Boolean(quickScoring.firstInningsCompletedAt) || firstInningsIsComplete;
   const secondInningsEvents = getQuickScoringEventsForTeam(
     quickScoring,
     chasingTeamId
   );
   const storedQuickInningsPhase = quickScoring.inningsPhase ?? null;
   const quickInningsPhase =
-    storedQuickInningsPhase === "first_innings" && firstInningsIsComplete
+    storedQuickInningsPhase === "first_innings" && firstInningsWasCompleted
       ? "innings_break"
       : storedQuickInningsPhase ??
         (secondInningsEvents.length > 0
           ? "second_innings"
-          : firstInningsIsComplete
+          : firstInningsWasCompleted
             ? "innings_break"
             : "first_innings");
   const isFirstInningsBreak =
     status === "in_progress" &&
     quickInningsPhase === "innings_break" &&
-    firstInningsIsComplete;
+    firstInningsWasCompleted;
   const quickScoringBaseCanBeEdited = canEditQuickScoring({
     canEditMatch,
     status,
@@ -1000,9 +1084,14 @@ export function MockMatchEntryForm({
   const quickActiveInningsCompleteMessage =
     getInningsCompleteMessage(quickActiveInningsState);
   const quickScoringCanBeEdited =
-    quickScoringBaseCanBeEdited && !quickActiveInningsState.isComplete;
+    quickScoringBaseCanBeEdited &&
+    !quickActiveInningsState.isComplete &&
+    !playerUpdateOpen;
   const canUndoQuickScoring =
-    !isLocked && status === "in_progress" && quickActiveEvents.length > 0;
+    !isLocked &&
+    !playerUpdateOpen &&
+    status === "in_progress" &&
+    quickActiveEvents.length > 0;
   const quickDismissedPlayerIdsForState = getQuickDismissedPlayerIds(quickActiveDerived);
   const quickUndismissedBattingPlayers = quickActiveBattingPlayers.filter(
     (player) => !quickDismissedPlayerIdsForState.has(player.id)
@@ -1292,6 +1381,336 @@ export function MockMatchEntryForm({
     }));
   }
 
+  function createAssignmentStateFromCurrentRosters() {
+    return Object.fromEntries(
+      activePlayers.map((player) => [
+        player.id,
+        getPlayerAssignment(player.id, {
+          teamAPlayerIds: teamA,
+          teamBPlayerIds: teamB,
+          sharedPlayerId
+        })
+      ])
+    ) as Record<string, PlayerAssignment>;
+  }
+
+  function openPlayerUpdatePanel() {
+    if (status !== "in_progress" || isFinalised || !canEditMatch) return;
+
+    resetQuickDeliveryEditors();
+    setCancelConfirmationOpen(false);
+    setSetupExpanded(false);
+    setPlayerUpdateAssignments(createAssignmentStateFromCurrentRosters());
+    setPlayerUpdateErrors([]);
+    setPlayerUpdateOpen(true);
+    setMessage("Quick Scoring paused. Update players, then save or discard.");
+  }
+
+  function openActiveSetupPanel() {
+    setCancelConfirmationOpen(false);
+    setPlayerUpdateOpen(false);
+    setPlayerUpdateErrors([]);
+    setPlayerUpdateAssignments({});
+    setSetupExpanded(true);
+  }
+
+  function toggleActiveSetupPanel() {
+    if (setupExpanded) {
+      setSetupExpanded(false);
+      return;
+    }
+
+    openActiveSetupPanel();
+  }
+
+  function openRestartConfirmation() {
+    setPlayerUpdateOpen(false);
+    setPlayerUpdateErrors([]);
+    setPlayerUpdateAssignments({});
+    setSetupExpanded(false);
+    setCancelConfirmationOpen(true);
+  }
+
+  function closePlayerUpdatePanel() {
+    setPlayerUpdateOpen(false);
+    setPlayerUpdateErrors([]);
+    setPlayerUpdateAssignments({});
+    setMessage("Player update discarded. Quick Scoring is unchanged.");
+  }
+
+  function getLockedPlayerUpdateMessage(
+    playerId: string,
+    assignment: PlayerAssignment
+  ) {
+    const playerName = getPlayerDisplayName(activePlayers, playerId);
+
+    if (assignment === "shared") {
+      return `${playerName} has already participated as the Shared player. To change the Shared player safely, restart this match.`;
+    }
+
+    return `${playerName} has already participated in the match and cannot be reassigned.`;
+  }
+
+  function changePlayerUpdateAssignment(
+    playerId: string,
+    assignment: PlayerAssignment
+  ) {
+    const currentAssignment = getPlayerAssignment(playerId, {
+      teamAPlayerIds: teamA,
+      teamBPlayerIds: teamB,
+      sharedPlayerId
+    });
+
+    if (
+      recordedActivityPlayerIds.has(playerId) &&
+      assignment !== currentAssignment
+    ) {
+      setPlayerUpdateErrors([
+        getLockedPlayerUpdateMessage(playerId, currentAssignment)
+      ]);
+      return;
+    }
+
+    setPlayerUpdateErrors([]);
+    setPlayerUpdateAssignments((current) => {
+      const next = { ...current, [playerId]: assignment };
+
+      if (assignment === "shared") {
+        for (const [candidateId, candidateAssignment] of Object.entries(next)) {
+          if (candidateId === playerId || candidateAssignment !== "shared") continue;
+
+          if (recordedActivityPlayerIds.has(candidateId)) {
+            setPlayerUpdateErrors([
+              getLockedPlayerUpdateMessage(candidateId, "shared")
+            ]);
+            return current;
+          }
+
+          next[candidateId] = "unassigned";
+        }
+      }
+
+      return next;
+    });
+  }
+
+  function getRostersFromAssignments(assignments: Record<string, PlayerAssignment>) {
+    const nextAvailable = activePlayers
+      .filter((player) => assignments[player.id] !== "unassigned")
+      .map((player) => player.id);
+    const nextSharedPlayerId =
+      activePlayers.find((player) => assignments[player.id] === "shared")?.id ?? null;
+    const assignedTeamA = activePlayers
+      .filter((player) => assignments[player.id] === "teamA")
+      .map((player) => player.id);
+    const assignedTeamB = activePlayers
+      .filter((player) => assignments[player.id] === "teamB")
+      .map((player) => player.id);
+    const nextRosters = applySharedPlayerToRosters({
+      teamAPlayerIds: assignedTeamA,
+      teamBPlayerIds: assignedTeamB,
+      sharedPlayerId: nextSharedPlayerId
+    });
+
+    return {
+      availablePlayerIds: nextAvailable,
+      teamAPlayerIds: nextRosters.teamAPlayerIds,
+      teamBPlayerIds: nextRosters.teamBPlayerIds,
+      sharedPlayerId: nextRosters.sharedPlayerId
+    };
+  }
+
+  function buildPerformanceStateForRosters(
+    nextTeamA: string[],
+    nextTeamB: string[]
+  ) {
+    const selectedContextKeys = new Set([
+      ...nextTeamA.map((playerId) => getPerformanceKey(playerId, "teamA")),
+      ...nextTeamB.map((playerId) => getPerformanceKey(playerId, "teamB"))
+    ]);
+    const next: Record<string, PlayerMatchPerformance> = {};
+
+    for (const playerId of nextTeamA) {
+      const key = getPerformanceKey(playerId, "teamA");
+      next[key] = {
+        ...(performances[key] ?? createPerformance(playerId, "teamA")),
+        teamId: "teamA",
+        representingTeamId: "teamA",
+        played: true
+      };
+    }
+
+    for (const playerId of nextTeamB) {
+      const key = getPerformanceKey(playerId, "teamB");
+      next[key] = {
+        ...(performances[key] ?? createPerformance(playerId, "teamB")),
+        teamId: "teamB",
+        representingTeamId: "teamB",
+        played: true
+      };
+    }
+
+    for (const [key, performance] of Object.entries(performances)) {
+      const recordKey = key.includes(":") ? key : getPerformanceRecordKey(performance);
+
+      if (selectedContextKeys.has(recordKey)) {
+        next[recordKey] = {
+          ...next[recordKey],
+          ...performance
+        };
+      }
+    }
+
+    return next;
+  }
+
+  function validatePlayerUpdateAssignments(
+    assignments: Record<string, PlayerAssignment>
+  ) {
+    const errors: string[] = [];
+    const next = getRostersFromAssignments(assignments);
+    const nextAssignmentByPlayer = new Map(
+      activePlayers.map((player) => [
+        player.id,
+        getPlayerAssignment(player.id, {
+          teamAPlayerIds: next.teamAPlayerIds,
+          teamBPlayerIds: next.teamBPlayerIds,
+          sharedPlayerId: next.sharedPlayerId
+        })
+      ])
+    );
+
+    for (const playerId of recordedActivityPlayerIds) {
+      const currentAssignment = getPlayerAssignment(playerId, {
+        teamAPlayerIds: teamA,
+        teamBPlayerIds: teamB,
+        sharedPlayerId
+      });
+
+      if ((nextAssignmentByPlayer.get(playerId) ?? "unassigned") !== currentAssignment) {
+        errors.push(
+          getLockedPlayerUpdateMessage(playerId, currentAssignment)
+        );
+      }
+    }
+
+    const validationErrors = validateReadyToStart({
+      matchDate: values.matchDate,
+      matchNumber: getMatchNumberValue(values.matchNumber),
+      startTime: values.startTime || undefined,
+      matchName: values.matchName,
+      teamAName: values.teamAName,
+      teamBName: values.teamBName,
+      status,
+      stage: "start",
+      scheduledOversPerInnings: getScheduledOversValue(
+        values.scheduledOversPerInnings
+      ),
+      battingMode: activeBattingMode,
+      battingFirstTeamId: effectiveBattingFirstTeamId,
+      inningsExtras,
+      availablePlayerIds: next.availablePlayerIds,
+      teamAPlayerIds: next.teamAPlayerIds,
+      teamBPlayerIds: next.teamBPlayerIds,
+      sharedPlayerId: next.sharedPlayerId,
+      performances: Object.values(
+        buildPerformanceStateForRosters(next.teamAPlayerIds, next.teamBPlayerIds)
+      ),
+      bowlingOvers
+    });
+
+    return {
+      ...next,
+      errors: [...new Set([...errors, ...validationErrors])]
+    };
+  }
+
+  async function savePlayerUpdates() {
+    if (!canEditMatch || status !== "in_progress") return;
+
+    const validation = validatePlayerUpdateAssignments(playerUpdateAssignments);
+
+    if (validation.errors.length > 0) {
+      setPlayerUpdateErrors(validation.errors);
+      return;
+    }
+
+    const nextPerformances = buildPerformanceStateForRosters(
+      validation.teamAPlayerIds,
+      validation.teamBPlayerIds
+    );
+    const nextTeamAIds = new Set(validation.teamAPlayerIds);
+    const nextTeamBIds = new Set(validation.teamBPlayerIds);
+    const nextBowlingOvers = {
+      teamA: bowlingOvers.teamA.map((over) =>
+        !over.bowlerId || nextTeamAIds.has(over.bowlerId)
+          ? over
+          : { ...over, bowlerId: "" }
+      ),
+      teamB: bowlingOvers.teamB.map((over) =>
+        !over.bowlerId || nextTeamBIds.has(over.bowlerId)
+          ? over
+          : { ...over, bowlerId: "" }
+      )
+    };
+    const nextMatch = buildCurrentMatchRecord(
+      "in_progress",
+      liveResult,
+      new Date().toISOString(),
+      quickScoring,
+      {
+        teamAPlayerIds: validation.teamAPlayerIds,
+        teamBPlayerIds: validation.teamBPlayerIds,
+        sharedPlayerId: validation.sharedPlayerId,
+        performances: nextPerformances,
+        bowlingOvers: nextBowlingOvers
+      }
+    );
+
+    setIsSavingMatch(true);
+
+    try {
+      const saved = await persistNonFinalisedMatch(nextMatch);
+
+      if (!saved) return;
+
+      setAvailablePlayerIds(validation.availablePlayerIds);
+      setTeamA(validation.teamAPlayerIds);
+      setTeamB(validation.teamBPlayerIds);
+      setSharedPlayerId(validation.sharedPlayerId);
+      setPerformances(nextPerformances);
+      setBowlingOvers(nextBowlingOvers);
+      setQuickSelection((current) => {
+        const battingIds = new Set(
+          quickActiveBattingTeamId === "teamA"
+            ? validation.teamAPlayerIds
+            : validation.teamBPlayerIds
+        );
+        const bowlingIds = new Set(
+          quickActiveBowlingTeamId === "teamA"
+            ? validation.teamAPlayerIds
+            : validation.teamBPlayerIds
+        );
+
+        return {
+          strikerId: battingIds.has(current.strikerId) ? current.strikerId : "",
+          nonStrikerId: battingIds.has(current.nonStrikerId)
+            ? current.nonStrikerId
+            : "",
+          bowlerId: bowlingIds.has(current.bowlerId) ? current.bowlerId : ""
+        };
+      });
+      setPlayerUpdateOpen(false);
+      setPlayerUpdateAssignments({});
+      setPlayerUpdateErrors([]);
+      setQuickValidationAttempted(false);
+      setWicketValidationAttempted(false);
+      setMessage("Player changes saved. Quick Scoring can continue.");
+    } finally {
+      setIsSavingMatch(false);
+    }
+  }
+
   function selectAllAvailable() {
     if (isRosterLocked) return;
     applyRosters(allPlayerIds, teamA, teamB, null);
@@ -1362,23 +1781,6 @@ export function MockMatchEntryForm({
     if (isRosterLocked) return;
 
     const nextSharedPlayerId = playerId || null;
-    const hasDraftData =
-      Object.keys(performances).length > 0 ||
-      bowlingOvers.teamA.length > 0 ||
-      bowlingOvers.teamB.length > 0 ||
-      teamA.length > 0 ||
-      teamB.length > 0;
-
-    if (
-      hasDraftData &&
-      sharedPlayerId !== nextSharedPlayerId &&
-      !window.confirm(
-        "Changing the Shared Player will rebuild both team rosters and may remove draft batting, bowling and dismissal records associated with the current shared player. Continue?"
-      )
-    ) {
-      return;
-    }
-
     const ordinaryTeamA = teamA.filter((id) => id !== sharedPlayerId && id !== nextSharedPlayerId);
     const ordinaryTeamB = teamB.filter((id) => id !== sharedPlayerId && id !== nextSharedPlayerId);
 
@@ -2073,10 +2475,75 @@ export function MockMatchEntryForm({
     finalStatus: MatchStatus,
     result: MatchResult,
     appliedAt: string,
-    quickScoringOverride = quickScoring
+    quickScoringOverride = quickScoring,
+    overrides: {
+      matchId?: string;
+      formValues?: MockMatchFormValues;
+      teamAPlayerIds?: string[];
+      teamBPlayerIds?: string[];
+      sharedPlayerId?: string | null;
+      performances?: Record<string, PlayerMatchPerformance>;
+      bowlingOvers?: TeamBowlingState;
+      inningsExtras?: Record<TeamId, number>;
+    } = {}
   ): MatchRecord {
+    const recordValues = overrides.formValues ?? values;
+    const recordTeamA = overrides.teamAPlayerIds ?? teamA;
+    const recordTeamB = overrides.teamBPlayerIds ?? teamB;
+    const recordSharedPlayerId =
+      overrides.sharedPlayerId === undefined
+        ? sharedPlayerId
+        : overrides.sharedPlayerId;
+    const recordPerformancesState = overrides.performances ?? performances;
+    const recordBowlingOvers = overrides.bowlingOvers ?? bowlingOvers;
+    const recordInningsExtras = overrides.inningsExtras ?? inningsExtras;
+    const recordTeamAPlayers = activePlayers.filter((player) =>
+      recordTeamA.includes(player.id)
+    );
+    const recordTeamBPlayers = activePlayers.filter((player) =>
+      recordTeamB.includes(player.id)
+    );
+    const recordTeamAPerformances = buildPerformanceList(
+      recordTeamAPlayers,
+      "teamA",
+      recordPerformancesState,
+      recordBowlingOvers.teamA,
+      recordBowlingOvers.teamB
+    );
+    const recordTeamBPerformances = buildPerformanceList(
+      recordTeamBPlayers,
+      "teamB",
+      recordPerformancesState,
+      recordBowlingOvers.teamB,
+      recordBowlingOvers.teamA
+    );
+    const recordPerformanceList = [
+      ...recordTeamAPerformances,
+      ...recordTeamBPerformances
+    ];
+    const recordFirstInnings = buildTeamInnings({
+      battingTeamId: effectiveBattingFirstTeamId,
+      battingPlayerIds:
+        effectiveBattingFirstTeamId === "teamA" ? recordTeamA : recordTeamB,
+      performances: recordPerformanceList,
+      bowlingOvers:
+        effectiveBattingFirstTeamId === "teamA"
+          ? recordBowlingOvers.teamB
+          : recordBowlingOvers.teamA,
+      extras: recordInningsExtras[effectiveBattingFirstTeamId]
+    });
+    const recordSecondInnings = buildTeamInnings({
+      battingTeamId: chasingTeamId,
+      battingPlayerIds: chasingTeamId === "teamA" ? recordTeamA : recordTeamB,
+      performances: recordPerformanceList,
+      bowlingOvers:
+        chasingTeamId === "teamA"
+          ? recordBowlingOvers.teamB
+          : recordBowlingOvers.teamA,
+      extras: recordInningsExtras[chasingTeamId]
+    });
     const persistedBattingMode =
-      values.battingMode ||
+      recordValues.battingMode ||
       quickScoringOverride.battingMode ||
       (finalStatus === "draft" ? null : activeBattingMode);
     const persistedQuickScoring = {
@@ -2084,8 +2551,11 @@ export function MockMatchEntryForm({
       version: 2 as const,
       battingMode: persistedBattingMode
     };
-    const allBowlingOvers = [...bowlingOvers.teamA, ...bowlingOvers.teamB];
-    const teamContextFinalisedRecords: FinalisedPlayerMatchRecord[] = performanceList.map(
+    const allBowlingOvers = [
+      ...recordBowlingOvers.teamA,
+      ...recordBowlingOvers.teamB
+    ];
+    const teamContextFinalisedRecords: FinalisedPlayerMatchRecord[] = recordPerformanceList.map(
       (performance) => ({
         ...performance,
         xpBreakdown: calculatePlayerMatchXP(performance, {
@@ -2104,40 +2574,40 @@ export function MockMatchEntryForm({
       teamContextFinalisedRecords.map((record) => [getPerformanceRecordKey(record), record])
     );
     const finalisedPlayerRecords = aggregateFinalisedPlayerRecords({
-      performances: performanceList,
+      performances: recordPerformanceList,
       allBowlingOvers,
       result,
-      sharedPlayerId,
+      sharedPlayerId: recordSharedPlayerId,
       appliedAt,
       finalStatus
     });
     const teamAMatchData = buildTeamMatchData({
       teamId: "teamA",
       teamName: FIXED_TEAM_A_NAME,
-      playerIds: teamA,
-      performances: performanceList,
-      bowlingOvers: bowlingOvers.teamA
+      playerIds: recordTeamA,
+      performances: recordPerformanceList,
+      bowlingOvers: recordBowlingOvers.teamA
     });
     const teamBMatchData = buildTeamMatchData({
       teamId: "teamB",
       teamName: FIXED_TEAM_B_NAME,
-      playerIds: teamB,
-      performances: performanceList,
-      bowlingOvers: bowlingOvers.teamB
+      playerIds: recordTeamB,
+      performances: recordPerformanceList,
+      bowlingOvers: recordBowlingOvers.teamB
     });
 
     return {
-      id: matchId,
+      id: overrides.matchId ?? matchId,
       isDemo: isDemoMatch,
       isDemoTestMatch,
-      matchDate: values.matchDate,
-      matchNumber: getMatchNumberValue(values.matchNumber),
-      startTime: values.startTime || undefined,
-      matchName: values.matchName,
+      matchDate: recordValues.matchDate,
+      matchNumber: getMatchNumberValue(recordValues.matchNumber),
+      startTime: recordValues.startTime || undefined,
+      matchName: recordValues.matchName,
       venue: "CZU Gully Arena",
       status: finalStatus,
       scheduledOversPerInnings: getScheduledOversValue(
-        values.scheduledOversPerInnings
+        recordValues.scheduledOversPerInnings
       ),
       battingMode: persistedBattingMode,
       battingFirstTeamId:
@@ -2154,7 +2624,7 @@ export function MockMatchEntryForm({
             ? getChasingTeamId(battingFirstTeamId)
             : null
           : chasingTeamId,
-      sharedPlayerId,
+      sharedPlayerId: recordSharedPlayerId,
       quickScoring: persistedQuickScoring,
       teams: {
         teamA: {
@@ -2171,8 +2641,8 @@ export function MockMatchEntryForm({
         }
       },
       innings: {
-        first: firstInnings,
-        second: secondInnings
+        first: recordFirstInnings,
+        second: recordSecondInnings
       },
       result,
       finalisedPlayerRecords,
@@ -2185,7 +2655,10 @@ export function MockMatchEntryForm({
     };
   }
 
-  async function persistNonFinalisedMatch(match: MatchRecord) {
+  async function persistNonFinalisedMatch(
+    match: MatchRecord,
+    expectedUpdatedAt = supabaseUpdatedAt
+  ) {
     if (!canEditMatch) {
       setQuickSaveStatus("Login required");
       setMessage("Admin login required to continue scoring.");
@@ -2199,7 +2672,7 @@ export function MockMatchEntryForm({
 
     const result = await saveSupabaseAdminMatch({
       match,
-      expectedUpdatedAt: supabaseUpdatedAt
+      expectedUpdatedAt
     });
 
     if (!result.ok) {
@@ -2302,7 +2775,7 @@ export function MockMatchEntryForm({
         })
       ) {
         setMessage(
-          `Game ${matchNumber} already exists for this date. Choose another game number.`
+          `Game ${matchNumber} is already in use for this date. Refresh and try again.`
         );
         return false;
       }
@@ -2489,6 +2962,7 @@ export function MockMatchEntryForm({
           setQuickScoring(nextQuickScoring);
           setSetupExpanded(false);
           setSetupValidationAttempted(false);
+          setRestartSetupNoticeOpen(false);
         }
         setFinalisedXPBreakdowns({});
       }
@@ -2537,6 +3011,126 @@ export function MockMatchEntryForm({
     });
   }
 
+  function buildFreshPerformanceStateForRosters(
+    nextTeamA: string[],
+    nextTeamB: string[]
+  ) {
+    return Object.fromEntries([
+      ...nextTeamA.map((playerId) => [
+        getPerformanceKey(playerId, "teamA"),
+        createPerformance(playerId, "teamA")
+      ]),
+      ...nextTeamB.map((playerId) => [
+        getPerformanceKey(playerId, "teamB"),
+        createPerformance(playerId, "teamB")
+      ])
+    ]) as Record<string, PlayerMatchPerformance>;
+  }
+
+  async function cancelAndRestartActiveMatch() {
+    if (!canEditMatch || status !== "in_progress") return;
+
+    const cancelledResult: MatchResult = {
+      type: "no_result",
+      reason: "cancelled"
+    };
+    const cancelledMatch = buildCurrentMatchRecord(
+      "cancelled",
+      cancelledResult,
+      new Date().toISOString(),
+      {
+        ...quickScoring,
+        setupLocked: true
+      }
+    );
+    const restartMatchId = createLocalMatchId();
+    const matchesForRestartNumber = [
+      ...savedMatches.filter((match) => match.id !== matchId),
+      cancelledMatch
+    ];
+    const restartValues: MockMatchFormValues = {
+      ...values,
+      matchNumber: getNextAvailableMatchNumber(
+        matchesForRestartNumber,
+        values.matchDate
+      ),
+      startTime: "",
+      teamAName: FIXED_TEAM_A_NAME,
+      teamBName: FIXED_TEAM_B_NAME,
+      teamATotal: 0,
+      teamBTotal: 0
+    };
+    const restartQuickScoring = createEmptyQuickScoringMetadata();
+    const restartBowlingOvers = { teamA: [], teamB: [] };
+    const restartPerformances = buildFreshPerformanceStateForRosters(teamA, teamB);
+    const restartMatch = buildCurrentMatchRecord(
+      "draft",
+      { type: "no_result" },
+      new Date().toISOString(),
+      restartQuickScoring,
+      {
+        matchId: restartMatchId,
+        formValues: restartValues,
+        teamAPlayerIds: teamA,
+        teamBPlayerIds: teamB,
+        sharedPlayerId,
+        performances: restartPerformances,
+        bowlingOvers: restartBowlingOvers,
+        inningsExtras: { teamA: 0, teamB: 0 }
+      }
+    );
+
+    setIsSavingMatch(true);
+
+    try {
+      const cancelledSaved = await persistNonFinalisedMatch(
+        cancelledMatch,
+        supabaseUpdatedAt
+      );
+
+      if (!cancelledSaved) return;
+
+      const restartSaved = await persistNonFinalisedMatch(restartMatch, null);
+
+      if (!restartSaved) {
+        setStatus("cancelled");
+        setCancelConfirmationOpen(false);
+        setPlayerUpdateOpen(false);
+        setMessage(
+          "The previous attempt was cancelled, but the restart draft could not be created. Create a new match manually."
+        );
+        return;
+      }
+
+      setMatchId(restartMatchId);
+      setValues(restartValues);
+      setAvailablePlayerIds(availablePlayerIds);
+      setTeamA(teamA);
+      setTeamB(teamB);
+      setSharedPlayerId(sharedPlayerId);
+      setBattingFirstTeamId(battingFirstTeamId);
+      setQuickScoring(restartQuickScoring);
+      setSetupExpanded(true);
+      setInningsExtras({ teamA: 0, teamB: 0 });
+      setPerformances(restartPerformances);
+      setPlayerOfMatchSelectionMode("auto");
+      setBowlingOvers(restartBowlingOvers);
+      setStatus("draft");
+      setCancelConfirmationOpen(false);
+      setPlayerUpdateOpen(false);
+      setRestartSetupNoticeOpen(true);
+      setQuickSaveStatus("Saved");
+      setFinalisedXPBreakdowns({});
+      setSetupValidationAttempted(false);
+      setQuickValidationAttempted(false);
+      setWicketValidationAttempted(false);
+      setDetailedRecordsExpanded(false);
+      setMessage("Match restart setup created. Update players or teams, then start the new match.");
+    } finally {
+      setIsSavingMatch(false);
+    }
+  }
+
   function resetForm() {
     if (!canEditMatch) {
       setMessage("Admin login required to continue scoring.");
@@ -2545,7 +3139,7 @@ export function MockMatchEntryForm({
 
     setMatchId(createLocalMatchId());
     setSupabaseUpdatedAt(null);
-    setValues(initialValues);
+    setValues(createInitialFormValues(savedMatches));
     setAvailablePlayerIds([]);
     setTeamA([]);
     setTeamB([]);
@@ -2563,6 +3157,7 @@ export function MockMatchEntryForm({
     setQuickValidationAttempted(false);
     setWicketValidationAttempted(false);
     setDetailedRecordsExpanded(false);
+    setRestartSetupNoticeOpen(false);
     setMessage("Match entry reset.");
   }
 
@@ -2604,7 +3199,7 @@ export function MockMatchEntryForm({
             teamBName={values.teamBName}
             firstInnings={firstInnings}
             secondInnings={secondInnings}
-            firstInningsIsComplete={firstInningsIsComplete}
+            firstInningsIsComplete={firstInningsWasCompleted}
             secondInningsIsComplete={secondInningsIsComplete}
           />
         </div>
@@ -2626,6 +3221,211 @@ export function MockMatchEntryForm({
           />
         ) : null}
 
+        {status === "in_progress" && !isFinalised ? (
+          <section className="match-controls-panel rounded-lg border border-neon-cyan/35 bg-black/35 p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase text-neon-cyan">
+                  Match Controls
+                </p>
+                <h2 className="text-2xl font-black uppercase text-stone-50">
+                  Active Match Tools
+                </h2>
+                <p className="text-sm font-bold text-stone-400">
+                  View setup, update late arrivals, or restart safely when attendance changes too much.
+                </p>
+              </div>
+              <div className="match-controls-actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={openActiveSetupPanel}
+                >
+                  <Users className="h-4 w-4" aria-hidden="true" />
+                  View Setup
+                </Button>
+                <button
+                  type="button"
+                  className="match-control-action match-control-action-update"
+                  disabled={!canEditMatch || isSavingMatch}
+                  onClick={openPlayerUpdatePanel}
+                >
+                  <UserPlus className="h-5 w-5" aria-hidden="true" />
+                  UPDATE PLAYERS
+                </button>
+                <button
+                  type="button"
+                  className="match-control-action match-control-action-cancel"
+                  disabled={!canEditMatch || isSavingMatch}
+                  onClick={openRestartConfirmation}
+                >
+                  <RotateCcw className="h-5 w-5" aria-hidden="true" />
+                  CANCEL & RESTART MATCH
+                </button>
+              </div>
+            </div>
+
+            {playerUpdateOpen ? (
+              <div className="active-player-update-panel mt-4 rounded-lg border border-neon-cyan/30 bg-black/30 p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-xl font-black uppercase text-stone-50">
+                      Update Players
+                    </h3>
+                    <p className="text-sm font-bold text-stone-400">
+                      Quick Scoring is paused. Players with recorded activity are locked to their current assignment.
+                    </p>
+                  </div>
+                  <span className="rounded border border-neon-yellow/40 bg-neon-yellow/10 px-3 py-2 text-xs font-black uppercase text-neon-yellow">
+                    No balls will be reset
+                  </span>
+                </div>
+
+                {playerUpdateErrors.length > 0 ? (
+                  <div className="mt-3 grid gap-2">
+                    {playerUpdateErrors.map((error) => (
+                      <p
+                        key={error}
+                        className="rounded-md border border-neon-red/45 bg-neon-red/10 p-3 text-sm font-black uppercase text-red-100"
+                      >
+                        {error}
+                      </p>
+                    ))}
+                    {playerUpdateErrors.some((error) =>
+                      error.toLowerCase().includes("restart this match")
+                    ) ? (
+                      <button
+                        type="button"
+                        className="match-control-action match-control-action-cancel w-fit"
+                        disabled={isSavingMatch}
+                        onClick={openRestartConfirmation}
+                      >
+                        <RotateCcw className="h-5 w-5" aria-hidden="true" />
+                        CANCEL & RESTART MATCH
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="active-player-update-grid mt-4">
+                  {activePlayers.map((player) => {
+                    const assignment =
+                      playerUpdateAssignments[player.id] ?? "unassigned";
+                    const lockedByActivity = recordedActivityPlayerIds.has(player.id);
+
+                    return (
+                      <label
+                        key={`active-update-${player.id}`}
+                        className="active-player-update-row"
+                      >
+                        <span>
+                          <strong>{player.name}</strong>
+                          {lockedByActivity ? (
+                            <em>
+                              This player has already participated in the match and cannot be reassigned.
+                            </em>
+                          ) : (
+                            <em>Can be assigned safely.</em>
+                          )}
+                        </span>
+                        <select
+                          value={assignment}
+                          disabled={lockedByActivity || isSavingMatch}
+                          onChange={(event) =>
+                            changePlayerUpdateAssignment(
+                              player.id,
+                              event.target.value as PlayerAssignment
+                            )
+                          }
+                        >
+                          <option value="unassigned">Unassigned</option>
+                          <option value="teamA">Team A</option>
+                          <option value="teamB">Team B</option>
+                          <option value="shared">Shared</option>
+                        </select>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    className="match-control-action match-control-action-update"
+                    disabled={isSavingMatch}
+                    onClick={savePlayerUpdates}
+                  >
+                    <Save className="h-5 w-5" aria-hidden="true" />
+                    SAVE PLAYER CHANGES
+                  </button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={isSavingMatch}
+                    onClick={closePlayerUpdatePanel}
+                  >
+                    Discard / Close
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {cancelConfirmationOpen ? (
+              <div className="cancel-match-confirmation mt-4 rounded-lg border border-neon-red/50 bg-neon-red/10 p-4">
+                <h3 className="text-xl font-black uppercase text-red-100">
+                  Cancel & Restart This Match?
+                </h3>
+                <p className="mt-2 text-sm font-bold text-red-100/90">
+                  The current scoring attempt will be cancelled. Recorded balls will not affect career stats or XP.
+                  Your current setup will be copied into a new draft match so you can update the players and start again.
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-md border border-neon-red/35 bg-black/35 p-3">
+                    <span className="block text-xs font-black uppercase text-red-200/80">
+                      Team A
+                    </span>
+                    <strong className="text-2xl font-black text-red-100">
+                      {formatInningsScore(teamAInningsScore.runs, teamAInningsScore.wicketsLost)}
+                    </strong>
+                  </div>
+                  <div className="rounded-md border border-neon-red/35 bg-black/35 p-3">
+                    <span className="block text-xs font-black uppercase text-red-200/80">
+                      Team B
+                    </span>
+                    <strong className="text-2xl font-black text-red-100">
+                      {formatInningsScore(teamBInningsScore.runs, teamBInningsScore.wicketsLost)}
+                    </strong>
+                  </div>
+                </div>
+                {hasQuickScoringEvents ? (
+                  <p className="mt-2 text-sm font-black uppercase text-neon-yellow">
+                    Scoring data has already been recorded.
+                  </p>
+                ) : null}
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={isSavingMatch}
+                    onClick={() => setCancelConfirmationOpen(false)}
+                  >
+                    Keep Playing
+                  </Button>
+                  <button
+                    type="button"
+                    className="match-control-action match-control-action-cancel"
+                    disabled={isSavingMatch}
+                    onClick={cancelAndRestartActiveMatch}
+                  >
+                    <RotateCcw className="h-5 w-5" aria-hidden="true" />
+                    CANCEL & RESTART
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
         {isFinalised ? (
           <FinalisedMatchOverview
             matchName={values.matchName}
@@ -2640,6 +3440,30 @@ export function MockMatchEntryForm({
           />
         ) : (
         <>
+          {restartSetupNoticeOpen && status === "draft" ? (
+            <div className="match-restart-setup-banner rounded-lg border border-neon-yellow/45 bg-neon-yellow/10 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase text-neon-yellow">
+                    Match Restart Setup
+                  </p>
+                  <h2 className="text-2xl font-black uppercase text-stone-50">
+                    Previous Attempt Cancelled
+                  </h2>
+                  <p className="mt-1 text-sm font-bold text-yellow-100/90">
+                    Your setup has been copied. Update today&apos;s players or teams, then start the new match from 0/0.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setRestartSetupNoticeOpen(false)}
+                >
+                  Hide
+                </Button>
+              </div>
+            </div>
+          ) : null}
           <section
             ref={setupSectionRef}
             className="match-setup-panel rounded-lg border border-neon-green/30 bg-black/25 p-4"
@@ -2663,7 +3487,7 @@ export function MockMatchEntryForm({
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={() => setSetupExpanded((current) => !current)}
+                    onClick={toggleActiveSetupPanel}
                   >
                     {setupIsCollapsed ? "View Setup" : "Hide Setup"}
                   </Button>
@@ -2718,10 +3542,13 @@ export function MockMatchEntryForm({
                     <div>
                       <h3 className="flex items-center gap-2 text-xl font-black uppercase text-stone-50">
                         <Users className="h-5 w-5 text-neon-green" aria-hidden="true" />
-                        Available Today
+                        1. Who&apos;s Playing?
                       </h3>
                       <p className="text-sm text-stone-400">
-                        Select everybody available for today&apos;s match.
+                        Select everyone who is available for this match.
+                      </p>
+                      <p className="mt-1 text-xs font-black uppercase text-neon-yellow">
+                        {availablePlayerIds.length} players selected
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -2772,10 +3599,10 @@ export function MockMatchEntryForm({
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                     <div>
                       <h3 className="text-xl font-black uppercase text-stone-50">
-                        Team Assignment
+                        2. Build the Teams
                       </h3>
                       <p className="text-sm text-stone-400">
-                        Assign available players manually or generate balanced teams.
+                        Assign selected players to Team A, Shared, or Team B.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -2813,13 +3640,13 @@ export function MockMatchEntryForm({
 
                   <div className="team-assignment-summary mt-4 grid gap-3 md:grid-cols-3">
                     <div className="team-assignment-summary-item rounded-md border border-neon-cyan/25 bg-black/25 p-3 text-sm font-black uppercase text-stone-100">
-                      {availableSummary.uniquePlayers} unique players available
+                      Team A - {availableSummary.teamASize}
                     </div>
                     <div className="team-assignment-summary-item rounded-md border border-neon-yellow/25 bg-black/25 p-3 text-sm font-black uppercase text-neon-yellow">
-                      {availableSummary.teamASize} vs {availableSummary.teamBSize}
+                      Shared - {availableSummary.sharedSlots}
                     </div>
                     <div className="team-assignment-summary-item rounded-md border border-neon-green/25 bg-black/25 p-3 text-sm font-black uppercase text-neon-green">
-                      {availableSummary.sharedSlots} shared player
+                      Team B - {availableSummary.teamBSize}
                     </div>
                   </div>
                   <ErrorText>{visibleSetupErrors.teamAssignment}</ErrorText>
@@ -2858,84 +3685,75 @@ export function MockMatchEntryForm({
 
                 <section className="rounded-lg border border-white/12 bg-black/20 p-4">
                   <h3 className="text-xl font-black uppercase text-stone-50">
-                    Match Settings
+                    3. Match Settings
                   </h3>
                   <p className="text-sm text-stone-400">
-                    Team names are fixed as Team A and Team B.
+                    Pick only the scoring choices needed before the first ball.
                   </p>
-          <div className="grid gap-4 md:grid-cols-2">
-          <label className="grid gap-2 text-sm font-bold text-stone-200">
-            Match date
-            <input
-              type="date"
-              value={values.matchDate}
-              disabled={isLocked}
-              onChange={(event) =>
-                setValues((current) => ({
-                  ...current,
-                  matchDate: event.target.value,
-                  matchNumber:
-                    initialMatch || current.matchNumber !== "" || !event.target.value
-                      ? current.matchNumber
-                      : getNextAvailableMatchNumber(savedMatches, event.target.value)
-                }))
-              }
-              className={getInputClass(Boolean(visibleSetupErrors.matchDate))}
-            />
-            <ErrorText>{visibleSetupErrors.matchDate}</ErrorText>
-          </label>
-          <label className="grid gap-2 text-sm font-bold text-stone-200">
-            Game number
-            <input
-              min={1}
-              step={1}
-              type="number"
-              value={values.matchNumber}
-              disabled={isLocked}
-              onChange={(event) =>
-                setValues((current) => ({
-                  ...current,
-                  matchNumber:
-                    event.target.value === ""
-                      ? ""
-                      : Math.max(1, sanitizeRuns(event.target.value))
-                }))
-              }
-              className={getInputClass()}
-            />
-          </label>
-          <label className="grid gap-2 text-sm font-bold text-stone-200">
-            Start time
-            <input
-              type="time"
-              value={values.startTime}
-              disabled={isLocked}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, startTime: event.target.value }))
-              }
-              className={getInputClass()}
-            />
-          </label>
-          <label className="grid gap-2 text-sm font-bold text-stone-200">
-            Match name
-            <input
-              value={values.matchName}
-              disabled={isLocked}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, matchName: event.target.value }))
-              }
-              className={getInputClass(Boolean(visibleSetupErrors.matchName))}
-            />
-            <ErrorText>{visibleSetupErrors.matchName}</ErrorText>
-          </label>
-          <div className="grid gap-2 text-sm font-bold text-stone-200">
-            Scoring flow
-            <output className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100">
-              {getFriendlyWorkflowStatus(status, quickSaveStatus)}
-            </output>
+          <div className="match-auto-metadata mt-4">
+            <div>
+              <span>Today</span>
+              <strong>{formatAutomaticMatchDate(values.matchDate)}</strong>
+            </div>
+            <div>
+              <span>Automatic game</span>
+              <strong>Game {values.matchNumber || "-"}</strong>
+            </div>
+            <div>
+              <span>Venue</span>
+              <strong>CZU Gully Arena</strong>
+            </div>
           </div>
+          <details className="match-more-options">
+            <summary>More Options</summary>
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <label className="grid gap-2 text-sm font-bold text-stone-200">
+                Change match date
+                <input
+                  type="date"
+                  value={values.matchDate}
+                  disabled={isRosterLocked}
+                  onChange={(event) =>
+                    setValues((current) => {
+                      const matchDate = event.target.value || getPragueMatchDate();
+
+                      return {
+                        ...current,
+                        matchDate,
+                        matchNumber: getNextAvailableMatchNumber(
+                          savedMatches,
+                          matchDate
+                        )
+                      };
+                    })
+                  }
+                  className={getInputClass(Boolean(visibleSetupErrors.matchDate))}
+                />
+                <ErrorText>{visibleSetupErrors.matchDate}</ErrorText>
+              </label>
+              <label className="grid gap-2 text-sm font-bold text-stone-200">
+                Match name
+                <input
+                  value={values.matchName}
+                  disabled={isLocked}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, matchName: event.target.value }))
+                  }
+                  className={getInputClass(Boolean(visibleSetupErrors.matchName))}
+                />
+                <ErrorText>{visibleSetupErrors.matchName}</ErrorText>
+              </label>
+              <div className="grid gap-2 text-sm font-bold text-stone-200">
+                Game number
+                <output className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-stone-100">
+                  Automatically assigned as Game {values.matchNumber || "-"}.
+                </output>
+              </div>
+            </div>
+          </details>
+          <div className="grid gap-4 md:grid-cols-3">
           <label className="grid gap-2 text-sm font-bold text-stone-200">
-            Scheduled overs per innings
+            Overs
             <input
               min={1}
               type="number"
@@ -2955,7 +3773,7 @@ export function MockMatchEntryForm({
             <ErrorText>{visibleSetupErrors.overs}</ErrorText>
           </label>
           <label className="grid gap-2 text-sm font-bold text-stone-200">
-            Batting mode
+            Batting Mode
                 <select
                   name="battingMode"
                   value={values.battingMode}
@@ -2975,7 +3793,7 @@ export function MockMatchEntryForm({
             <ErrorText>{visibleSetupErrors.battingMode}</ErrorText>
           </label>
           <label className="grid gap-2 text-sm font-bold text-stone-200">
-            Who bats first?
+            Batting First
             <select
               value={battingFirstTeamId}
               disabled={isRosterLocked}
@@ -2988,31 +3806,33 @@ export function MockMatchEntryForm({
             </select>
             <ErrorText>{visibleSetupErrors.battingFirst}</ErrorText>
           </label>
-          <div className="grid gap-2 text-sm font-bold text-stone-200">
-            Live innings scores
-            <div className="grid grid-cols-2 gap-3">
-              <output className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-2xl font-black text-neon-yellow">
-                {formatInningsScore(teamAInningsScore.runs, teamAInningsScore.wicketsLost)}
-              </output>
-              <output className="rounded-md border border-white/15 bg-black/35 px-3 py-3 text-2xl font-black text-neon-yellow">
-                {formatInningsScore(teamBInningsScore.runs, teamBInningsScore.wicketsLost)}
-              </output>
-            </div>
-          </div>
           </div>
           {status === "draft" ? (
-            <div className="mt-4 flex flex-wrap gap-3">
+            <div className="mt-5 grid gap-4">
+              <div className="match-start-summary">
+                <span>{availablePlayerIds.length} players</span>
+                <span>
+                  Team A {availableSummary.teamASize} - Shared {availableSummary.sharedSlots} - Team B {availableSummary.teamBSize}
+                </span>
+                <span>{values.scheduledOversPerInnings || "-"} overs</span>
+                <span>
+                  {battingFirstTeamId === "teamB" ? "Team B" : battingFirstTeamId === "teamA" ? "Team A" : "Choose batting first"}
+                </span>
+                <span>{values.battingMode ? getBattingModeLabel(values.battingMode) : "Choose batting mode"}</span>
+              </div>
+              <div className="flex flex-wrap gap-3">
               <Button
                 type="button"
-                variant="secondary"
+                className="start-match-primary"
                 onClick={() => validateAndSetStatus("in_progress", "start")}
                 disabled={isSavingMatch || isRosterLocked}
               >
                 <Swords className="h-4 w-4" aria-hidden="true" />
-                Start Match
+                START MATCH
               </Button>
               <Button
                 type="button"
+                variant="ghost"
                 onClick={() => validateAndSetStatus("draft", "draft")}
                 disabled={isSavingMatch || isRosterLocked}
               >
@@ -3024,6 +3844,7 @@ export function MockMatchEntryForm({
                   <ErrorText>{getRequiredSummary(setupErrorCount)}</ErrorText>
                 </div>
               ) : null}
+              </div>
             </div>
           ) : null}
                 </section>

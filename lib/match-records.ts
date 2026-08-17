@@ -6,6 +6,7 @@ import type {
   MatchResult,
   MatchStatus,
   PlayerMatchPerformance,
+  QuickScoringMetadata,
   QuickScoringInningsPhase,
   TeamId,
   InningsState,
@@ -18,6 +19,8 @@ export type TeamRosters = {
   teamBPlayerIds: string[];
   sharedPlayerId?: string | null;
 };
+
+export type PlayerAssignment = "teamA" | "teamB" | "shared" | "unassigned";
 
 export type MatchTotals = {
   teamATotal: number;
@@ -132,6 +135,83 @@ export function getOrdinaryCrossTeamPlayerIds(rosters: TeamRosters): string[] {
   return getCrossTeamPlayerIds(rosters).filter(
     (playerId) => playerId !== sharedPlayerId
   );
+}
+
+export function getPlayerAssignment(
+  playerId: string,
+  rosters: TeamRosters
+): PlayerAssignment {
+  if (rosters.sharedPlayerId === playerId) return "shared";
+
+  const inTeamA = rosters.teamAPlayerIds.includes(playerId);
+  const inTeamB = rosters.teamBPlayerIds.includes(playerId);
+
+  if (inTeamA && inTeamB) return "shared";
+  if (inTeamA) return "teamA";
+  if (inTeamB) return "teamB";
+
+  return "unassigned";
+}
+
+export function getRecordedActivityPlayerIds({
+  performances = [],
+  bowlingOvers = { teamA: [], teamB: [] },
+  quickScoring
+}: {
+  performances?: PlayerMatchPerformance[];
+  bowlingOvers?: TeamBowlingOvers;
+  quickScoring?: QuickScoringMetadata | null;
+}): string[] {
+  const activityIds = new Set<string>();
+
+  for (const event of [
+    ...(quickScoring?.inningsAEvents ?? []),
+    ...(quickScoring?.inningsBEvents ?? [])
+  ]) {
+    activityIds.add(event.strikerId);
+    if (event.nonStrikerId) activityIds.add(event.nonStrikerId);
+    activityIds.add(event.bowlerId);
+
+    if (event.wicket) {
+      activityIds.add(event.wicket.dismissedPlayerId);
+      if (event.wicket.fielderId) activityIds.add(event.wicket.fielderId);
+      if (event.wicket.assistingFielderId) {
+        activityIds.add(event.wicket.assistingFielderId);
+      }
+      if (event.wicket.newBatterId) activityIds.add(event.wicket.newBatterId);
+      if (event.wicket.nextStrikerId) activityIds.add(event.wicket.nextStrikerId);
+      if (event.wicket.nextNonStrikerId) {
+        activityIds.add(event.wicket.nextNonStrikerId);
+      }
+    }
+  }
+
+  for (const over of [...bowlingOvers.teamA, ...bowlingOvers.teamB]) {
+    if (over.bowlerId) activityIds.add(over.bowlerId);
+
+    for (const dismissal of over.dismissals) {
+      activityIds.add(dismissal.dismissedBatterId);
+      if (dismissal.creditedBowlerId) activityIds.add(dismissal.creditedBowlerId);
+      if (dismissal.fielderId) activityIds.add(dismissal.fielderId);
+    }
+  }
+
+  for (const performance of performances) {
+    if (
+      performance.didBat ||
+      sanitizeRuns(performance.runs) > 0 ||
+      performance.wasOut ||
+      sanitizeRuns(performance.wickets) > 0 ||
+      sanitizeRuns(performance.hatTricks) > 0 ||
+      sanitizeRuns(performance.catches) > 0 ||
+      sanitizeRuns(performance.runOuts) > 0 ||
+      sanitizeRuns(performance.stumpings) > 0
+    ) {
+      activityIds.add(performance.playerId);
+    }
+  }
+
+  return [...activityIds].filter(Boolean).sort();
 }
 
 export type GetInningsStateArgs = {
