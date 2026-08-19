@@ -14,8 +14,8 @@ import { activePlayers } from "@/lib/data/players";
 import {
   LEADERBOARD_CATEGORIES,
   getLeaderboardEntries,
-  getLeaderboardPodium,
   getLeaderboardSummary,
+  groupLeaderboardPodiumEntries,
   hasAnyFinalisedLeaderboardData,
   type LeaderSummary,
   type LeaderboardCategory,
@@ -111,10 +111,14 @@ function formatPower(entry: PlayerLeaderboardEntry) {
   return `${entry.supporting.playerPower}/100`;
 }
 
+function formatRunOuts(runOuts: number) {
+  return `${runOuts} ${runOuts === 1 ? "RUN-OUT" : "RUN-OUTS"}`;
+}
+
 function getSupportLine(entry: PlayerLeaderboardEntry) {
   if (entry.category === "runs") return `HIGH SCORE ${entry.supporting.highScore ?? "-"}`;
   if (entry.category === "wickets") return `BEST ${entry.supporting.bestBowling ?? "-"}`;
-  if (entry.category === "catches") return `${entry.supporting.runOuts} RUN-OUTS`;
+  if (entry.category === "catches") return formatRunOuts(entry.supporting.runOuts);
   if (entry.category === "strikeRate") {
     return `${entry.supporting.ballsFaced} BALLS FACED`;
   }
@@ -129,6 +133,14 @@ function getSupportLine(entry: PlayerLeaderboardEntry) {
   if (entry.category === "xp") return `LEVEL ${entry.supporting.level}`;
 
   return `${entry.supporting.totalXP} XP`;
+}
+
+function getJointSupportLine(entry: PlayerLeaderboardEntry) {
+  if (entry.category === "catches") {
+    return `${formatRunOuts(entry.supporting.runOuts)} EACH`;
+  }
+
+  return getSupportLine(entry);
 }
 
 function getRankTone(rank: number) {
@@ -167,9 +179,9 @@ function DuckCollectorTease({ quote }: { quote: string }) {
   );
 }
 
-function getPodiumPlacement(entry: PlayerLeaderboardEntry) {
-  if (entry.rank === 1) return "first";
-  if (entry.rank === 2) return "second";
+function getPodiumPlacementForRank(rank: number) {
+  if (rank === 1) return "first";
+  if (rank === 2) return "second";
 
   return "third";
 }
@@ -355,7 +367,7 @@ function LeaderboardPodiumCard({
   placement
 }: {
   entry: PlayerLeaderboardEntry;
-  placement: "first" | "second" | "third" | "joint-first";
+  placement: "first" | "second" | "third" | "balanced" | "single";
 }) {
   const rankTone = getRankTone(entry.rank);
 
@@ -392,13 +404,80 @@ function LeaderboardPodiumCard({
   );
 }
 
-function RaceOpenCard({ rank }: { rank: number }) {
+function JointRankCard({
+  entries,
+  placement,
+  rank
+}: {
+  entries: PlayerLeaderboardEntry[];
+  placement: "first" | "second" | "third" | "balanced" | "single";
+  rank: number;
+}) {
+  const firstEntry = entries[0];
+
+  if (!firstEntry) return null;
+
   return (
-    <div className="podium-card podium-placeholder">
-      <span className="rank-badge">#{rank}</span>
-      <h3>RACE OPEN</h3>
-      <p>A finalised performance can claim this place.</p>
+    <div
+      className={`joint-rank-card joint-rank-card-${placement} podium-rank-${getRankTone(rank)} joint-rank-count-${Math.min(entries.length, 4)}`}
+    >
+      <span className={`rank-badge rank-badge-${getRankTone(rank)}`}>
+        JOINT #{rank}
+      </span>
+      <div className="joint-rank-players">
+        {entries.map((entry) => (
+          <Link
+            key={entry.player.id}
+            href={`/players/${entry.player.slug}`}
+            className="joint-rank-player"
+            aria-label={`Open ${entry.player.name} profile, joint rank ${rank}`}
+          >
+            <Image
+              src={entry.player.cardImage}
+              alt={`${entry.player.name} player card`}
+              fill
+              sizes="(max-width: 680px) 34vw, 110px"
+              className="rank-player-image"
+            />
+          </Link>
+        ))}
+      </div>
+      <h3>{entries.map((entry) => entry.player.name).join(" - ")}</h3>
+      <strong>{firstEntry.displayValue} EACH</strong>
+      <p>{getJointSupportLine(firstEntry)}</p>
     </div>
+  );
+}
+
+function LeaderboardPodiumRankGroup({
+  entries,
+  layout,
+  rank
+}: {
+  entries: PlayerLeaderboardEntry[];
+  layout: "three" | "two" | "one";
+  rank: number;
+}) {
+  const placement =
+    layout === "one"
+      ? "single"
+    : layout === "two"
+      ? "balanced"
+      : getPodiumPlacementForRank(rank);
+
+  if (entries.length > 1) {
+    return <JointRankCard entries={entries} placement={placement} rank={rank} />;
+  }
+
+  const entry = entries[0];
+
+  if (!entry) return null;
+
+  return (
+    <LeaderboardPodiumCard
+      entry={entry}
+      placement={placement}
+    />
   );
 }
 
@@ -412,46 +491,15 @@ function LeaderboardPodium({
   summary: LeaderSummary;
 }) {
   const meta = LEADERBOARD_CATEGORIES[category];
-  const podiumEntries = getLeaderboardPodium(entries);
-  const firstPlaceEntries =
-    summary.status === "joint-leaders" && summary.leaders[0]?.rank === 1
-      ? summary.leaders.filter((entry) => entry.rank === 1)
-      : podiumEntries.filter((entry) => entry.rank === 1);
-  const hasJointFirstPlace = firstPlaceEntries.length > 1;
-  const visibleJointLeaders = firstPlaceEntries.slice(0, 3);
-  const extraJointLeaders =
-    hasJointFirstPlace
-      ? Math.max(0, firstPlaceEntries.length - visibleJointLeaders.length)
-      : 0;
-  const orderedCards = [
-    podiumEntries[1] ? (
-      <LeaderboardPodiumCard
-        key={podiumEntries[1].player.id}
-        entry={podiumEntries[1]}
-        placement={getPodiumPlacement(podiumEntries[1])}
-      />
-    ) : (
-      <RaceOpenCard key="race-open-second" rank={2} />
-    ),
-    podiumEntries[0] ? (
-      <LeaderboardPodiumCard
-        key={podiumEntries[0].player.id}
-        entry={podiumEntries[0]}
-        placement={getPodiumPlacement(podiumEntries[0])}
-      />
-    ) : (
-      <RaceOpenCard key="race-open-first" rank={1} />
-    ),
-    podiumEntries[2] ? (
-      <LeaderboardPodiumCard
-        key={podiumEntries[2].player.id}
-        entry={podiumEntries[2]}
-        placement={getPodiumPlacement(podiumEntries[2])}
-      />
-    ) : (
-      <RaceOpenCard key="race-open-third" rank={3} />
-    )
-  ];
+  const rankGroups = groupLeaderboardPodiumEntries(entries);
+  const podiumLayout =
+    rankGroups.length >= 3 ? "three" : rankGroups.length === 2 ? "two" : "one";
+  const orderedRankGroups =
+    podiumLayout === "three"
+      ? [2, 1, 3]
+          .map((rank) => rankGroups.find((group) => group.rank === rank))
+          .filter((group): group is (typeof rankGroups)[number] => Boolean(group))
+      : rankGroups;
 
   if (summary.status === "race-not-started" || summary.status === "all-tied") {
     return <LeaderboardEmptyState category={category} />;
@@ -477,26 +525,20 @@ function LeaderboardPodium({
           <DuckCollectorTease quote={getDuckCollectorQuote(summary)} />
         ) : null}
       </div>
-      {hasJointFirstPlace ? (
-        <div
-          className={`joint-winners-grid joint-winners-count-${visibleJointLeaders.length}`}
-        >
-          {visibleJointLeaders.map((entry) => (
-            <LeaderboardPodiumCard
-              key={entry.player.id}
-              entry={entry}
-              placement="joint-first"
+      <div className={`podium-slot-layout podium-slot-layout-${podiumLayout}`}>
+        {orderedRankGroups.map((group) => (
+          <div
+            key={group.rank}
+            className={`podium-slot podium-slot-rank-${group.rank}`}
+          >
+            <LeaderboardPodiumRankGroup
+              layout={podiumLayout}
+              rank={group.rank}
+              entries={group.entries}
             />
-          ))}
-        </div>
-      ) : (
-        <div className="podium-grid">{orderedCards}</div>
-      )}
-      {extraJointLeaders > 0 ? (
-        <a className="joint-leaders-link" href="#full-rankings">
-          +{extraJointLeaders} MORE JOINT LEADERS
-        </a>
-      ) : null}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

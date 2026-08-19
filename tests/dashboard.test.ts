@@ -15,7 +15,9 @@ import {
   mainNavigation
 } from "../lib/data/navigation";
 import {
+  getMatchInningsOversLabel,
   getMatchResultHeadline,
+  getMatchScheduledOversLabel,
   getMatchScoreRowsInInningsOrder,
   getMatchTeamScore
 } from "../lib/match-display";
@@ -2047,6 +2049,140 @@ test("Match archive score rows follow actual innings order without changing resu
     getMatchScoreRowsInInningsOrder(legacyWithoutReliableOrder).map((row) => row.teamId),
     ["teamA", "teamB"]
   );
+});
+
+test("Match archive cards display scheduled and actual innings overs", () => {
+  const base = matchRecord({ id: "archive-overs-base", matchDate: "2026-08-05" });
+  const sixOverTeamBFirst = {
+    ...base,
+    id: "archive-six-over-team-b-first",
+    scheduledOversPerInnings: 6,
+    battingFirstTeamId: "teamB" as const,
+    chasingTeamId: "teamA" as const,
+    innings: {
+      first: {
+        ...base.innings.first,
+        battingTeamId: "teamB" as const,
+        bowlingTeamId: "teamA" as const,
+        runs: 96,
+        wicketsLost: 2,
+        completedOvers: 6
+      },
+      second: {
+        ...base.innings.second,
+        battingTeamId: "teamA" as const,
+        bowlingTeamId: "teamB" as const,
+        runs: 90,
+        wicketsLost: 5,
+        completedOvers: 5 + 4 / 6
+      }
+    },
+    result: {
+      type: "win_by_runs" as const,
+      winnerTeamId: "teamB" as const,
+      loserTeamId: "teamA" as const,
+      marginRuns: 6
+    }
+  } satisfies MatchRecord;
+  const eightOverTeamAFirst = {
+    ...matchRecord({ id: "archive-eight-over-team-a-first", matchDate: "2026-08-06" }),
+    scheduledOversPerInnings: 8,
+    innings: {
+      first: {
+        ...base.innings.first,
+        battingTeamId: "teamA" as const,
+        bowlingTeamId: "teamB" as const,
+        completedOvers: 8
+      },
+      second: {
+        ...base.innings.second,
+        battingTeamId: "teamB" as const,
+        bowlingTeamId: "teamA" as const,
+        completedOvers: 8
+      }
+    }
+  } satisfies MatchRecord;
+  const legacyWithLegalBalls = {
+    ...base,
+    id: "archive-legacy-derived-overs",
+    innings: {
+      ...base.innings,
+      second: {
+        ...base.innings.second,
+        completedOvers: undefined as unknown as number,
+        bowlingOvers: [
+          {
+            id: "legacy-over-one",
+            bowlingTeamId: "teamA" as const,
+            battingTeamId: "teamB" as const,
+            bowlerId: "aninda",
+            overNumber: 1,
+            legalBalls: 6,
+            runsConceded: 4,
+            wicketsTaken: 0,
+            dismissals: [],
+            maiden: false
+          },
+          {
+            id: "legacy-over-two",
+            bowlingTeamId: "teamA" as const,
+            battingTeamId: "teamB" as const,
+            bowlerId: "biplab",
+            overNumber: 2,
+            legalBalls: 4,
+            runsConceded: 3,
+            wicketsTaken: 0,
+            dismissals: [],
+            maiden: false
+          }
+        ]
+      }
+    }
+  } satisfies MatchRecord;
+  const legacyWithoutReliableOvers = {
+    ...base,
+    id: "archive-legacy-no-overs",
+    scheduledOversPerInnings: null,
+    innings: {
+      ...base.innings,
+      first: {
+        ...base.innings.first,
+        completedOvers: undefined as unknown as number,
+        bowlingOvers: []
+      }
+    }
+  } satisfies MatchRecord;
+  const archive = matchArchiveSource();
+
+  assert.equal(getMatchScheduledOversLabel(sixOverTeamBFirst), "6 OVERS");
+  assert.deepEqual(
+    getMatchScoreRowsInInningsOrder(sixOverTeamBFirst).map((row) => [
+      row.teamId,
+      row.score,
+      row.overs
+    ]),
+    [
+      ["teamB", "96/2", "6.0"],
+      ["teamA", "90/5", "5.4"]
+    ]
+  );
+  assert.equal(getMatchResultHeadline(sixOverTeamBFirst), "TEAM B WINS BY 6 RUNS");
+  assert.equal(getMatchScheduledOversLabel(eightOverTeamAFirst), "8 OVERS");
+  assert.deepEqual(
+    getMatchScoreRowsInInningsOrder(eightOverTeamAFirst).map((row) => [
+      row.teamId,
+      row.overs
+    ]),
+    [
+      ["teamA", "8.0"],
+      ["teamB", "8.0"]
+    ]
+  );
+  assert.equal(getMatchInningsOversLabel(legacyWithLegalBalls, "teamB"), "1.4");
+  assert.equal(getMatchInningsOversLabel(legacyWithoutReliableOvers, "teamA"), "-");
+  assert.equal(getMatchScheduledOversLabel(legacyWithoutReliableOvers), "-");
+  assert.match(archive, /getMatchScheduledOversLabel\(match\)/);
+  assert.match(archive, /<small>\(\{row\.overs\}\)<\/small>/);
 });
 
 test("Match archive filters search sorts and groups finalised matches", () => {

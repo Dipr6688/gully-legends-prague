@@ -949,6 +949,14 @@ function MatchMathsPanel() {
             <dd>Most career fours plus sixes from event-backed finalised matches.</dd>
           </div>
           <div>
+            <dt>Safe Hands</dt>
+            <dd>
+              Ranked by career catches. If catches are tied, more career
+              run-outs ranks higher. If catches and run-outs are both equal,
+              players share the rank.
+            </dd>
+          </div>
+          <div>
             <dt>Duck</dt>
             <dd>Batted, dismissed, and scored zero.</dd>
           </div>

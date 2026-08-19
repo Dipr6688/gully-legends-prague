@@ -116,6 +116,15 @@ test("Formula Room documents shared advanced boundary calculations without dupli
   assert.match(formulaRoom, /Six Machine/);
   assert.match(formulaRoom, /Most career sixes from event-backed finalised matches/);
   assert.match(formulaRoom, /Boundary Bandit/);
+  assert.match(formulaRoom, /Safe Hands/);
+  assert.match(
+    formulaRoom,
+    /Ranked by career catches\. If catches are tied, more career\s+run-outs ranks higher/
+  );
+  assert.match(
+    formulaRoom,
+    /If catches and run-outs are both equal,\s+players share the rank/
+  );
   assert.match(formulaRoom, /Tracked Runs \/ Tracked Balls Faced x 100/);
   assert.match(formulaRoom, /Tracked Runs Conceded x 6 \/ Tracked Legal Balls/);
   assert.match(

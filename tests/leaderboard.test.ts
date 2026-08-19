@@ -8,9 +8,11 @@ import {
   getLeaderboardEntries,
   getLeaderboardPodium,
   getLeaderboardSummary,
+  groupLeaderboardPodiumEntries,
   hasAnyFinalisedLeaderboardData,
   parseLocalMatchDate
 } from "../lib/leaderboard";
+import { createQuickScoringEvent } from "../lib/quick-scoring";
 import type {
   BowlingOver,
   MatchRecord,
@@ -115,6 +117,35 @@ function bowlingOver(playerId: string, runsConceded: number): BowlingOver {
     dismissals: [],
     maiden: false
   };
+}
+
+function economyEvents(
+  bowlerId: string,
+  runsPerBall: number[],
+  firstSequence: number
+) {
+  return runsPerBall.map((batterRuns, index) =>
+    createQuickScoringEvent({
+      sequence: firstSequence + index,
+      battingTeamId: "teamB",
+      strikerId: index % 2 === 0 ? "aninda" : "arunabha",
+      nonStrikerId: index % 2 === 0 ? "arunabha" : "aninda",
+      bowlerId,
+      batterRuns,
+      extraType: null,
+      wicket: null,
+      timestamp: `2026-08-05T12:${String(firstSequence + index).padStart(2, "0")}:00.000Z`
+    })
+  );
+}
+
+function getPodiumLayoutForEntries(entries: ReturnType<typeof getLeaderboardEntries>) {
+  const rankGroupCount = groupLeaderboardPodiumEntries(entries).length;
+
+  if (rankGroupCount >= 3) return "three";
+  if (rankGroupCount === 2) return "two";
+
+  return "one";
 }
 
 function matchRecord({
@@ -254,12 +285,19 @@ test("Leaderboard renders required interactive sections and player links", () =>
   assert.match(css, /\.leader-quick-card\[data-category="level"\]/);
   assert.match(css, /\.duck-collector-tease/);
   assert.match(css, /\.duck-collector-tease::after/);
-  assert.match(css, /\.podium-grid\s*{[\s\S]*?minmax\(0,\s*1\.08fr\)/);
+  assert.match(css, /\.podium-slot-layout-three\s*{[\s\S]*?grid-template-areas:\s*"second first third"/);
+  assert.match(css, /\.podium-slot-layout-two\s*{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(css, /\.podium-slot-layout-one\s*{[\s\S]*?justify-content:\s*center/);
   assert.match(css, /\.podium-card-first\s*{[\s\S]*?translateY\(-38px\)\s*scale\(1\.07\)/);
-  assert.match(leaderboard, /const hasJointFirstPlace = firstPlaceEntries\.length > 1/);
-  assert.match(leaderboard, /placement="joint-first"/);
-  assert.match(css, /\.joint-winners-grid\s*{[\s\S]*?grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
-  assert.match(css, /\.joint-winners-grid > \*\s*{[\s\S]*?transform:\s*none/);
+  assert.match(leaderboard, /groupLeaderboardPodiumEntries\(entries\)/);
+  assert.match(leaderboard, /rankGroups\.length >= 3 \? "three"/);
+  assert.match(leaderboard, /podiumLayout === "three"/);
+  assert.match(leaderboard, /\[2, 1, 3\]/);
+  assert.match(leaderboard, /className=\{`podium-slot-layout podium-slot-layout-\$\{podiumLayout\}`\}/);
+  assert.match(leaderboard, /className=\{`podium-slot podium-slot-rank-\$\{group\.rank\}`\}/);
+  assert.match(leaderboard, /JOINT #\{rank\}/);
+  assert.match(css, /\.joint-rank-card\s*{[\s\S]*?overflow:\s*hidden/);
+  assert.match(css, /\.joint-rank-players\s*{[\s\S]*?grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(72px,\s*1fr\)\)/);
   assert.match(css, /\.leaderboard-podium-section \.leaderboard-section-heading\s*{[\s\S]*?margin-bottom:\s*60px/);
   assert.match(css, /@media \(max-width:\s*1024px\)[\s\S]*?\.leaderboard-podium-section \.leaderboard-section-heading\s*{[\s\S]*?margin-bottom:\s*48px/);
   assert.match(css, /@media \(max-width:\s*540px\)[\s\S]*?\.leaderboard-podium-section \.leaderboard-section-heading\s*{[\s\S]*?margin-bottom:\s*32px/);
@@ -482,6 +520,373 @@ test("Competition ranking keeps ties and skips the next rank", () => {
   assert.equal(summary.displayValue, "3 EACH");
 });
 
+test("Hall podium includes all players at competition ranks one through three", () => {
+  const xpTieFirstPlayers = withCareerStats({
+    aninda: { xp: 100 },
+    arunabha: { xp: 100 },
+    atripan: { xp: 90 },
+    biplab: { xp: 80 }
+  });
+  const threeFirstPlayers = withCareerStats({
+    aninda: { xp: 100 },
+    arunabha: { xp: 100 },
+    atripan: { xp: 100 },
+    biplab: { xp: 90 }
+  });
+  const tiedSecondPlayers = withCareerStats({
+    aninda: { xp: 100 },
+    arunabha: { xp: 90 },
+    atripan: { xp: 90 },
+    biplab: { xp: 80 }
+  });
+  const tiedThirdPlayers = withCareerStats({
+    rohit: { stats: { matches: 1, runs: 0, wickets: 0, catches: 6, runOuts: 0 } },
+    soman: { stats: { matches: 1, runs: 0, wickets: 0, catches: 6, runOuts: 0 } },
+    amrit: { stats: { matches: 1, runs: 0, wickets: 0, catches: 4, runOuts: 1 } },
+    dipanjan: { stats: { matches: 1, runs: 0, wickets: 0, catches: 4, runOuts: 1 } },
+    saurav: { stats: { matches: 1, runs: 0, wickets: 0, catches: 4, runOuts: 0 } }
+  });
+  const noSecondRankPlayers = withCareerStats({
+    aninda: { stats: { matches: 1, runs: 100, wickets: 0, catches: 0 } },
+    arunabha: { stats: { matches: 1, runs: 100, wickets: 0, catches: 0 } },
+    atripan: { stats: { matches: 1, runs: 90, wickets: 0, catches: 0 } },
+    biplab: { stats: { matches: 1, runs: 90, wickets: 0, catches: 0 } },
+    dipanjan: { stats: { matches: 1, runs: 90, wickets: 0, catches: 0 } },
+    gaurav: { stats: { matches: 1, runs: 80, wickets: 0, catches: 0 } }
+  });
+  const tiedFirstEntries = getLeaderboardEntries({
+    players: xpTieFirstPlayers,
+    matches: [],
+    category: "xp",
+    period: "all-time"
+  });
+  const threeFirstEntries = getLeaderboardEntries({
+    players: threeFirstPlayers,
+    matches: [],
+    category: "xp",
+    period: "all-time"
+  });
+  const tiedSecondEntries = getLeaderboardEntries({
+    players: tiedSecondPlayers,
+    matches: [],
+    category: "xp",
+    period: "all-time"
+  });
+  const tiedThirdEntries = getLeaderboardEntries({
+    players: tiedThirdPlayers,
+    matches: [],
+    category: "catches",
+    period: "all-time"
+  });
+  const noSecondRankEntries = getLeaderboardEntries({
+    players: noSecondRankPlayers,
+    matches: [],
+    category: "runs",
+    period: "all-time"
+  });
+
+  assert.deepEqual(
+    getLeaderboardPodium(tiedFirstEntries).map((entry) => [entry.player.id, entry.rank]),
+    [
+      ["aninda", 1],
+      ["arunabha", 1],
+      ["atripan", 3]
+    ]
+  );
+  assert.deepEqual(
+    groupLeaderboardPodiumEntries(tiedFirstEntries).map((group) => [
+      group.rank,
+      group.entries.map((entry) => entry.player.id)
+    ]),
+    [
+      [1, ["aninda", "arunabha"]],
+      [3, ["atripan"]]
+    ]
+  );
+  assert.deepEqual(
+    getLeaderboardPodium(threeFirstEntries).map((entry) => [entry.player.id, entry.rank]),
+    [
+      ["aninda", 1],
+      ["arunabha", 1],
+      ["atripan", 1]
+    ]
+  );
+  assert.equal(
+    getLeaderboardPodium(threeFirstEntries).some((entry) => entry.rank === 4),
+    false
+  );
+  assert.deepEqual(
+    groupLeaderboardPodiumEntries(tiedSecondEntries).map((group) => [
+      group.rank,
+      group.entries.map((entry) => entry.player.id)
+    ]),
+    [
+      [1, ["aninda"]],
+      [2, ["arunabha", "atripan"]]
+    ]
+  );
+  assert.deepEqual(
+    groupLeaderboardPodiumEntries(tiedThirdEntries).map((group) => [
+      group.rank,
+      group.entries.map((entry) => entry.player.id)
+    ]),
+    [
+      [1, ["rohit", "soman"]],
+      [3, ["amrit", "dipanjan"]]
+    ]
+  );
+  assert.deepEqual(
+    tiedThirdEntries
+      .filter((entry) => ["rohit", "soman", "amrit", "dipanjan", "saurav"].includes(entry.player.id))
+      .map((entry) => [entry.player.id, entry.primaryValue, entry.supporting.runOuts, entry.rank]),
+    [
+      ["rohit", 6, 0, 1],
+      ["soman", 6, 0, 1],
+      ["amrit", 4, 1, 3],
+      ["dipanjan", 4, 1, 3],
+      ["saurav", 4, 0, 5]
+    ]
+  );
+  assert.deepEqual(
+    groupLeaderboardPodiumEntries(noSecondRankEntries).map((group) => [
+      group.rank,
+      group.entries.map((entry) => entry.player.id)
+    ]),
+    [
+      [1, ["aninda", "arunabha"]],
+      [3, ["atripan", "biplab", "dipanjan"]]
+    ]
+  );
+  assert.equal(
+    getLeaderboardPodium(noSecondRankEntries).some((entry) => entry.player.id === "gaurav"),
+    false
+  );
+});
+
+test("Hall podium preserves single leader and race-not-started behavior", () => {
+  const singleLeaderPlayers = withCareerStats({
+    aninda: { stats: { matches: 1, runs: 30, wickets: 0, catches: 0 } },
+    arunabha: { stats: { matches: 1, runs: 20, wickets: 0, catches: 0 } },
+    atripan: { stats: { matches: 1, runs: 10, wickets: 0, catches: 0 } }
+  });
+  const singleLeaderEntries = getLeaderboardEntries({
+    players: singleLeaderPlayers,
+    matches: [],
+    category: "runs",
+    period: "all-time"
+  });
+  const emptyEntries = getLeaderboardEntries({
+    players: withCareerStats({}),
+    matches: [],
+    category: "catches",
+    period: "all-time"
+  });
+
+  assert.deepEqual(
+    getLeaderboardPodium(singleLeaderEntries).map((entry) => [
+      entry.player.id,
+      entry.rank
+    ]),
+    [
+      ["aninda", 1],
+      ["arunabha", 2],
+      ["atripan", 3]
+    ]
+  );
+  assert.deepEqual(getLeaderboardPodium(emptyEntries), []);
+  assert.equal(
+    getLeaderboardSummary({ category: "catches", entries: emptyEntries }).status,
+    "race-not-started"
+  );
+});
+
+test("Hall podium ranks Best Economy ties with lower economy first", () => {
+  const economyMatch = {
+    ...matchRecord({
+      id: "economy-tie",
+      matchDate: "2026-08-05",
+      records: [
+        performance({ playerId: "aninda" }),
+        performance({ playerId: "arunabha" }),
+        performance({ playerId: "atripan" }),
+        performance({ playerId: "biplab" })
+      ]
+    }),
+    quickScoring: {
+      version: 2 as const,
+      setupLocked: true,
+      battingMode: "two_batter" as const,
+      inningsPhase: "second_innings" as const,
+      inningsAEvents: [],
+      inningsBEvents: [
+        ...economyEvents("aninda", Array.from({ length: 18 }, () => 1), 1),
+        ...economyEvents("arunabha", Array.from({ length: 18 }, () => 1), 19),
+        ...economyEvents("atripan", Array.from({ length: 18 }, () => 2), 37),
+        ...economyEvents("biplab", Array.from({ length: 18 }, () => 3), 55)
+      ]
+    }
+  } satisfies MatchRecord;
+  const entries = getLeaderboardEntries({
+    players: withCareerStats({}),
+    matches: [economyMatch],
+    category: "economy",
+    period: "all-time"
+  });
+
+  assert.deepEqual(
+    getLeaderboardPodium(entries).map((entry) => [
+      entry.player.id,
+      entry.rank,
+      entry.displayValue
+    ]),
+    [
+      ["aninda", 1, "6.00 ECO"],
+      ["arunabha", 1, "6.00 ECO"],
+      ["atripan", 3, "12.00 ECO"]
+    ]
+  );
+  assert.equal(
+    getLeaderboardPodium(entries).some((entry) => entry.player.id === "biplab"),
+    false
+  );
+});
+
+test("Safe Hands uses run-outs only as a Most Catches tie-breaker", () => {
+  const sameCatchesDifferentRunOuts = getLeaderboardEntries({
+    players: withCareerStats({
+      amrit: { stats: { matches: 1, runs: 0, wickets: 0, catches: 4, runOuts: 1 } },
+      saurav: { stats: { matches: 1, runs: 0, wickets: 0, catches: 4, runOuts: 0 } }
+    }),
+    matches: [],
+    category: "catches",
+    period: "all-time"
+  });
+  const sameCatchesSameRunOuts = getLeaderboardEntries({
+    players: withCareerStats({
+      amrit: { stats: { matches: 1, runs: 0, wickets: 0, catches: 4, runOuts: 1 } },
+      dipanjan: { stats: { matches: 1, runs: 0, wickets: 0, catches: 4, runOuts: 1 } }
+    }),
+    matches: [],
+    category: "catches",
+    period: "all-time"
+  });
+  const realExample = getLeaderboardEntries({
+    players: withCareerStats({
+      rohit: { stats: { matches: 1, runs: 0, wickets: 0, catches: 6, runOuts: 0 } },
+      soman: { stats: { matches: 1, runs: 0, wickets: 0, catches: 6, runOuts: 0 } },
+      amrit: { stats: { matches: 1, runs: 0, wickets: 0, catches: 4, runOuts: 1 } },
+      dipanjan: { stats: { matches: 1, runs: 0, wickets: 0, catches: 4, runOuts: 1 } },
+      saurav: { stats: { matches: 1, runs: 0, wickets: 0, catches: 4, runOuts: 0 } }
+    }),
+    matches: [],
+    category: "catches",
+    period: "all-time"
+  });
+  const realSummary = getLeaderboardSummary({
+    category: "catches",
+    entries: realExample
+  });
+  const source = leaderboardSource();
+
+  assert.deepEqual(
+    sameCatchesDifferentRunOuts
+      .filter((entry) => ["amrit", "saurav"].includes(entry.player.id))
+      .map((entry) => [entry.player.id, entry.primaryValue, entry.supporting.runOuts, entry.rank]),
+    [
+      ["amrit", 4, 1, 1],
+      ["saurav", 4, 0, 2]
+    ]
+  );
+  assert.deepEqual(
+    sameCatchesSameRunOuts
+      .filter((entry) => ["amrit", "dipanjan"].includes(entry.player.id))
+      .map((entry) => [entry.player.id, entry.primaryValue, entry.supporting.runOuts, entry.rank]),
+    [
+      ["amrit", 4, 1, 1],
+      ["dipanjan", 4, 1, 1]
+    ]
+  );
+  assert.deepEqual(
+    realExample
+      .filter((entry) => ["rohit", "soman", "amrit", "dipanjan", "saurav"].includes(entry.player.id))
+      .map((entry) => [
+        entry.player.id,
+        entry.displayValue,
+        entry.supporting.runOuts,
+        entry.rank
+      ]),
+    [
+      ["rohit", "6 CATCHES", 0, 1],
+      ["soman", "6 CATCHES", 0, 1],
+      ["amrit", "4 CATCHES", 1, 3],
+      ["dipanjan", "4 CATCHES", 1, 3],
+      ["saurav", "4 CATCHES", 0, 5]
+    ]
+  );
+  assert.deepEqual(
+    groupLeaderboardPodiumEntries(realExample).map((group) => [
+      group.rank,
+      group.entries.map((entry) => entry.player.id)
+    ]),
+    [
+      [1, ["rohit", "soman"]],
+      [3, ["amrit", "dipanjan"]]
+    ]
+  );
+  assert.equal(
+    getLeaderboardPodium(realExample).some((entry) => entry.player.id === "saurav"),
+    false
+  );
+  assert.equal(realSummary.status, "joint-leaders");
+  assert.deepEqual(
+    realSummary.leaders.map((entry) => entry.player.id),
+    ["rohit", "soman"]
+  );
+  assert.match(source, /function formatRunOuts/);
+  assert.match(source, /formatRunOuts\(entry\.supporting\.runOuts\)/);
+  assert.match(source, /formatRunOuts\(entry\.supporting\.runOuts\)} EACH/);
+});
+
+test("Safe Hands run-out tie-breaker does not affect other leaderboard categories", () => {
+  const runEntries = getLeaderboardEntries({
+    players: withCareerStats({
+      amrit: { stats: { matches: 1, runs: 25, wickets: 0, catches: 0, runOuts: 4 } },
+      saurav: { stats: { matches: 1, runs: 25, wickets: 0, catches: 0, runOuts: 0 } }
+    }),
+    matches: [],
+    category: "runs",
+    period: "all-time"
+  });
+  const wicketEntries = getLeaderboardEntries({
+    players: withCareerStats({
+      amrit: { stats: { matches: 1, runs: 0, wickets: 2, catches: 0, runOuts: 4 } },
+      saurav: { stats: { matches: 1, runs: 0, wickets: 2, catches: 0, runOuts: 0 } }
+    }),
+    matches: [],
+    category: "wickets",
+    period: "all-time"
+  });
+
+  assert.deepEqual(
+    runEntries
+      .filter((entry) => ["amrit", "saurav"].includes(entry.player.id))
+      .map((entry) => [entry.player.id, entry.rank]),
+    [
+      ["amrit", 1],
+      ["saurav", 1]
+    ]
+  );
+  assert.deepEqual(
+    wicketEntries
+      .filter((entry) => ["amrit", "saurav"].includes(entry.player.id))
+      .map((entry) => [entry.player.id, entry.rank]),
+    [
+      ["amrit", 1],
+      ["saurav", 1]
+    ]
+  );
+});
+
 test("Podium excludes zero-value players but preserves tied podium ranks", () => {
   const oneWinnerPlayers = withCareerStats({
     dipanjan: { stats: { matches: 1, runs: 0, wickets: 3, catches: 0 } }
@@ -520,36 +925,146 @@ test("Podium excludes zero-value players but preserves tied podium ranks", () =>
   );
 });
 
-test("Joint first-place podium uses equal winner cards while unique first keeps elevation", () => {
+test("Hall podium chooses visual geometry from distinct rank positions", () => {
   const leaderboard = leaderboardSource();
   const css = leaderboardCssSource();
-  const threeLeaderPlayers = withCareerStats({
+  const entriesFor = (
+    overrides: Parameters<typeof withCareerStats>[0],
+    category: "runs" | "xp" = "runs"
+  ) =>
+    getLeaderboardEntries({
+      players: withCareerStats(overrides),
+      matches: [],
+      category,
+      period: "all-time"
+    });
+  const normalEntries = entriesFor({
+    aninda: { stats: { matches: 1, runs: 30, wickets: 0, catches: 0 } },
+    arunabha: { stats: { matches: 1, runs: 20, wickets: 0, catches: 0 } },
+    atripan: { stats: { matches: 1, runs: 10, wickets: 0, catches: 0 } }
+  });
+  const tieFirstEntries = entriesFor({
     aninda: { stats: { matches: 1, runs: 30, wickets: 0, catches: 0 } },
     arunabha: { stats: { matches: 1, runs: 30, wickets: 0, catches: 0 } },
-    atripan: { stats: { matches: 1, runs: 30, wickets: 0, catches: 0 } }
+    atripan: { stats: { matches: 1, runs: 10, wickets: 0, catches: 0 } }
   });
-  const entries = getLeaderboardEntries({
-    players: threeLeaderPlayers,
-    matches: [],
-    category: "runs",
-    period: "all-time"
+  const tieSecondEntries = entriesFor({
+    aninda: { xp: 100 },
+    arunabha: { xp: 80 },
+    atripan: { xp: 80 },
+    biplab: { xp: 70 }
+  }, "xp");
+  const tieThirdEntries = entriesFor({
+    aninda: { stats: { matches: 1, runs: 30, wickets: 0, catches: 0 } },
+    arunabha: { stats: { matches: 1, runs: 20, wickets: 0, catches: 0 } },
+    atripan: { stats: { matches: 1, runs: 10, wickets: 0, catches: 0 } },
+    biplab: { stats: { matches: 1, runs: 10, wickets: 0, catches: 0 } },
+    dipanjan: { stats: { matches: 1, runs: 10, wickets: 0, catches: 0 } }
   });
+  const threeWayFirstEntries = entriesFor({
+    aninda: { xp: 100 },
+    arunabha: { xp: 100 },
+    atripan: { xp: 100 },
+    biplab: { xp: 70 }
+  }, "xp");
+  const tieFirstAndThirdEntries = entriesFor({
+    aninda: { stats: { matches: 1, runs: 30, wickets: 0, catches: 0 } },
+    arunabha: { stats: { matches: 1, runs: 30, wickets: 0, catches: 0 } },
+    atripan: { stats: { matches: 1, runs: 10, wickets: 0, catches: 0 } },
+    biplab: { stats: { matches: 1, runs: 10, wickets: 0, catches: 0 } },
+    dipanjan: { stats: { matches: 1, runs: 10, wickets: 0, catches: 0 } }
+  });
+  const threeWaySecondEntries = entriesFor({
+    aninda: { xp: 100 },
+    arunabha: { xp: 80 },
+    atripan: { xp: 80 },
+    biplab: { xp: 80 },
+    dipanjan: { xp: 70 }
+  }, "xp");
 
   assert.deepEqual(
-    entries.slice(0, 3).map((entry) => [entry.player.id, entry.rank]),
+    groupLeaderboardPodiumEntries(normalEntries).map((group) => group.rank),
+    [1, 2, 3]
+  );
+  assert.equal(getPodiumLayoutForEntries(normalEntries), "three");
+  assert.deepEqual(
+    groupLeaderboardPodiumEntries(tieFirstEntries).map((group) => [
+      group.rank,
+      group.entries.map((entry) => entry.player.id)
+    ]),
     [
-      ["aninda", 1],
-      ["arunabha", 1],
-      ["atripan", 1]
+      [1, ["aninda", "arunabha"]],
+      [3, ["atripan"]]
     ]
   );
-  assert.match(leaderboard, /hasJointFirstPlace \? \(/);
-  assert.match(leaderboard, /<div className="podium-grid">\{orderedCards\}<\/div>/);
+  assert.equal(getPodiumLayoutForEntries(tieFirstEntries), "two");
+  assert.deepEqual(
+    groupLeaderboardPodiumEntries(tieSecondEntries).map((group) => [
+      group.rank,
+      group.entries.map((entry) => entry.player.id)
+    ]),
+    [
+      [1, ["aninda"]],
+      [2, ["arunabha", "atripan"]]
+    ]
+  );
+  assert.equal(getPodiumLayoutForEntries(tieSecondEntries), "two");
+  assert.deepEqual(
+    groupLeaderboardPodiumEntries(tieThirdEntries).map((group) => [
+      group.rank,
+      group.entries.map((entry) => entry.player.id)
+    ]),
+    [
+      [1, ["aninda"]],
+      [2, ["arunabha"]],
+      [3, ["atripan", "biplab", "dipanjan"]]
+    ]
+  );
+  assert.equal(getPodiumLayoutForEntries(tieThirdEntries), "three");
+  assert.deepEqual(
+    groupLeaderboardPodiumEntries(threeWayFirstEntries).map((group) => [
+      group.rank,
+      group.entries.map((entry) => entry.player.id)
+    ]),
+    [[1, ["aninda", "arunabha", "atripan"]]]
+  );
+  assert.equal(getPodiumLayoutForEntries(threeWayFirstEntries), "one");
+  assert.deepEqual(
+    groupLeaderboardPodiumEntries(tieFirstAndThirdEntries).map((group) => [
+      group.rank,
+      group.entries.map((entry) => entry.player.id)
+    ]),
+    [
+      [1, ["aninda", "arunabha"]],
+      [3, ["atripan", "biplab", "dipanjan"]]
+    ]
+  );
+  assert.equal(getPodiumLayoutForEntries(tieFirstAndThirdEntries), "two");
+  assert.deepEqual(
+    groupLeaderboardPodiumEntries(threeWaySecondEntries).map((group) => [
+      group.rank,
+      group.entries.map((entry) => entry.player.id)
+    ]),
+    [
+      [1, ["aninda"]],
+      [2, ["arunabha", "atripan", "biplab"]]
+    ]
+  );
+  assert.equal(getPodiumLayoutForEntries(threeWaySecondEntries), "two");
+  assert.equal(
+    getLeaderboardPodium(threeWaySecondEntries).some((entry) => entry.rank >= 5),
+    false
+  );
+  assert.match(leaderboard, /JointRankCard/);
+  assert.match(leaderboard, /podium-slot-layout-\$\{podiumLayout\}/);
+  assert.match(leaderboard, /podiumLayout === "three"[\s\S]*?\[2, 1, 3\]/);
   assert.match(css, /\.podium-card-first\s*{[\s\S]*?transform:\s*translateY\(-38px\)\s*scale\(1\.07\)/);
-  assert.match(css, /\.podium-card-joint-first[\s\S]*?transform:\s*translateY\(0\)/);
-  assert.match(css, /\.joint-winners-count-2\s*{[\s\S]*?justify-content:\s*center/);
-  assert.match(css, /@media \(max-width:\s*820px\)[\s\S]*?\.joint-winners-grid\s*{[\s\S]*?repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
-  assert.match(css, /@media \(max-width:\s*540px\)[\s\S]*?\.joint-winners-grid,[\s\S]*?grid-template-columns:\s*1fr/);
+  assert.match(css, /\.joint-rank-card-first\s*{[\s\S]*?transform:\s*translateY\(-38px\)\s*scale\(1\.07\)/);
+  assert.match(css, /\.podium-slot-layout-two\s*{[\s\S]*?align-items:\s*stretch/);
+  assert.match(css, /\.podium-slot-layout-one\s*{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*min\(100%,\s*460px\)\)/);
+  assert.match(css, /\.joint-rank-player\s*{[\s\S]*?aspect-ratio:\s*2 \/ 3/);
+  assert.match(css, /@media \(max-width:\s*820px\)[\s\S]*?\.podium-slot-layout-three \.podium-slot-rank-1\s*{[\s\S]*?order:\s*-1/);
+  assert.match(css, /@media \(max-width:\s*540px\)[\s\S]*?\.joint-rank-players,/);
 });
 
 test("Cricket stats use bowler wickets, catches, stored XP and career Level correctly", () => {

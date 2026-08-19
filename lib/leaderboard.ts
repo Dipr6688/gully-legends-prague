@@ -388,6 +388,19 @@ export function formatLeaderboardValue(
   return `${value} ${LEADERBOARD_CATEGORIES[category].unit}`;
 }
 
+function hasSameCompetitionPosition(
+  left: PlayerLeaderboardEntry,
+  right: PlayerLeaderboardEntry
+) {
+  if (left.primaryValue !== right.primaryValue) return false;
+
+  if (left.category === "catches" && right.category === "catches") {
+    return left.supporting.runOuts === right.supporting.runOuts;
+  }
+
+  return true;
+}
+
 function getPlayerPowerValue(player: Player, category: LeaderboardCategory) {
   const ratingKey = LEADERBOARD_CATEGORIES[category].ratingKey;
 
@@ -395,7 +408,7 @@ function getPlayerPowerValue(player: Player, category: LeaderboardCategory) {
 }
 
 export function getCompetitionRankings(entries: PlayerLeaderboardEntry[]) {
-  let previousValue: number | null = null;
+  let previousEntry: PlayerLeaderboardEntry | null = null;
   let previousRank = 0;
   let rankedCount = 0;
 
@@ -404,11 +417,11 @@ export function getCompetitionRankings(entries: PlayerLeaderboardEntry[]) {
 
     rankedCount += 1;
     const rank =
-      previousValue !== null && entry.primaryValue === previousValue
+      previousEntry !== null && hasSameCompetitionPosition(entry, previousEntry)
         ? previousRank
         : rankedCount;
 
-    previousValue = entry.primaryValue;
+    previousEntry = entry;
     previousRank = rank;
 
     return { ...entry, rank };
@@ -518,7 +531,7 @@ export function getLeaderboardEntries({
         period === "all-time" ? allTimeTotals.highScore : periodTotals.highScore,
       bestBowling:
         period === "all-time" ? allTimeTotals.bestBowling : periodTotals.bestBowling,
-      runOuts: period === "all-time" ? allTimeTotals.runOuts : periodTotals.runOuts,
+      runOuts: period === "all-time" ? player.stats.runOuts : periodTotals.runOuts,
       level: player.level,
       totalXP: period === "all-time" ? player.xp : periodTotals.xp,
       xpToNextLevel: levelProgress.xpRequiredWithinLevel - levelProgress.xpWithinLevel,
@@ -561,6 +574,10 @@ export function getLeaderboardEntries({
       return right.primaryValue - left.primaryValue;
     }
 
+    if (category === "catches" && left.supporting.runOuts !== right.supporting.runOuts) {
+      return right.supporting.runOuts - left.supporting.runOuts;
+    }
+
     return left.player.name.localeCompare(right.player.name);
   });
 
@@ -575,8 +592,11 @@ export function getLeaderboardSummary({
   category: LeaderboardCategory;
 }): LeaderSummary {
   const rankedEntries = entries.filter((entry) => entry.rankable);
-  const bestValue = rankedEntries[0]?.primaryValue ?? 0;
-  const leaders = rankedEntries.filter((entry) => entry.primaryValue === bestValue);
+  const leadingEntry = rankedEntries[0];
+  const bestValue = leadingEntry?.primaryValue ?? 0;
+  const leaders = leadingEntry
+    ? rankedEntries.filter((entry) => hasSameCompetitionPosition(entry, leadingEntry))
+    : [];
 
   if (category === "level" && leaders.length === entries.length) {
     return {
@@ -617,7 +637,34 @@ export function getLeaderboardSummary({
 }
 
 export function getLeaderboardPodium(entries: PlayerLeaderboardEntry[]) {
-  return entries.filter((entry) => entry.rankable).slice(0, 3);
+  return entries.filter((entry) => entry.rankable && entry.rank > 0 && entry.rank <= 3);
+}
+
+export type LeaderboardPodiumRankGroup = {
+  rank: number;
+  entries: PlayerLeaderboardEntry[];
+};
+
+export function groupLeaderboardPodiumEntries(
+  entries: PlayerLeaderboardEntry[]
+): LeaderboardPodiumRankGroup[] {
+  return getLeaderboardPodium(entries).reduce<LeaderboardPodiumRankGroup[]>(
+    (groups, entry) => {
+      const existingGroup = groups.find((group) => group.rank === entry.rank);
+
+      if (existingGroup) {
+        existingGroup.entries.push(entry);
+      } else {
+        groups.push({
+          rank: entry.rank,
+          entries: [entry]
+        });
+      }
+
+      return groups;
+    },
+    []
+  );
 }
 
 export function hasAnyFinalisedLeaderboardData(players: Player[], matches: MatchRecord[]) {

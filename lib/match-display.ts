@@ -3,12 +3,14 @@ import {
   formatInningsScore,
   getFinalResultHeadline
 } from "./match-records";
+import { formatCompletedOvers, formatCricketOversFromLegalBalls } from "./match-scorecard";
 import type { MatchRecord, TeamId, TeamInnings } from "./types/match";
 
 export type MatchScoreRow = {
   teamId: TeamId;
   teamName: string;
   score: string;
+  overs: string;
 };
 
 export function formatMatchDisplayDate(matchDate: string): string {
@@ -35,6 +37,38 @@ export function getMatchTeamScore(match: MatchRecord, teamId: TeamId): string {
   const innings = getTeamInnings(match, teamId);
 
   return formatInningsScore(innings.runs, innings.wicketsLost);
+}
+
+export function getMatchScheduledOversLabel(match: MatchRecord): string {
+  const scheduledOvers = match.scheduledOversPerInnings;
+
+  if (!Number.isInteger(scheduledOvers) || (scheduledOvers ?? 0) <= 0) {
+    return "-";
+  }
+
+  return `${scheduledOvers} ${scheduledOvers === 1 ? "OVER" : "OVERS"}`;
+}
+
+export function getMatchInningsOversLabel(
+  match: MatchRecord,
+  teamId: TeamId
+): string {
+  const innings = getTeamInnings(match, teamId);
+  const completedOvers = Number(innings.completedOvers);
+
+  if (Number.isFinite(completedOvers) && completedOvers >= 0) {
+    return formatCompletedOvers(completedOvers);
+  }
+
+  const legalBalls = innings.bowlingOvers.reduce<number | null>((total, over) => {
+    if (typeof over.legalBalls !== "number" || !Number.isFinite(over.legalBalls)) {
+      return total;
+    }
+
+    return (total ?? 0) + Math.max(0, Math.round(over.legalBalls));
+  }, null);
+
+  return legalBalls === null ? "-" : formatCricketOversFromLegalBalls(legalBalls);
 }
 
 function isTeamId(value: unknown): value is TeamId {
@@ -69,7 +103,8 @@ export function getMatchScoreRowsInInningsOrder(match: MatchRecord): MatchScoreR
   return orderedTeamIds.map((teamId) => ({
     teamId,
     teamName: getTeamName(match, teamId),
-    score: getMatchTeamScore(match, teamId)
+    score: getMatchTeamScore(match, teamId),
+    overs: getMatchInningsOversLabel(match, teamId)
   }));
 }
 

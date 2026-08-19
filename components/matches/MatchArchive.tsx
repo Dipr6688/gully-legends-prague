@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { useMatchRepository } from "@/components/matches/useMatchRepository";
 import {
   formatMatchDisplayDate,
+  getMatchScheduledOversLabel,
   getMatchResultHeadline,
   getMatchScoreRowsInInningsOrder
 } from "@/lib/match-display";
@@ -99,11 +100,19 @@ function MatchArchiveCard({
         <strong>Finalised</strong>
       </div>
 
+      <div className="match-archive-length" aria-label="Scheduled match length">
+        <span>Match Length</span>
+        <strong>{getMatchScheduledOversLabel(match)}</strong>
+      </div>
+
       <div className="match-archive-scores" aria-label={`${match.matchName} score`}>
         {scoreRows.map((row) => (
           <div key={row.teamId}>
             <span>{row.teamName}</span>
-            <b>{row.score}</b>
+            <b>
+              {row.score}
+              <small>({row.overs})</small>
+            </b>
           </div>
         ))}
       </div>
