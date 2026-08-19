@@ -2910,6 +2910,47 @@ test("Draft saving does not trigger finalisation side effects", () => {
   assert.match(form, /applyFinalisedMatchToLocalCareerStats\(finalisedMatch\)/);
 });
 
+test("Demo Test Match completion is a dry-run validation action", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const finaliseBranch =
+    form.match(/if \(nextStatus === "finalised"\) \{[\s\S]*?\n      \} else \{/)?.[0] ?? "";
+  const demoBranch =
+    finaliseBranch.match(/if \(isDemoMatch\) \{[\s\S]*?return true;\n        \}/)?.[0] ?? "";
+  const afterDemoBranch = finaliseBranch.slice(
+    finaliseBranch.indexOf("if (isDemoMatch)"),
+    finaliseBranch.indexOf("const finalScore")
+  );
+
+  assert.match(form, /DEMO TEST MATCH - Nothing from this match will affect official records\./);
+  assert.match(form, /isDemoMatch \? "Complete Demo Test" : "Finalise Match"/);
+  assert.match(form, /DEMO TEST COMPLETED - Validation passed\. No official records were changed\./);
+  assert.match(form, /DEMO VALIDATION FAILED -/);
+  assert.match(finaliseBranch, /const finalisedMatch = buildCurrentMatchRecord/);
+  assert.match(demoBranch, /setFinalisedXPBreakdowns/);
+  assert.match(demoBranch, /return true/);
+  assert.doesNotMatch(demoBranch, /finalizeSupabaseAdminMatch/);
+  assert.doesNotMatch(demoBranch, /applyFinalisedMatchToLocalCareerStats/);
+  assert.doesNotMatch(demoBranch, /localMatchRepository\.saveMatch/);
+  assert.doesNotMatch(demoBranch, /setStatus\(nextStatus\)/);
+  assert.doesNotMatch(afterDemoBranch, /window\.confirm/);
+  assert.doesNotMatch(afterDemoBranch, /Finalisation updates career statistics/);
+});
+
+test("Normal match finalisation remains official while Demo save stays non-finalised", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const nonFinalisedSaveSection =
+    form.match(/async function persistNonFinalisedMatch[\s\S]*?async function createDemoTestMatch/)?.[0] ?? "";
+
+  assert.match(form, /isDemoMatch \? "Complete Demo Test" : "Finalise Match"/);
+  assert.match(form, /FINALISE MATCH\?/);
+  assert.match(form, /Finalisation updates career statistics, XP, Hall of Legends and Monthly Beasts/);
+  assert.match(form, /finalizeSupabaseAdminMatch\(\{/);
+  assert.match(form, /applyFinalisedMatchToLocalCareerStats\(finalisedMatch\)/);
+  assert.match(nonFinalisedSaveSection, /saveSupabaseAdminMatch/);
+  assert.doesNotMatch(nonFinalisedSaveSection, /finalizeSupabaseAdminMatch/);
+  assert.doesNotMatch(nonFinalisedSaveSection, /applyFinalisedMatchToLocalCareerStats/);
+});
+
 test("Create Match form supports quick fixture creation fields", () => {
   const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
 

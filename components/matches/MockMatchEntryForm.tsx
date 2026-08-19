@@ -3181,17 +3181,25 @@ export function MockMatchEntryForm({
         ];
 
         if (quickIssues.length > 0) {
-          setMessage(quickIssues[0] ?? "Resolve quick scoring details before finalising.");
+          setMessage(
+            isDemoMatch
+              ? `DEMO VALIDATION FAILED - ${quickIssues[0] ?? "Resolve quick scoring details before completing the demo."}`
+              : quickIssues[0] ?? "Resolve quick scoring details before finalising."
+          );
           return false;
         }
 
         if (!secondInningsIsComplete) {
-          setMessage("Finish the match or innings review before finalising.");
+          setMessage(
+            isDemoMatch
+              ? "DEMO VALIDATION FAILED - Finish the match or innings review before completing the demo."
+              : "Finish the match or innings review before finalising."
+          );
           return false;
         }
       }
 
-      if (nextStatus === "finalised" && !options.skipMonthlyCrownGuard) {
+      if (nextStatus === "finalised" && !isDemoMatch && !options.skipMonthlyCrownGuard) {
         if (!supabaseWriteMode) {
           const matchMonthKey = getMatchMonthKey(values.matchDate);
           const activeCrown = matchMonthKey
@@ -3241,7 +3249,9 @@ export function MockMatchEntryForm({
 
       if (!response.ok || !result.ok) {
         setMessage(
-          stage === "start"
+          isDemoMatch && nextStatus === "finalised"
+            ? `DEMO VALIDATION FAILED - ${result.errors[0] ?? "Please check the match record."}`
+            : stage === "start"
             ? getSetupValidationMessage(
                 result.errors[0] ?? "Please check the match setup."
               )
@@ -3251,6 +3261,30 @@ export function MockMatchEntryForm({
       }
 
       if (nextStatus === "finalised") {
+        const appliedAt = new Date().toISOString();
+        const finalisedMatch = buildCurrentMatchRecord(
+          nextStatus,
+          result.result,
+          appliedAt
+        );
+
+        if (isDemoMatch) {
+          setFinalisedXPBreakdowns(
+            Object.fromEntries(
+              [
+                ...finalisedMatch.teams.teamA.playerPerformances,
+                ...finalisedMatch.teams.teamB.playerPerformances
+              ]
+                .filter((record): record is FinalisedPlayerMatchRecord => "xpBreakdown" in record)
+                .map((record) => [getPerformanceRecordKey(record), record.xpBreakdown])
+            )
+          );
+          setMessage(
+            "DEMO TEST COMPLETED - Validation passed. No official records were changed."
+          );
+          return true;
+        }
+
         const finalScore = `${values.teamAName} ${formatInningsScore(
           result.totals.teamATotal,
           teamAInningsScore.wicketsLost
@@ -3271,13 +3305,6 @@ export function MockMatchEntryForm({
         );
 
         if (!confirmed) return false;
-
-        const appliedAt = new Date().toISOString();
-        const finalisedMatch = buildCurrentMatchRecord(
-          nextStatus,
-          result.result,
-          appliedAt
-        );
 
         if (supabaseWriteMode) {
           const finaliseResult = await finalizeSupabaseAdminMatch({
@@ -3359,7 +3386,11 @@ export function MockMatchEntryForm({
       }
       return true;
     } catch {
-      setMessage("COULD NOT SAVE MATCH. Your changes were not saved. Please try again.");
+      setMessage(
+        isDemoMatch && nextStatus === "finalised"
+          ? "DEMO VALIDATION FAILED - Your demo was not completed. Please check the match record."
+          : "COULD NOT SAVE MATCH. Your changes were not saved. Please try again."
+      );
       return false;
     } finally {
       setIsSavingMatch(false);
@@ -3571,6 +3602,11 @@ export function MockMatchEntryForm({
       {isDemoTestMatch ? (
         <div className="mt-4 inline-flex w-fit rounded-md border border-neon-yellow/45 bg-neon-yellow/10 px-3 py-2 text-xs font-black uppercase text-neon-yellow">
           Demo Test - Will Be Removed By Demo Reset
+        </div>
+      ) : null}
+      {isDemoMatch && !isFinalised ? (
+        <div className="mt-4 rounded-md border border-neon-cyan/35 bg-neon-cyan/10 px-3 py-2 text-sm font-black uppercase text-neon-cyan">
+          DEMO TEST MATCH - Nothing from this match will affect official records.
         </div>
       ) : null}
 
@@ -4733,7 +4769,7 @@ export function MockMatchEntryForm({
             disabled={isLocked || status !== "in_progress" || !canUseTeamControls || isSavingMatch}
           >
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            Finalise Match
+            {isDemoMatch ? "Complete Demo Test" : "Finalise Match"}
           </Button>
           <Button type="button" variant="ghost" onClick={resetForm} disabled={isLocked || isSavingMatch}>
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
