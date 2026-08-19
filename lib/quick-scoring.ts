@@ -448,6 +448,10 @@ export function deriveQuickScoringInnings({
         missingInformation.push(`Missing catcher for event ${event.sequence}.`);
       }
 
+      if (event.wicket.type === "stumped" && !event.wicket.fielderId) {
+        missingInformation.push(`Missing stumper for event ${event.sequence}.`);
+      }
+
       if (event.wicket.type === "run_out" && !event.wicket.fielderId) {
         missingInformation.push(`Run-out fielder missing for event ${event.sequence}.`);
       }
@@ -458,6 +462,13 @@ export function deriveQuickScoringInnings({
         !eligibleFieldingPlayerIds.includes(event.wicket.fielderId)
       ) {
         missingInformation.push(`Event ${event.sequence} has an ineligible fielder.`);
+      }
+
+      if (
+        event.wicket.type === "stumped" &&
+        event.wicket.fielderId === event.bowlerId
+      ) {
+        missingInformation.push(`Event ${event.sequence} uses the bowler as the stumper.`);
       }
 
       if (event.wicket.newBatterId) {

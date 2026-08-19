@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { isAdminWithClient } from "@/lib/admin/auth";
 import { getPlayerById } from "@/lib/data/players";
 import { getMatchMonthKey } from "@/lib/monthly-beasts";
-import { isDemoTestMatchPayload } from "@/lib/demo-test-match";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { buildFinalisationPlan } from "@/lib/supabase/match-finalisation-plan";
 import {
@@ -214,11 +213,7 @@ export async function POST(request: Request) {
       throw new SupabaseMatchFinalisationError("COULD NOT FINALISE MATCH", "validation_failed");
     }
 
-    if (
-      currentRow.is_demo &&
-      currentRow.status !== "finalised" &&
-      !isDemoTestMatchPayload(currentPayload.match)
-    ) {
+    if (currentRow.is_demo && currentRow.status !== "finalised") {
       throw new SupabaseMatchFinalisationError("COULD NOT FINALISE MATCH", "not_allowed");
     }
 

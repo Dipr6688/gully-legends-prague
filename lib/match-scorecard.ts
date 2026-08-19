@@ -152,6 +152,10 @@ export function formatDismissalText(
     return `run out (${fielderName})`;
   }
 
+  if (dismissal.type === "stumped") {
+    return `st ${fielderName} b ${bowlerName}`;
+  }
+
   if (dismissal.type === "lbw") {
     return `lbw b ${bowlerName}`;
   }

@@ -567,6 +567,7 @@ export function MockMatchEntryForm({
     "Match workflow ready. Enter team, innings and player records."
   );
   const [isSavingMatch, setIsSavingMatch] = useState(false);
+  const [isCreatingDemoTestMatch, setIsCreatingDemoTestMatch] = useState(false);
   const [playerUpdateOpen, setPlayerUpdateOpen] = useState(false);
   const [playerUpdateAssignments, setPlayerUpdateAssignments] = useState<
     Record<string, PlayerAssignment>
@@ -1409,19 +1410,28 @@ export function MockMatchEntryForm({
 
     if (
       (quickWicketDraft.type === "caught" ||
+        quickWicketDraft.type === "stumped" ||
         quickWicketDraft.type === "run_out") &&
       !quickWicketDraft.fielderId
     ) {
       errors.fielder =
         quickWicketDraft.type === "caught"
           ? "Please select the catcher."
+          : quickWicketDraft.type === "stumped"
+            ? "Please select the stumper."
           : "Please select the run-out fielder.";
     } else if (
       (quickWicketDraft.type === "caught" ||
+        quickWicketDraft.type === "stumped" ||
         quickWicketDraft.type === "run_out") &&
       !fieldingPlayerIds.has(quickWicketDraft.fielderId)
     ) {
       errors.fielder = "Select a player from the fielding side or Fielding Helpers.";
+    } else if (
+      quickWicketDraft.type === "stumped" &&
+      quickWicketDraft.fielderId === quickSelection.bowlerId
+    ) {
+      errors.fielder = "The bowler cannot also be selected as the stumper.";
     }
 
     if (
@@ -1442,6 +1452,7 @@ export function MockMatchEntryForm({
     quickActiveDerived,
     quickActiveFieldingPlayers,
     quickRequiresNonStriker,
+    quickSelection.bowlerId,
     quickSelection.nonStrikerId,
     quickSelection.strikerId,
     quickWicketDraft
@@ -3040,6 +3051,32 @@ export function MockMatchEntryForm({
     return true;
   }
 
+  async function createDemoTestMatch() {
+    if (!supabaseWriteMode || !hasAdminWriteAccess || !isNewMatch) return;
+
+    setIsCreatingDemoTestMatch(true);
+    setMessage("Creating Demo Test Match...");
+
+    try {
+      const response = await fetch("/api/admin/matches/demo-test", {
+        method: "POST"
+      });
+      const result = (await response.json().catch(() => null)) as
+        | { ok?: boolean; matchId?: string; message?: string }
+        | null;
+
+      if (!response.ok || !result?.ok || !result.matchId) {
+        setMessage(result?.message ?? "COULD NOT CREATE DEMO TEST MATCH");
+        return;
+      }
+
+      router.push(`/matches/${result.matchId}`);
+      router.refresh();
+    } finally {
+      setIsCreatingDemoTestMatch(false);
+    }
+  }
+
   async function editLockedSetupBeforeScoring() {
     if (!canEditLockedSetup || !canEditMatch) return;
 
@@ -4122,6 +4159,26 @@ export function MockMatchEntryForm({
                   Automatically assigned as Game {values.matchNumber || "-"}.
                 </output>
               </div>
+              {isNewMatch && supabaseWriteMode && hasAdminWriteAccess ? (
+                <div className="grid gap-2 text-sm font-bold text-stone-200 md:col-span-2">
+                  Demo Test Match
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={createDemoTestMatch}
+                    disabled={isCreatingDemoTestMatch}
+                    className="w-fit"
+                  >
+                    {isCreatingDemoTestMatch
+                      ? "CREATING DEMO..."
+                      : "CREATE DEMO TEST MATCH"}
+                  </Button>
+                  <p className="text-xs font-bold uppercase text-neon-yellow">
+                    Demo scoring is isolated from official career stats, XP,
+                    Hall of Legends and Monthly Beasts.
+                  </p>
+                </div>
+              ) : null}
             </div>
           </details>
           <div className="grid gap-4 md:grid-cols-3">
@@ -4889,7 +4946,10 @@ function buildPerformanceList(
         (helperIdSet.has(player.id)
           ? calculatePlayerRunOuts(player.id, opposingBowlingOvers)
           : 0),
-      stumpings: calculatePlayerStumpings(player.id, ownBowlingOvers)
+      stumpings: calculatePlayerStumpings(player.id, ownBowlingOvers) +
+        (helperIdSet.has(player.id)
+          ? calculatePlayerStumpings(player.id, opposingBowlingOvers)
+          : 0)
     };
   });
 }
@@ -5692,12 +5752,41 @@ function QuickScoringPanel({
             >
               <option value="bowled">Bowled</option>
               <option value="caught">Caught</option>
+              <option value="stumped">Stumped</option>
               <option value="run_out">Run Out</option>
               <option value="other_bowler_wicket">Other</option>
             </select>
           </label>
 
-          {wicketDraft.type === "run_out" ? (
+          {wicketDraft.type === "stumped" ? (
+            <label>
+              Stumped by
+              <select
+                value={wicketDraft.fielderId}
+                disabled={disabled}
+                onChange={(event) =>
+                  onWicketDraftChange({
+                    ...wicketDraft,
+                    fielderId: event.target.value
+                  })
+                }
+              >
+                <option value="">Select stumper</option>
+                {fieldingPlayers
+                  .filter(
+                    (player) =>
+                      player.id !== selection.bowlerId &&
+                      player.id !== pendingDismissedPlayerId
+                  )
+                  .map((player) => (
+                    <option key={`quick-stumper-${player.id}`} value={player.id}>
+                      {player.name}
+                    </option>
+                  ))}
+              </select>
+              <ErrorText>{wicketErrors.fielder}</ErrorText>
+            </label>
+          ) : wicketDraft.type === "run_out" ? (
             <div className="quick-run-out-guide">
               {requiresNonStriker ? (
                 <>
@@ -6235,7 +6324,7 @@ function DismissalEditor({
         : "Run-out by";
   const fielderOptions =
     dismissal.type === "stumped"
-      ? bowlingPlayers.filter((player) => player.id !== over.bowlerId)
+      ? fieldingPlayers.filter((player) => player.id !== over.bowlerId)
       : fieldingPlayers;
   const safeFielderOptions = fielderOptions.filter(
     (player) => player.id !== dismissal.dismissedBatterId

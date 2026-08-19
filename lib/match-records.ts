@@ -1642,8 +1642,8 @@ function validateBowlingOvers(
             break;
           }
 
-          if (!bowlingPlayerIds.includes(dismissal.fielderId)) {
-            errors.push("Every stumping fielder must belong to the bowling team.");
+          if (!fieldingPlayerIds.includes(dismissal.fielderId)) {
+            errors.push("Every stumping fielder must belong to the bowling team or Fielding Helpers.");
             break;
           }
 

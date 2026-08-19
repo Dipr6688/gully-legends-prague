@@ -1129,10 +1129,13 @@ test("admin-only demo test match helper keeps normal match creation real", () =>
   assert.match(readData, /isDemo: row\.is_demo/);
   assert.match(readData, /isDemoTestMatch: row\.is_demo && result\.match\.isDemoTestMatch === true/);
   assert.match(matchForm, /Demo Test - Will Be Removed By Demo Reset/);
+  assert.match(matchForm, /CREATE DEMO TEST MATCH/);
+  assert.match(matchForm, /\/api\/admin\/matches\/demo-test/);
   assert.match(matchForm, /isDemo:\s*isDemoMatch/);
   assert.match(matchForm, /isDemoTestMatch/);
   assert.doesNotMatch(matchWriteRoute, /isDemo|is_demo|demo-test/);
-  assert.match(finaliseRoute, /isDemoTestMatchPayload\(currentPayload\.match\)/);
+  assert.match(finaliseRoute, /currentRow\.is_demo && currentRow\.status !== "finalised"/);
+  assert.doesNotMatch(finaliseRoute, /!isDemoTestMatchPayload\(currentPayload\.match\)/);
   assert.match(finaliseRoute, /finalizeAtomically/);
   assert.doesNotMatch(atomicFinalisationSql, /set\s+is_demo|is_demo\s*=/i);
   assert.match(resetMigration, /delete from public\.matches[\s\S]*where is_demo = true/);

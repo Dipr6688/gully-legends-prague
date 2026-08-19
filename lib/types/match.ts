@@ -35,6 +35,7 @@ export type QuickScoringExtraType = "wide" | "no_ball" | null;
 export type QuickScoringDismissalType =
   | "bowled"
   | "caught"
+  | "stumped"
   | "run_out"
   | "other_bowler_wicket";
 

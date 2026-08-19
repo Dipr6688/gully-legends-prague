@@ -1,4 +1,4 @@
-import { Camera, Crown, LogOut, Swords, Trophy, Users } from "lucide-react";
+import { Camera, Crown, DownloadCloud, LogOut, Swords, Trophy, Users } from "lucide-react";
 import { logoutAdmin } from "@/app/admin/actions";
 import { DemoDataResetControl } from "@/components/admin/DemoDataResetControl";
 import { LinkButton } from "@/components/ui/Button";
@@ -12,7 +12,15 @@ const controlSections = [
     icon: Swords,
     links: [
       { label: "Create Match", href: "/matches/new" },
-      { label: "Manage Fixtures", href: "/matches" }
+      { label: "Manage Fixtures", href: "/matches" },
+      { label: "APK Pending Review", href: "/admin/apk-imports" }
+    ]
+  },
+  {
+    title: "APK SYNC",
+    icon: DownloadCloud,
+    links: [
+      { label: "APK Matches", href: "/admin/apk-imports" }
     ]
   },
   {

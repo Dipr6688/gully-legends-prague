@@ -386,7 +386,8 @@ export function calculateSharedPlayerMatchXP(
       (sum, performance) =>
         sum +
         performance.catches * XP_RULES.catch +
-        performance.runOuts * XP_RULES.runOut,
+        performance.runOuts * XP_RULES.runOut +
+        (performance.stumpings ?? 0) * XP_RULES.stumping,
       0
     ),
     XP_RULES.fieldingCap

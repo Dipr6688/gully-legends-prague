@@ -3316,7 +3316,7 @@ test("Fielding Helpers use separate fielder options and do not expand bowler eli
   assert.match(form, /fieldingPlayers=\{quickActiveFieldingPlayers\}/);
   assert.match(form, /const bowlerOptions = bowlingPlayers\.filter/);
   assert.match(form, /fieldingPlayers\.map\(\(player\) => \(/);
-  assert.match(form, /const fielderOptions =[\s\S]*\? bowlingPlayers\.filter[\s\S]*: fieldingPlayers/);
+  assert.match(form, /const fielderOptions =[\s\S]*\? fieldingPlayers\.filter[\s\S]*: fieldingPlayers/);
   assert.match(quickScoring, /bowlingPlayerIds && !bowlingPlayerIds\.includes\(event\.bowlerId\)/);
   assert.match(quickScoring, /const eligibleFieldingPlayerIds = fieldingPlayerIds \?\? bowlingPlayerIds \?\? \[\]/);
 });
@@ -4347,7 +4347,7 @@ test("server rejects stumping when stumper is not from bowling team", () => {
     }
   }));
 
-  assert.equal(errors.includes("Every stumping fielder must belong to the bowling team."), true);
+  assert.equal(errors.includes("Every stumping fielder must belong to the bowling team or Fielding Helpers."), true);
 });
 
 test("server rejects duplicate dismissed batters in an innings", () => {
