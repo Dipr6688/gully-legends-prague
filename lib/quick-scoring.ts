@@ -49,6 +49,7 @@ export type QuickScoringDerivedInnings = {
   activeBatterCount: number;
   currentOverEvents: QuickScoringEvent[];
   lastCompletedOverEvents: QuickScoringEvent[];
+  isBetweenOvers: boolean;
   previousOverBowlerId: string | null;
   missingInformation: string[];
 };
@@ -541,10 +542,12 @@ export function deriveQuickScoringInnings({
     }
   }
 
-  const currentOverNumber =
-    legalBalls > 0 && legalBalls % 6 === 0
-      ? Math.floor(legalBalls / 6) + 1
-      : Math.floor(legalBalls / 6) + 1;
+  const currentOverNumber = Math.floor(legalBalls / 6) + 1;
+  const currentOverEvents = eventsByOverNumber.get(currentOverNumber) ?? [];
+  const isBetweenOvers =
+    legalBalls > 0 &&
+    legalBalls % 6 === 0 &&
+    currentOverEvents.length === 0;
 
   return {
     battingTeamId,
@@ -568,14 +571,12 @@ export function deriveQuickScoringInnings({
       battingPlayerIds.filter((playerId) => !dismissedPlayerIds.has(playerId))
         .length === 1,
     activeBatterCount: [strikerId, nonStrikerId].filter(Boolean).length,
-    currentOverEvents:
-      legalBalls > 0 && legalBalls % 6 === 0
-        ? []
-        : eventsByOverNumber.get(currentOverNumber) ?? [],
+    currentOverEvents: isBetweenOvers ? [] : currentOverEvents,
     lastCompletedOverEvents:
       legalBalls > 0 && legalBalls % 6 === 0
         ? eventsByOverNumber.get(Math.floor(legalBalls / 6)) ?? []
         : [],
+    isBetweenOvers,
     previousOverBowlerId,
     missingInformation
   };

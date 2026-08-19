@@ -635,6 +635,251 @@ test("Quick Scoring wides and no-balls add extras without legal deliveries", () 
   assert.equal(derived.battingPerformances.find((row) => row.playerId === "naim")?.runs, 4);
 });
 
+test("Quick Scoring shows every first event of a new over immediately", () => {
+  const firstOver = quickLegalOver(1, "aninda");
+  const cases = [
+    {
+      name: "dot ball",
+      event: quickEvent(7, { bowlerId: "dipanjan", batterRuns: 0 }),
+      expectedLegalBalls: 7
+    },
+    {
+      name: "single",
+      event: quickEvent(7, { bowlerId: "dipanjan", batterRuns: 1 }),
+      expectedLegalBalls: 7
+    },
+    {
+      name: "four",
+      event: quickEvent(7, { bowlerId: "dipanjan", batterRuns: 4 }),
+      expectedLegalBalls: 7
+    },
+    {
+      name: "six",
+      event: quickEvent(7, { bowlerId: "dipanjan", batterRuns: 6 }),
+      expectedLegalBalls: 7
+    },
+    {
+      name: "wide",
+      event: quickEvent(7, { bowlerId: "dipanjan", extraType: "wide", extras: 1 }),
+      expectedLegalBalls: 6
+    },
+    {
+      name: "no-ball",
+      event: quickEvent(7, { bowlerId: "dipanjan", extraType: "no_ball", extras: 1 }),
+      expectedLegalBalls: 6
+    },
+    {
+      name: "wicket",
+      event: quickEvent(7, {
+        bowlerId: "dipanjan",
+        wicket: {
+          type: "bowled",
+          dismissedPlayerId: "naim",
+          fielderId: null,
+          newBatterId: "soman",
+          completedRuns: 0
+        }
+      }),
+      expectedLegalBalls: 7
+    }
+  ];
+
+  for (const { name, event, expectedLegalBalls } of cases) {
+    const derived = deriveQuickScoringInnings(quickInput([...firstOver, event]));
+
+    assert.equal(derived.legalBalls, expectedLegalBalls, name);
+    assert.deepEqual(
+      derived.currentOverEvents.map((candidate) => candidate.id),
+      [event.id],
+      name
+    );
+    assert.equal(derived.isBetweenOvers, false, name);
+    assert.equal(derived.currentBowlerId, "dipanjan", name);
+    if (expectedLegalBalls === 6) {
+      assert.equal(derived.lastCompletedOverEvents.length, 6, name);
+    }
+  }
+});
+
+test("Quick Scoring keeps first wide and no-ball visible after later over transitions", () => {
+  const completedOvers = [
+    quickLegalOver(1, "aninda"),
+    quickLegalOver(7, "dipanjan"),
+    quickLegalOver(13, "utpal")
+  ];
+  const cases = [
+    {
+      name: "Over 2 first wide",
+      eventsBefore: completedOvers.slice(0, 1).flat(),
+      event: quickEvent(7, { bowlerId: "dipanjan", extraType: "wide", extras: 1 }),
+      expectedLegalBalls: 6
+    },
+    {
+      name: "Over 3 first wide",
+      eventsBefore: completedOvers.slice(0, 2).flat(),
+      event: quickEvent(13, { bowlerId: "utpal", extraType: "wide", extras: 1 }),
+      expectedLegalBalls: 12
+    },
+    {
+      name: "Over 4 first wide",
+      eventsBefore: completedOvers.flat(),
+      event: quickEvent(19, { bowlerId: "dheeraj", extraType: "wide", extras: 1 }),
+      expectedLegalBalls: 18
+    },
+    {
+      name: "Over 2 first no-ball",
+      eventsBefore: completedOvers.slice(0, 1).flat(),
+      event: quickEvent(7, { bowlerId: "dipanjan", extraType: "no_ball", extras: 1 }),
+      expectedLegalBalls: 6
+    },
+    {
+      name: "Over 3 first no-ball",
+      eventsBefore: completedOvers.slice(0, 2).flat(),
+      event: quickEvent(13, { bowlerId: "utpal", extraType: "no_ball", extras: 1 }),
+      expectedLegalBalls: 12
+    }
+  ];
+
+  for (const { name, eventsBefore, event, expectedLegalBalls } of cases) {
+    const derived = deriveQuickScoringInnings(quickInput([...eventsBefore, event]));
+
+    assert.equal(derived.legalBalls, expectedLegalBalls, name);
+    assert.equal(derived.isBetweenOvers, false, name);
+    assert.deepEqual(
+      derived.currentOverEvents.map((candidate) => candidate.id),
+      [event.id],
+      name
+    );
+    assert.equal(derived.currentBowlerId, event.bowlerId, name);
+  }
+});
+
+test("Quick Scoring keeps first wide in the new over before the next legal ball", () => {
+  const firstOver = quickLegalOver(1, "aninda");
+  const wide = quickEvent(7, {
+    bowlerId: "dipanjan",
+    extraType: "wide",
+    extras: 1
+  });
+  const single = quickEvent(8, {
+    bowlerId: "dipanjan",
+    batterRuns: 1
+  });
+  const afterWide = deriveQuickScoringInnings(quickInput([...firstOver, wide]));
+  const afterSingle = deriveQuickScoringInnings(
+    quickInput([...firstOver, wide, single])
+  );
+
+  assert.equal(afterWide.legalBalls, 6);
+  assert.equal(afterWide.isBetweenOvers, false);
+  assert.deepEqual(afterWide.currentOverEvents.map((event) => event.extraType), ["wide"]);
+  assert.equal(afterSingle.legalBalls, 7);
+  assert.deepEqual(
+    afterSingle.currentOverEvents.map((event) => event.id),
+    [wide.id, single.id]
+  );
+});
+
+test("Quick Scoring keeps first no-ball in the new over before the next boundary", () => {
+  const firstOver = quickLegalOver(1, "aninda");
+  const noBall = quickEvent(7, {
+    bowlerId: "dipanjan",
+    extraType: "no_ball",
+    extras: 1
+  });
+  const four = quickEvent(8, {
+    bowlerId: "dipanjan",
+    batterRuns: 4
+  });
+  const afterNoBall = deriveQuickScoringInnings(quickInput([...firstOver, noBall]));
+  const afterFour = deriveQuickScoringInnings(
+    quickInput([...firstOver, noBall, four])
+  );
+
+  assert.equal(afterNoBall.legalBalls, 6);
+  assert.equal(afterNoBall.isBetweenOvers, false);
+  assert.deepEqual(afterNoBall.currentOverEvents.map((event) => event.extraType), ["no_ball"]);
+  assert.equal(afterFour.legalBalls, 7);
+  assert.deepEqual(
+    afterFour.currentOverEvents.map((event) => event.id),
+    [noBall.id, four.id]
+  );
+});
+
+test("Quick Scoring undo removes a first wide or no-ball from the new over immediately", () => {
+  for (const extraType of ["wide", "no_ball"] as const) {
+    const quickScoring = {
+      ...createEmptyQuickScoringMetadata(),
+      inningsBEvents: [
+        ...quickLegalOver(1, "aninda"),
+        quickEvent(7, { bowlerId: "dipanjan", extraType, extras: 1 })
+      ]
+    };
+    const withExtra = deriveQuickScoringInnings(quickInput(quickScoring.inningsBEvents));
+    const undone = undoLastQuickScoringEvent(quickScoring, "teamB");
+    const afterUndo = deriveQuickScoringInnings(quickInput(undone.inningsBEvents));
+
+    assert.equal(withExtra.currentOverEvents.length, 1, extraType);
+    assert.equal(withExtra.legalBalls, 6, extraType);
+    assert.equal(withExtra.isBetweenOvers, false, extraType);
+    assert.equal(afterUndo.currentOverEvents.length, 0, extraType);
+    assert.equal(afterUndo.lastCompletedOverEvents.length, 6, extraType);
+    assert.equal(afterUndo.legalBalls, 6, extraType);
+    assert.equal(afterUndo.isBetweenOvers, true, extraType);
+  }
+});
+
+test("Quick Scoring groups mixed first-event wides and no-balls across four overs", () => {
+  const overOne = quickLegalOver(1, "aninda");
+  const overTwoWide = quickEvent(7, {
+    bowlerId: "dipanjan",
+    extraType: "wide",
+    extras: 1
+  });
+  const overTwoLegalBalls = quickLegalOver(8, "dipanjan");
+  const overThreeNoBall = quickEvent(14, {
+    bowlerId: "utpal",
+    extraType: "no_ball",
+    extras: 1
+  });
+  const overThreeLegalBalls = quickLegalOver(15, "utpal");
+  const overFourWide = quickEvent(21, {
+    bowlerId: "dheeraj",
+    extraType: "wide",
+    extras: 1
+  });
+  const overFourSingle = quickEvent(22, {
+    bowlerId: "dheeraj",
+    batterRuns: 1
+  });
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      ...overOne,
+      overTwoWide,
+      ...overTwoLegalBalls,
+      overThreeNoBall,
+      ...overThreeLegalBalls,
+      overFourWide,
+      overFourSingle
+    ])
+  );
+
+  assert.equal(derived.legalBalls, 19);
+  assert.equal(derived.isBetweenOvers, false);
+  assert.equal(derived.bowlingOvers[0]?.overNumber, 1);
+  assert.equal(derived.bowlingOvers[1]?.overNumber, 2);
+  assert.equal(derived.bowlingOvers[2]?.overNumber, 3);
+  assert.equal(derived.bowlingOvers[3]?.overNumber, 4);
+  assert.equal(derived.bowlingOvers[1]?.legalBalls, 6);
+  assert.equal(derived.bowlingOvers[1]?.runsConceded, 1);
+  assert.equal(derived.bowlingOvers[2]?.legalBalls, 6);
+  assert.equal(derived.bowlingOvers[2]?.runsConceded, 1);
+  assert.deepEqual(
+    derived.currentOverEvents.map((event) => event.id),
+    [overFourWide.id, overFourSingle.id]
+  );
+});
+
 test("Quick Scoring derives bowled caught and run-out wickets with correct credits", () => {
   const derived = deriveQuickScoringInnings(
     quickInput([

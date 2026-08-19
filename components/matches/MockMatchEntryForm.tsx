@@ -1325,15 +1325,13 @@ export function MockMatchEntryForm({
 
     if (!quickSelection.bowlerId) {
       errors.bowler =
-        quickActiveDerived.legalBalls > 0 &&
-        quickActiveDerived.legalBalls % 6 === 0
+        quickActiveDerived.isBetweenOvers
           ? "Please select the next bowler."
           : "Please select the bowler.";
     } else if (!bowlingPlayerIds.has(quickSelection.bowlerId)) {
       errors.bowler = "Select a bowler from the bowling team.";
     } else if (
-      quickActiveDerived.legalBalls > 0 &&
-      quickActiveDerived.legalBalls % 6 === 0 &&
+      quickActiveDerived.isBetweenOvers &&
       quickActiveDerived.previousOverBowlerId === quickSelection.bowlerId
     ) {
       errors.bowler = "Select a different bowler for the next over.";
@@ -5405,8 +5403,7 @@ function QuickScoringPanel({
   );
   const overLimitReached = inningsState.hasCompletedOvers;
   const inningsIsComplete = inningsState.isComplete;
-  const overJustEnded =
-    !inningsIsComplete && derived.legalBalls > 0 && derived.legalBalls % 6 === 0;
+  const overJustEnded = !inningsIsComplete && derived.isBetweenOvers;
   const scoringDisabled = disabled || inningsIsComplete;
   const effectiveRunOutDismissedPlayerId = requiresNonStriker
     ? wicketDraft.dismissedPlayerId
