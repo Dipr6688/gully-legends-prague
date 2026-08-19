@@ -1,6 +1,6 @@
 {
-  "metadataVersion": 3,
-  "lastUpdated": "2026-08-09",
+  "metadataVersion": 4,
+  "lastUpdated": "2026-08-19",
   "project": {
     "name": "Gully Legends Prague",
     "purpose": "Gaming/comic styled cricket website, Supabase-backed cricket match management, player progression, Hall of Legends rankings, Monthly Beasts awards, Formula Room documentation, and shared Gallery for the Gully Legends Prague cricket group.",
@@ -10,7 +10,7 @@
     "primaryDataSource": "Supabase when NEXT_PUBLIC_DATA_SOURCE is unset or set to supabase",
     "localFallbackMode": "NEXT_PUBLIC_DATA_SOURCE=local preserves local browser fallback behavior for development",
     "databaseStatus": "Supabase Auth, Postgres, RLS, RPC finalisation, Monthly Beast writes, Demo Reset, and Gallery Storage persistence are implemented.",
-    "phaseStatus": "Current project is close to final: 21-player roster, approved responsive dashboard, Supabase-backed public reads, Admin-only writes, atomic match finalisation, reset-safe player progression, Monthly Beasts Crown/Reopen, Demo Reset, demo test match helper, and Supabase Gallery persistence are implemented."
+    "phaseStatus": "Current project is stable on main: 21-player roster, approved responsive dashboard, Supabase-backed public reads, Admin-only writes, Quick Scoring, atomic match finalisation, reset-safe player progression, Monthly Beasts Crown/Reopen, Demo Reset, demo test match helper, Supabase Gallery persistence, private server-side Team Balance / Shuffle, and illustrated match scoring documentation are implemented."
   },
   "commands": {
     "windowsNote": "Use npm.cmd in PowerShell because npm.ps1 may be blocked by execution policy.",
@@ -60,6 +60,10 @@
     "matchScorecard": "components/matches/MatchScorecard.tsx",
     "matchArchive": "components/matches/MatchArchive.tsx",
     "matchLogic": "lib/match-records.ts",
+    "quickScoringLogic": "lib/quick-scoring.ts",
+    "teamBalancingCore": "lib/team-balancing-core.ts",
+    "teamBalancingServer": "server/team-balancing.ts",
+    "teamBalanceApi": "app/api/team-balance/route.ts",
     "progressionLogic": "lib/progression.ts",
     "careerStore": "lib/career-store.ts",
     "dataSourceSwitch": "lib/data-source.ts",
@@ -88,7 +92,8 @@
       "tests/dashboard.test.ts",
       "tests/monthly-beasts.test.ts",
       "tests/gallery.test.ts",
-      "tests/admin-auth.test.ts"
+      "tests/admin-auth.test.ts",
+      "tests/advanced-cricket-stats.test.ts"
     ]
   },
   "designRules": {
@@ -139,7 +144,7 @@
       ]
     },
     "playerCards": {
-      "runtimeDirectory": "public/images/player-cards",
+      "runtimeDirectory": "public/player-cards",
       "aspectRatio": "2:3",
       "rules": [
         "Use approved PNG files exactly.",
@@ -207,6 +212,14 @@
     ],
     "dataFile": "lib/data/players.ts",
     "rule": "Add players only to the canonical roster and let all player-driven features consume that roster.",
+    "currentDisplayNotes": [
+      "Stable ID jogindar currently displays as Jogi.",
+      "Stable ID naim currently displays as Naeem.",
+      "Gaurav card title is Slow Poison.",
+      "Soman card title is Apex Crusher.",
+      "Dipayan card title is Dipayan the Destroyer.",
+      "Dheeraj card title is Surgical Chase Master."
+    ],
     "zeroProgress": {
       "level": 0,
       "xp": 0,
@@ -284,8 +297,31 @@
       "Automatic innings stop rules",
       "Atomic finalisation and idempotent retry",
       "Read-only finalised scorecard",
-      "Scheduled fixture delete before play starts"
+      "Scheduled fixture delete before play starts",
+      "Quick Scoring with single-batter and two-batter modes",
+      "Mobile-friendly scoring controls, innings breaks, and Undo Last Ball",
+      "Match-day Fielding Helpers",
+      "Cancel and Restart from active scoring",
+      "Private server-side Team Balance / Shuffle"
     ],
+    "teamBalancing": {
+      "status": "Implemented as a server-only automatic balancing helper.",
+      "clientContract": "Client sends availablePlayerIds and sharedPlayerId; API returns teamAPlayerIds and teamBPlayerIds or a generic error.",
+      "privacyRule": "Do not expose private balancing weights, groups, totals, or separation reasons in UI text, public API responses, accessibility labels, player profiles, logs, README, or public-facing docs.",
+      "implementationFiles": [
+        "server/team-balancing.ts",
+        "lib/team-balancing-core.ts",
+        "app/api/team-balance/route.ts"
+      ],
+      "algorithm": "Small candidate partition search. Shared Player is removed from exclusive candidate pool, valid team sizes are generated, private server-side constraints are applied, candidates are scored lexicographically, and a random equally optimal candidate is returned.",
+      "scoringPriority": [
+        "Minimum total private weight difference",
+        "Minimum high-weight composition difference",
+        "Then remaining private weight-group composition differences in order"
+      ],
+      "manualOverride": "Manual team assignment, Shared Player selection, Update Players, and Cancel & Restart editing remain unrestricted by private automatic balancing preferences.",
+      "fieldingHelpers": "Fielding Helper status has zero effect on automatic team strength."
+    },
     "resultRules": [
       "First-batting team wins by first innings runs minus chasing innings runs.",
       "Chasing team wins by wickets remaining: chasing team player count minus chasing wickets lost.",
@@ -390,7 +426,7 @@
   "tests": {
     "script": "npm.cmd run test",
     "runner": "node:test after compiling with tsconfig.test.json",
-    "currentPassingCount": 282,
+    "currentPassingCount": 426,
     "coverageThemes": [
       "Supabase Auth and Admin security",
       "Supabase public read mapping",
@@ -400,6 +436,9 @@
       "XP and Level edge cases",
       "Player Power clean reset behavior",
       "Team balancing and match validation",
+      "Private server-side Team Balance / Shuffle behavior",
+      "Quick Scoring delivery events, innings breaks, undo, and mobile source checks",
+      "Advanced cricket stats and Duck Collector logic",
       "Scorecard and result rules",
       "Hall of Legends and Monthly Beasts distinction",
       "Formula Room source-of-truth formulas",
@@ -409,15 +448,15 @@
     "generatedArtifact": ".test-build is generated by npm run test and should not be committed."
   },
   "lastVerified": {
-    "date": "2026-08-09",
+    "date": "2026-08-19",
     "commandsRun": [
       "npm.cmd run lint",
       "npm.cmd run typecheck",
       "npm.cmd run test",
       "npm.cmd run build"
     ],
-    "result": "All passed after the Player Power clean reset fix.",
-    "testCount": "282/282 tests passed"
+    "result": "All passed after the stable Team Balance / Shuffle metadata update.",
+    "testCount": "426/426 tests passed"
   },
   "agentGuidance": {
     "beforeVisualChanges": [

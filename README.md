@@ -7,6 +7,12 @@ The app is built with real responsive Next.js components. It now uses Supabase
 for shared public data, secure Admin authentication, match management,
 progression, Monthly Beasts, Demo Reset, and Gallery persistence.
 
+Production website:
+
+```text
+https://www.gullylegends.eu
+```
+
 ## Tech Stack
 
 - Next.js App Router
@@ -25,12 +31,19 @@ Implemented:
 - Public Supabase-backed website reads
 - Secure Admin login with password reset
 - Admin-only Create Match, match scoring, and atomic finalisation
+- Quick Scoring with single-batter/two-batter modes, innings breaks, undo, wides,
+  no-balls, wickets, run-outs, and mobile-friendly scoring controls
+- Private server-side automatic Team Balance / Shuffle for Available Today
+  players
+- Match-day Fielding Helpers for catches and run-outs without changing team
+  strength or bowling eligibility
 - Career statistics, XP, Levels, Player Power, and progression ledger
 - Hall of Legends rankings
 - Monthly Beasts Crown/Reopen
 - Reset Demo Data
 - Admin-only demo test match helper
 - Supabase-backed Gallery using Storage plus `public.gallery_photos`
+- Illustrated match creation and scoring user manual under `docs/user-manual`
 - Local fallback mode for match/gallery development data
 
 Not done in this repository:
@@ -38,6 +51,8 @@ Not done in this repository:
 - Automatic deployment
 - Manual Supabase data changes from code
 - Seeding fabricated Gallery photos
+- Post-finalisation Player of the Match correction is prepared as a migration
+  file but should not be treated as active until manually applied and tested.
 
 ## Main Pages
 
@@ -74,18 +89,18 @@ roster in `lib/data/players.ts`; do not add separate player lists per page.
 | Atripan | Smiling Sniper | Spin All-Rounder |
 | Biplab | Nerve Ninja | Mystery-Spin All-Rounder |
 | Dipanjan | Cutter Commander | Seam All-Rounder |
-| Gaurav | Loopy Lightning | Spin All-Rounder |
+| Gaurav | Slow Poison | Spin All-Rounder |
 | Madhab | Sweep Samurai | Pace All-Rounder |
 | Rohit | Skidball Sheriff | Fast-Bowling All-Rounder |
-| Soman | Silent Sixer | Power All-Rounder |
+| Soman | Apex Crusher | Power All-Rounder |
 | Utpal | Tempo Tactician | Adaptive All-Rounder |
-| Jogindar | Loopy Loyalist | Spin All-Rounder |
+| Jogi | Loopy Loyalist | Spin All-Rounder |
 | Badhan | Quiet Quake | Spin All-Rounder |
 | Debraj | Steady Sentinel | Spin All-Rounder |
-| Dipayan | Chessboard Charger | Tactical All-Rounder |
-| Dheeraj | Leg-Break Jester | Leg-Spin All-Rounder |
+| Dipayan | Dipayan the Destroyer | Tactical All-Rounder |
+| Dheeraj | Surgical Chase Master | Leg-Spin All-Rounder |
 | Saurav | Zen Sixsmith | Batting All-Rounder |
-| Naim | Calm Cannon | Power All-Rounder |
+| Naeem | Calm Cannon | Power All-Rounder |
 | Chaitanya | Steady Storm | Utility All-Rounder |
 | Amrit | Looper Legend | Support-Spin All-Rounder |
 | PritVi | Precision Pacer | Seam All-Rounder |
@@ -184,10 +199,15 @@ The match workflow supports:
 - Scheduled draft fixtures
 - Available Today selection
 - Manual team selection with cross-team mutual exclusion
-- Server-side auto-balancing from available player IDs
+- Private server-side auto-balancing from available player IDs
+- Balance Teams and Shuffle use the same server-side constrained partition
+  search and return only Team A / Team B IDs to the browser
 - Odd-player support through one Shared Player
+- Single Batter and Two Batter scoring modes
+- Fielding Helpers for selected non-bowling fielders
 - Draft saving without requiring complete scorecard data
 - Live match entry
+- Quick Scoring event history with autosave and Undo Last Ball
 - Team Bowling over entry
 - Player Match Records under each team
 - Dismissal details only for wickets that have actually occurred
@@ -358,7 +378,7 @@ npm.cmd run build
 The current test suite covers progression, Player Power reset behavior, team
 balancing, match records, scorecard validation, Hall of Legends, Monthly
 Beasts, Formula Room, Dashboard behavior, Gallery persistence, and Admin
-security checks.
+security checks. As of the latest stable verification, all `426` tests pass.
 
 ## Agent Handoff
 
@@ -366,6 +386,7 @@ Detailed project metadata for future agents is stored in:
 
 ```text
 AGENT_PROJECT_METADATA.json
+GULLY_LEGENDS_PROJECT_HANDOFF_METADATA_UPDATED.md
 ```
 
-Future agents should read that file before making broad changes.
+Future agents should read those files before making broad changes.
