@@ -1,25 +1,35 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { isAdminWithClient } from "@/lib/admin/auth";
+import { getAdminLoginConfig } from "@/lib/admin/env";
 import { requireSupabasePublicEnv } from "@/lib/supabase/env";
 
 type LoginBody = {
-  email?: string;
+  adminId?: string;
   password?: string;
 };
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as LoginBody | null;
 
-  if (!body?.email || !body.password) {
+  if (!body?.adminId || !body.password) {
     return NextResponse.json(
-      { ok: false, code: "invalid_request", message: "EMAIL AND PASSWORD REQUIRED" },
+      { ok: false, code: "invalid_request", message: "ADMIN ID AND PASSWORD REQUIRED" },
       { status: 400 }
     );
   }
 
   try {
+    const config = getAdminLoginConfig();
     const env = requireSupabasePublicEnv();
+
+    if (!config || body.adminId !== config.adminId) {
+      return NextResponse.json(
+        { ok: false, code: "invalid_credentials", message: "INVALID LOGIN" },
+        { status: 401 }
+      );
+    }
+
     const supabase = createClient(env.url, env.publishableKey, {
       auth: {
         persistSession: false,
@@ -28,13 +38,13 @@ export async function POST(request: Request) {
       }
     });
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: body.email,
+      email: config.adminEmail,
       password: body.password
     });
 
     if (error || !data.session || !data.user) {
       return NextResponse.json(
-        { ok: false, code: "invalid_credentials", message: "ADMIN LOGIN FAILED" },
+        { ok: false, code: "invalid_credentials", message: "INVALID LOGIN" },
         { status: 401 }
       );
     }

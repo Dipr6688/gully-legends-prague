@@ -2912,14 +2912,22 @@ test("Draft saving does not trigger finalisation side effects", () => {
 
 test("Demo Test Match completion is a dry-run validation action", () => {
   const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const finaliseStart = form.indexOf('if (nextStatus === "finalised") {');
+  const finaliseEnd = form.indexOf("const nextQuickScoring =", finaliseStart);
   const finaliseBranch =
-    form.match(/if \(nextStatus === "finalised"\) \{[\s\S]*?\n      \} else \{/)?.[0] ?? "";
+    finaliseStart >= 0 && finaliseEnd > finaliseStart
+      ? form.slice(finaliseStart, finaliseEnd)
+      : "";
+  const demoStart = finaliseBranch.indexOf("if (isDemoMatch) {");
+  const demoEnd = finaliseBranch.indexOf("const finalScore", demoStart);
   const demoBranch =
-    finaliseBranch.match(/if \(isDemoMatch\) \{[\s\S]*?return true;\n        \}/)?.[0] ?? "";
-  const afterDemoBranch = finaliseBranch.slice(
-    finaliseBranch.indexOf("if (isDemoMatch)"),
-    finaliseBranch.indexOf("const finalScore")
-  );
+    demoStart >= 0 && demoEnd > demoStart
+      ? finaliseBranch.slice(demoStart, demoEnd)
+      : "";
+  const afterDemoBranch =
+    demoStart >= 0 && demoEnd > demoStart
+      ? finaliseBranch.slice(demoStart, demoEnd)
+      : "";
 
   assert.match(form, /DEMO TEST MATCH - Nothing from this match will affect official records\./);
   assert.match(form, /isDemoMatch \? "Complete Demo Test" : "Finalise Match"/);

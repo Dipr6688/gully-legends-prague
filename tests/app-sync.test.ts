@@ -49,6 +49,56 @@ test("server-side APK match-date validation accepts only real YYYY-MM-DD dates",
   assert.equal(isValidIsoCalendarDate(""), false);
 });
 
+test("app-sync login route accepts Admin ID and keeps Admin email server-side", () => {
+  const route = readFileSync("app/api/app-sync/login/route.ts", "utf8");
+
+  assert.match(route, /type LoginBody = \{[\s\S]*adminId\?: string;[\s\S]*password\?: string;/);
+  assert.match(route, /getAdminLoginConfig/);
+  assert.match(route, /!body\?\.adminId \|\| !body\.password/);
+  assert.match(route, /ADMIN ID AND PASSWORD REQUIRED/);
+  assert.match(route, /body\.adminId !== config\.adminId/);
+  assert.match(route, /message: "INVALID LOGIN"/);
+  assert.match(route, /email: config\.adminEmail/);
+  assert.match(route, /password: body\.password/);
+  assert.match(route, /signInWithPassword/);
+  assert.match(route, /isAdminWithClient/);
+  assert.match(route, /ADMIN ACCESS REQUIRED/);
+  assert.doesNotMatch(route, /body\.email/);
+  assert.doesNotMatch(route, /EMAIL AND PASSWORD REQUIRED/);
+  assert.doesNotMatch(route, /ADMIN LOGIN FAILED/);
+});
+
+test("app-sync login route preserves safe failure categories and refresh flow remains unchanged", () => {
+  const loginRoute = readFileSync("app/api/app-sync/login/route.ts", "utf8");
+  const refreshRoute = readFileSync("app/api/app-sync/refresh/route.ts", "utf8");
+
+  assert.match(loginRoute, /code: "invalid_request"/);
+  assert.match(loginRoute, /code: "invalid_credentials"/);
+  assert.match(loginRoute, /code: "not_admin"/);
+  assert.match(loginRoute, /code: "supabase_not_configured"/);
+  assert.doesNotMatch(loginRoute, /message:\s*config\.adminEmail/);
+  assert.doesNotMatch(loginRoute, /config\.adminEmail[\s\S]*NextResponse\.json\(\{[\s\S]*adminEmail/);
+  assert.match(refreshRoute, /refreshToken/);
+  assert.match(refreshRoute, /refreshSession/);
+  assert.match(refreshRoute, /isAdminWithClient/);
+  assert.match(refreshRoute, /ADMIN ACCESS REQUIRED/);
+});
+
+test("APK login sends adminId and does not embed Admin email or credentials", () => {
+  const apkIndex = readFileSync(
+    "../apk-integration/GullyLegendsArena-source/app/src/main/assets/index.html",
+    "utf8"
+  );
+  const loginFunction = apkIndex.match(
+    /function doLogin\(adminId,password\)\{([\s\S]*?)\n\}/
+  )?.[0] ?? "";
+
+  assert.match(loginFunction, /api\('\/api\/app-sync\/login',\{adminId:adminId,password:password\}\)/);
+  assert.doesNotMatch(loginFunction, /\bemail\b/);
+  assert.doesNotMatch(apkIndex, /ADMIN_LOGIN_EMAIL|@.*\..*|gullylegends@gmail|supabase\.co/i);
+  assert.doesNotMatch(apkIndex, /password\s*[:=]\s*["'][^"']+["']/i);
+});
+
 test("app-sync validation rejects APK LBW quick scoring dismissals", () => {
   const assembler = readFileSync("lib/app-sync/assemble-pending-import.ts", "utf8");
   const dismissalSet = assembler.match(
