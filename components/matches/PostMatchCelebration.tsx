@@ -11,6 +11,7 @@ import {
 } from "@/lib/match-display";
 import type {
   PostMatchCelebrationMetric,
+  PostMatchProgressionChange,
   PostMatchCelebrationSummary
 } from "@/lib/post-match-celebration";
 import { sanitizeRuns } from "@/lib/match-records";
@@ -45,6 +46,7 @@ type PostMatchCelebrationProps = {
   summary: PostMatchCelebrationSummary;
   match: MatchRecord;
   onDismiss: () => void;
+  mode?: "live" | "historical";
 };
 
 function playerById(playerId: string): Player | undefined {
@@ -62,12 +64,33 @@ function formatSignedXP(value: number): string {
   return "0 XP";
 }
 
+function pluralizeMetricUnit(value: number, unit: string): string {
+  const normalizedUnit = unit.toLowerCase();
+
+  switch (normalizedUnit) {
+    case "runs":
+      return value === 1 ? "Run" : "Runs";
+    case "wickets":
+      return value === 1 ? "Wicket" : "Wickets";
+    case "fours":
+      return value === 1 ? "Four" : "Fours";
+    case "sixes":
+      return value === 1 ? "Six" : "Sixes";
+    case "catches":
+      return value === 1 ? "Catch" : "Catches";
+    case "run-outs":
+      return value === 1 ? "Run-out" : "Run-outs";
+    case "stumpings":
+      return value === 1 ? "Stumping" : "Stumpings";
+    case "xp":
+      return "XP";
+    default:
+      return value === 1 ? unit.replace(/s$/i, "") : unit;
+  }
+}
+
 function formatMetricValue(value: number, unit: string): string {
-  const upperUnit = unit.toUpperCase();
-
-  if (upperUnit === "XP") return `${value} XP`;
-
-  return `${value} ${upperUnit}`;
+  return `${value} ${pluralizeMetricUnit(value, unit)}`;
 }
 
 function getPlayerRecords(match: MatchRecord, playerId: string): FinalisedPlayerMatchRecord[] {
@@ -89,11 +112,11 @@ function getPomContributionItems(records: FinalisedPlayerMatchRecord[]): string[
   );
   const items: string[] = [];
 
-  if (totals.runs > 0) items.push(`${totals.runs} Runs`);
-  if (totals.wickets > 0) items.push(`${totals.wickets} Wickets`);
-  if (totals.catches > 0) items.push(`${totals.catches} Catches`);
-  if (totals.runOuts > 0) items.push(`${totals.runOuts} Run-outs`);
-  if (totals.stumpings > 0) items.push(`${totals.stumpings} Stumpings`);
+  if (totals.runs > 0) items.push(formatMetricValue(totals.runs, "runs"));
+  if (totals.wickets > 0) items.push(formatMetricValue(totals.wickets, "wickets"));
+  if (totals.catches > 0) items.push(formatMetricValue(totals.catches, "catches"));
+  if (totals.runOuts > 0) items.push(formatMetricValue(totals.runOuts, "run-outs"));
+  if (totals.stumpings > 0) items.push(formatMetricValue(totals.stumpings, "stumpings"));
 
   return items;
 }
@@ -117,10 +140,19 @@ function achievementKey(playerId: string, metric: PostMatchCelebrationMetric): s
   return `${playerId}:${metric}`;
 }
 
+function isProgressionChange(
+  change:
+    | PostMatchCelebrationSummary["progressionChanges"][number]
+    | PostMatchCelebrationSummary["matchXPAwards"][number]
+): change is PostMatchProgressionChange {
+  return "afterProgress" in change;
+}
+
 export function PostMatchCelebration({
   summary,
   match,
-  onDismiss
+  onDismiss,
+  mode = "live"
 }: PostMatchCelebrationProps) {
   const scoreRows = getMatchScoreRowsInInningsOrder(match);
   const resultHeadline = getMatchResultHeadline(match);
@@ -130,7 +162,10 @@ export function PostMatchCelebration({
   const recordKeys = new Set(
     summary.recordsBroken.map((record) => achievementKey(record.playerId, record.metric))
   );
-  const standalonePersonalBests = summary.personalBests.filter(
+  const displayPersonalBests = summary.personalBests.filter(
+    (best) => best.metric !== "matchXP"
+  );
+  const standalonePersonalBests = displayPersonalBests.filter(
     (best) => !recordKeys.has(achievementKey(best.playerId, best.metric))
   );
   const levelUpsByPlayer = new Map(
@@ -141,6 +176,17 @@ export function PostMatchCelebration({
     standalonePersonalBests.length > 0 ||
     summary.levelUps.length > 0;
   const hasProgression = summary.progressionChanges.length > 0;
+  const isHistorical = mode === "historical";
+  const xpRows = hasProgression ? summary.progressionChanges : summary.matchXPAwards;
+  const hasXPSection = hasProgression || (isHistorical && summary.matchXPAwards.length > 0);
+  const xpKicker = isHistorical ? "Match XP" : "XP Earned";
+  const xpTitle = isHistorical ? "XP Earned in This Match" : "Progression Board";
+  const pomStoredXPAward = pom
+    ? summary.matchXPAwards.find((award) => award.playerId === pom.playerId)
+    : undefined;
+  const pomXPValue = hasProgression ? pom?.matchXP : pomStoredXPAward?.awardedXP;
+  const shouldShowPomXP =
+    hasProgression || (isHistorical && typeof pomXPValue === "number");
 
   return (
     <div className="post-match-celebration-backdrop" role="presentation">
@@ -183,7 +229,7 @@ export function PostMatchCelebration({
               className="post-match-hero-icon"
               priority
             />
-            <p>No Rules. Only Fun.</p>
+            <p>{isHistorical ? "Celebration Replay" : "No Rules. Only Fun."}</p>
             <h2 id="post-match-celebration-title">{getOutcomeTitle(match)}</h2>
             <strong>{resultHeadline}</strong>
             <div className="post-match-game-meta">
@@ -230,7 +276,9 @@ export function PostMatchCelebration({
                   ) : (
                     <strong>Match-winning gully energy</strong>
                   )}
-                  {hasProgression ? <b>{formatSignedXP(pom.matchXP)}</b> : null}
+                  {shouldShowPomXP && typeof pomXPValue === "number" ? (
+                    <b>{formatSignedXP(pomXPValue)}</b>
+                  ) : null}
                 </div>
               </div>
             </section>
@@ -239,7 +287,7 @@ export function PostMatchCelebration({
           {hasAchievements ? (
             <div className="post-match-achievement-grid">
               {summary.recordsBroken.map((record) => {
-                const matchingBest = summary.personalBests.find(
+                const matchingBest = displayPersonalBests.find(
                   (best) =>
                     best.playerId === record.playerId && best.metric === record.metric
                 );
@@ -284,7 +332,7 @@ export function PostMatchCelebration({
                   />
                   <p>
                     {best.kind === "first_personal_best"
-                      ? "First Personal Mark!"
+                      ? "First Personal Best!"
                       : "New Personal Best!"}
                   </p>
                   <h3>{getPlayerName(best.playerId)}</h3>
@@ -324,46 +372,61 @@ export function PostMatchCelebration({
               <Image src={CELEBRATION_ICONS.personalBest} alt="" width={64} height={64} />
               <div>
                 <p>Good gully, clean finish.</p>
-                <span>The archive is updated. The next legend moment is loading.</span>
+                <span>
+                  {isHistorical
+                    ? "This replay keeps the old match readable without inventing extra awards."
+                    : "The archive is updated. The next legend moment is loading."}
+                </span>
               </div>
             </section>
           )}
 
-          {hasProgression ? (
+          {hasXPSection ? (
             <section className="post-match-xp-section" aria-label="XP earned">
               <div className="post-match-section-title">
                 <Image src={CELEBRATION_ICONS.xp} alt="" width={62} height={62} />
                 <div>
-                  <p>XP Earned</p>
-                  <h3>Progression Board</h3>
+                  <p>{xpKicker}</p>
+                  <h3>{xpTitle}</h3>
                 </div>
               </div>
               <div className="post-match-xp-list">
-                {summary.progressionChanges.map((change) => {
-                  const levelUp = levelUpsByPlayer.get(change.playerId);
-                  const progress = Math.max(
-                    0,
-                    Math.min(100, change.afterProgress.progressPercentage)
-                  );
+                {xpRows.map((change) => {
+                  const hasLevelProgress = isProgressionChange(change);
+                  const levelUp = hasLevelProgress
+                    ? levelUpsByPlayer.get(change.playerId)
+                    : undefined;
+                  const progress = hasLevelProgress
+                    ? Math.max(
+                        0,
+                        Math.min(100, change.afterProgress.progressPercentage)
+                      )
+                    : null;
 
                   return (
                     <article key={change.playerId} className="post-match-xp-row">
                       <div>
                         <b>{getPlayerName(change.playerId)}</b>
-                        {levelUp ? (
-                          <span>
-                            Level {levelUp.fromLevel} → {levelUp.toLevel}
-                          </span>
+                        {hasLevelProgress ? (
+                          levelUp ? (
+                            <span>
+                              Level {levelUp.fromLevel} → {levelUp.toLevel}
+                            </span>
+                          ) : (
+                            <span>Level {change.afterLevel}</span>
+                          )
                         ) : (
-                          <span>Level {change.afterLevel}</span>
+                          <span>Match XP</span>
                         )}
                       </div>
                       <strong className={change.awardedXP < 0 ? "is-negative" : ""}>
                         {formatSignedXP(change.awardedXP)}
                       </strong>
-                      <div className="post-match-xp-track" aria-hidden="true">
-                        <span style={{ width: `${progress}%` }} />
-                      </div>
+                      {progress !== null ? (
+                        <div className="post-match-xp-track" aria-hidden="true">
+                          <span style={{ width: `${progress}%` }} />
+                        </div>
+                      ) : null}
                     </article>
                   );
                 })}
@@ -372,14 +435,24 @@ export function PostMatchCelebration({
           ) : null}
 
           <footer className="post-match-celebration-actions">
-            <LinkButton href={`/matches/${match.id}`} onClick={onDismiss}>
-              View Scorecard
-            </LinkButton>
-            <LinkButton href="/" variant="secondary" onClick={onDismiss}>
-              Home
+            {isHistorical ? (
+              <Button type="button" onClick={onDismiss}>
+                Back to Scorecard
+              </Button>
+            ) : (
+              <LinkButton href={`/matches/${match.id}`} onClick={onDismiss}>
+                View Scorecard
+              </LinkButton>
+            )}
+            <LinkButton
+              href={isHistorical ? "/matches" : "/"}
+              variant="secondary"
+              onClick={onDismiss}
+            >
+              {isHistorical ? "Matches Archive" : "Home"}
             </LinkButton>
             <Button type="button" variant="ghost" onClick={onDismiss}>
-              Keep Reviewing
+              {isHistorical ? "Close Replay" : "Keep Reviewing"}
             </Button>
           </footer>
         </div>

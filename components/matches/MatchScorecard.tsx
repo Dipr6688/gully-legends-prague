@@ -2,11 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useMatchRepository } from "@/components/matches/useMatchRepository";
 import { MockMatchEntryForm } from "@/components/matches/MockMatchEntryForm";
+import { PostMatchCelebration } from "@/components/matches/PostMatchCelebration";
 import { getPlayerById } from "@/lib/data/players";
 import {
   formatMatchDisplayDate,
@@ -18,6 +20,7 @@ import {
   getOrderedInnings,
   type ScorecardInnings
 } from "@/lib/match-scorecard";
+import { buildHistoricalPostMatchCelebrationSummary } from "@/lib/post-match-celebration";
 import type { MatchRecord } from "@/lib/types/match";
 import type { Player } from "@/lib/types/player";
 
@@ -35,6 +38,7 @@ export function MatchScorecard({
   isAdmin?: boolean;
 }) {
   const localRepository = useMatchRepository();
+  const [isCelebrationOpen, setIsCelebrationOpen] = useState(false);
   const searchParams = useSearchParams();
   const matches = suppliedMatches ?? localRepository.matches;
   const match =
@@ -71,6 +75,11 @@ export function MatchScorecard({
     buildScorecardInnings(match, innings, resolvePlayerName)
   );
   const playerOfMatch = buildPlayerOfMatchSummary(match, playerById);
+  const historicalCelebration = buildHistoricalPostMatchCelebrationSummary({
+    match,
+    allMatches: matches
+  });
+  const canReplayCelebration = historicalCelebration.isEligibleOfficialMatch;
   const returnTo = searchParams.get("returnTo");
   const backToMatchesHref =
     returnTo && returnTo.startsWith("/matches") && !returnTo.startsWith("//")
@@ -109,6 +118,15 @@ export function MatchScorecard({
         </div>
 
         <p className="match-scorecard-result">{getMatchResultHeadline(match)}</p>
+        {canReplayCelebration ? (
+          <button
+            type="button"
+            className="match-scorecard-celebration-button"
+            onClick={() => setIsCelebrationOpen(true)}
+          >
+            View Match Celebration
+          </button>
+        ) : null}
       </section>
 
       <div className="match-scorecard-innings-stack">
@@ -152,6 +170,14 @@ export function MatchScorecard({
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         Back to Matches
       </Link>
+      {isCelebrationOpen && canReplayCelebration ? (
+        <PostMatchCelebration
+          summary={historicalCelebration}
+          match={match}
+          mode="historical"
+          onDismiss={() => setIsCelebrationOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -163,6 +163,11 @@ export type PostMatchProgressionChange = {
   afterProgress: PlayerLevelProgress;
 };
 
+export type PostMatchXPAward = {
+  playerId: string;
+  awardedXP: number;
+};
+
 export type PostMatchLevelUp = {
   playerId: string;
   fromLevel: number;
@@ -196,6 +201,7 @@ export type PostMatchCelebrationSummary = {
   isEligibleOfficialMatch: boolean;
   result: MatchResult;
   playerOfMatch: PostMatchPlayerOfMatch | null;
+  matchXPAwards: PostMatchXPAward[];
   progressionChanges: PostMatchProgressionChange[];
   levelUps: PostMatchLevelUp[];
   personalBests: PostMatchPersonalBest[];
@@ -207,6 +213,11 @@ export type BuildPostMatchCelebrationSummaryInput = {
   match: MatchRecord;
   historicalMatches: MatchRecord[];
   progressionSnapshots?: PostMatchProgressionSnapshot[];
+};
+
+export type BuildHistoricalPostMatchCelebrationSummaryInput = {
+  match: MatchRecord;
+  allMatches: MatchRecord[];
 };
 
 type AggregatedMatchMetrics = {
@@ -316,6 +327,31 @@ function getOfficialAwardedXP(record: FinalisedPlayerMatchRecord): number | null
   return typeof awardedXP === "number" && Number.isFinite(awardedXP)
     ? awardedXP
     : null;
+}
+
+export function buildStoredMatchXPAwards(match: MatchRecord): PostMatchXPAward[] {
+  const awardsByPlayerId = new Map<string, number>();
+
+  for (const record of getFinalisedPlayerRecords(match)) {
+    if (!record.played) continue;
+
+    const awardedXP = getOfficialAwardedXP(record);
+
+    if (awardedXP === null) continue;
+
+    awardsByPlayerId.set(
+      record.playerId,
+      (awardsByPlayerId.get(record.playerId) ?? 0) + awardedXP
+    );
+  }
+
+  return [...awardsByPlayerId.entries()]
+    .map(([playerId, awardedXP]) => ({ playerId, awardedXP }))
+    .sort((left, right) => {
+      if (right.awardedXP !== left.awardedXP) return right.awardedXP - left.awardedXP;
+
+      return left.playerId.localeCompare(right.playerId);
+    });
 }
 
 function aggregateMatchMetrics(match: MatchRecord): Map<string, AggregatedMatchMetrics> {
@@ -705,12 +741,14 @@ export function buildPostMatchCelebrationSummary({
     : [];
   const levelUps = buildLevelUps(progressionChanges);
   const playerOfMatch = isEligibleOfficialMatch ? getOfficialPlayerOfMatch(match) : null;
+  const matchXPAwards = isEligibleOfficialMatch ? buildStoredMatchXPAwards(match) : [];
 
   return {
     matchId: match.id,
     isEligibleOfficialMatch,
     result: match.result,
     playerOfMatch,
+    matchXPAwards,
     progressionChanges,
     levelUps,
     personalBests,
@@ -723,4 +761,14 @@ export function buildPostMatchCelebrationSummary({
       levelUps
     })
   };
+}
+
+export function buildHistoricalPostMatchCelebrationSummary({
+  match,
+  allMatches
+}: BuildHistoricalPostMatchCelebrationSummaryInput): PostMatchCelebrationSummary {
+  return buildPostMatchCelebrationSummary({
+    match,
+    historicalMatches: allMatches
+  });
 }

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  buildHistoricalPostMatchCelebrationSummary,
   buildPostMatchCelebrationSummary,
+  buildStoredMatchXPAwards,
   getPostMatchCelebrationBaselineMatches,
   isOfficialCelebrationMatch
 } from "../lib/post-match-celebration";
@@ -673,13 +675,45 @@ test("Post-match celebration UI renders official summary sections and actions", 
   assert.match(component, /Gully Record Broken!/);
   assert.match(component, /First Gully Record!/);
   assert.match(component, /New Personal Best!/);
-  assert.match(component, /First Personal Mark!/);
+  assert.match(component, /First Personal Best!/);
+  assert.doesNotMatch(component, /First Personal Mark!/);
   assert.match(component, /Level Up!/);
   assert.match(component, /XP Earned/);
   assert.match(component, /View Scorecard/);
   assert.match(component, /Home/);
   assert.match(component, /Keep Reviewing/);
   assert.match(component, /standalonePersonalBests/);
+});
+
+test("Post-match celebration formats cricket metric singulars and plurals", () => {
+  const component = readFileSync(
+    "components/matches/PostMatchCelebration.tsx",
+    "utf8"
+  );
+
+  assert.match(component, /case "runs":[\s\S]*?return value === 1 \? "Run" : "Runs"/);
+  assert.match(component, /case "wickets":[\s\S]*?return value === 1 \? "Wicket" : "Wickets"/);
+  assert.match(component, /case "fours":[\s\S]*?return value === 1 \? "Four" : "Fours"/);
+  assert.match(component, /case "sixes":[\s\S]*?return value === 1 \? "Six" : "Sixes"/);
+  assert.match(component, /case "catches":[\s\S]*?return value === 1 \? "Catch" : "Catches"/);
+  assert.match(component, /case "run-outs":[\s\S]*?return value === 1 \? "Run-out" : "Run-outs"/);
+  assert.match(component, /case "stumpings":[\s\S]*?return value === 1 \? "Stumping" : "Stumpings"/);
+  assert.match(component, /items\.push\(formatMetricValue\(totals\.runs, "runs"\)\)/);
+  assert.match(component, /items\.push\(formatMetricValue\(totals\.wickets, "wickets"\)\)/);
+  assert.match(component, /Previous best: \{formatMetricValue\(best\.previousBest, best\.unit\)\}/);
+  assert.match(component, /Previous: \{record\.previousRecord\.holderPlayerIds\.map\(getPlayerName\)\.join\(", "\)\} -\{" "\}\s*\{formatMetricValue\(record\.previousRecord\.value, record\.unit\)\}/);
+});
+
+test("Post-match celebration hides match XP from Personal Best cards", () => {
+  const component = readFileSync(
+    "components/matches/PostMatchCelebration.tsx",
+    "utf8"
+  );
+
+  assert.match(component, /const displayPersonalBests = summary\.personalBests\.filter\(/);
+  assert.match(component, /\(best\) => best\.metric !== "matchXP"/);
+  assert.match(component, /const standalonePersonalBests = displayPersonalBests\.filter/);
+  assert.match(component, /const matchingBest = displayPersonalBests\.find/);
 });
 
 test("Post-match celebration uses custom public artwork assets", () => {
@@ -737,8 +771,11 @@ test("Celebration UI omits fake XP when progression snapshots are unavailable", 
   );
 
   assert.match(component, /const hasProgression = summary\.progressionChanges\.length > 0/);
-  assert.match(component, /\{hasProgression \? \(/);
-  assert.match(component, /\{hasProgression \? <b>\{formatSignedXP\(pom\.matchXP\)\}<\/b> : null\}/);
+  assert.match(component, /const xpRows = hasProgression \? summary\.progressionChanges : summary\.matchXPAwards/);
+  assert.match(component, /const hasXPSection = hasProgression \|\| \(isHistorical && summary\.matchXPAwards\.length > 0\)/);
+  assert.match(component, /const pomStoredXPAward = pom/);
+  assert.match(component, /const pomXPValue = hasProgression \? pom\?\.matchXP : pomStoredXPAward\?\.awardedXP/);
+  assert.match(component, /const shouldShowPomXP =/);
   assert.doesNotMatch(component, /\+0 XP/);
 });
 
@@ -790,4 +827,255 @@ test("current match is never included in its own historical record baseline", ()
 
   assert.equal(summary.recordsBroken.find((item) => item.metric === "runs")?.status, "firstRecord");
   assert.equal(summary.personalBests.find((item) => item.metric === "runs")?.previousBest, null);
+});
+
+test("historical celebration baseline follows date and same-day game number chronology", () => {
+  const matches = [
+    match({
+      id: "aug-09-game-1",
+      matchDate: "2026-08-09",
+      matchNumber: 1,
+      records: [record({ playerId: "aninda", runs: 12 })]
+    }),
+    match({
+      id: "aug-09-game-2",
+      matchDate: "2026-08-09",
+      matchNumber: 2,
+      records: [record({ playerId: "arunabha", runs: 24 })]
+    }),
+    match({
+      id: "aug-09-game-3",
+      matchDate: "2026-08-09",
+      matchNumber: 3,
+      records: [record({ playerId: "atripan", runs: 31 })]
+    }),
+    match({
+      id: "aug-17-game-4",
+      matchDate: "2026-08-17",
+      matchNumber: 4,
+      records: [record({ playerId: "dipanjan", runs: 42 })]
+    }),
+    match({
+      id: "aug-17-game-5",
+      matchDate: "2026-08-17",
+      matchNumber: 5,
+      records: [record({ playerId: "soman", runs: 43 })]
+    }),
+    match({
+      id: "aug-17-game-6",
+      matchDate: "2026-08-17",
+      matchNumber: 6,
+      records: [record({ playerId: "rohit", runs: 44 })]
+    }),
+    match({
+      id: "aug-17-game-7",
+      matchDate: "2026-08-17",
+      matchNumber: 7,
+      records: [record({ playerId: "utpal", runs: 45 })]
+    })
+  ];
+
+  const baselineIds = matches.slice(3).map((target) =>
+    getPostMatchCelebrationBaselineMatches({
+      match: target,
+      historicalMatches: matches
+    }).map((item) => item.id)
+  );
+
+  assert.deepEqual(baselineIds, [
+    ["aug-09-game-1", "aug-09-game-2", "aug-09-game-3"],
+    ["aug-09-game-1", "aug-09-game-2", "aug-09-game-3", "aug-17-game-4"],
+    [
+      "aug-09-game-1",
+      "aug-09-game-2",
+      "aug-09-game-3",
+      "aug-17-game-4",
+      "aug-17-game-5"
+    ],
+    [
+      "aug-09-game-1",
+      "aug-09-game-2",
+      "aug-09-game-3",
+      "aug-17-game-4",
+      "aug-17-game-5",
+      "aug-17-game-6"
+    ]
+  ]);
+});
+
+test("historical replay reconstructs records and personal bests from only prior matches", () => {
+  const previous = match({
+    id: "previous",
+    matchDate: "2026-08-09",
+    matchNumber: 3,
+    records: [
+      record({ playerId: "rohit", runs: 45 }),
+      record({ playerId: "dipanjan", runs: 31 })
+    ]
+  });
+  const target = match({
+    id: "target",
+    matchDate: "2026-08-17",
+    matchNumber: 4,
+    records: [
+      record({ playerId: "dipanjan", runs: 52, playerOfMatch: true, awardedXP: 43 }),
+      record({ playerId: "soman", runs: 45, awardedXP: 22 })
+    ]
+  });
+  const later = match({
+    id: "later",
+    matchDate: "2026-08-17",
+    matchNumber: 5,
+    records: [record({ playerId: "rohit", runs: 58 })]
+  });
+  const summary = buildHistoricalPostMatchCelebrationSummary({
+    match: target,
+    allMatches: [previous, target, later]
+  });
+  const runRecord = summary.recordsBroken.find((item) => item.metric === "runs");
+  const dipanjanBest = summary.personalBests.find(
+    (item) => item.playerId === "dipanjan" && item.metric === "runs"
+  );
+
+  assert.equal(runRecord?.status, "broken");
+  assert.equal(runRecord?.currentValue, 52);
+  assert.equal(runRecord?.previousRecord?.value, 45);
+  assert.equal(runRecord?.previousRecord?.holderPlayerIds[0], "rohit");
+  assert.equal(dipanjanBest?.kind, "personal_best");
+  assert.equal(dipanjanBest?.previousBest, 31);
+  assert.equal(summary.playerOfMatch?.playerId, "dipanjan");
+  assert.deepEqual(summary.result, target.result);
+});
+
+test("historical replay models first records and ignores equal records or equal personal bests", () => {
+  const firstTarget = match({
+    id: "first-target",
+    matchDate: "2026-08-09",
+    matchNumber: 1,
+    records: [record({ playerId: "aninda", runs: 20 })]
+  });
+  const previous = match({
+    id: "previous",
+    matchDate: "2026-08-09",
+    matchNumber: 1,
+    records: [record({ playerId: "aninda", runs: 20 })]
+  });
+  const equalTarget = match({
+    id: "equal-target",
+    matchDate: "2026-08-17",
+    matchNumber: 4,
+    records: [record({ playerId: "aninda", runs: 20 })]
+  });
+  const firstSummary = buildHistoricalPostMatchCelebrationSummary({
+    match: firstTarget,
+    allMatches: [firstTarget]
+  });
+  const equalSummary = buildHistoricalPostMatchCelebrationSummary({
+    match: equalTarget,
+    allMatches: [previous, equalTarget]
+  });
+
+  assert.equal(firstSummary.recordsBroken.find((item) => item.metric === "runs")?.status, "firstRecord");
+  assert.equal(equalSummary.recordsBroken.some((item) => item.metric === "runs"), false);
+  assert.equal(
+    equalSummary.personalBests.some(
+      (item) => item.playerId === "aninda" && item.metric === "runs"
+    ),
+    false
+  );
+});
+
+test("historical replay uses stored match XP but does not invent level progress", () => {
+  const target = match({
+    id: "target-xp",
+    records: [
+      record({ playerId: "rohit", runs: 39, playerOfMatch: true, awardedXP: 56 }),
+      record({ playerId: "soman", runs: 8, awardedXP: 21 })
+    ]
+  });
+  const summary = buildHistoricalPostMatchCelebrationSummary({
+    match: target,
+    allMatches: [target]
+  });
+
+  assert.deepEqual(summary.matchXPAwards, [
+    { playerId: "rohit", awardedXP: 56 },
+    { playerId: "soman", awardedXP: 21 }
+  ]);
+  assert.deepEqual(summary.progressionChanges, []);
+  assert.deepEqual(summary.levelUps, []);
+});
+
+test("historical replay omits missing stored XP and keeps Shared Player once", () => {
+  const sharedA = record({ playerId: "jogindar", teamId: "teamA", runs: 9, awardedXP: 18 });
+  const sharedB = record({ playerId: "jogindar", teamId: "teamB", runs: 6, awardedXP: 19 });
+  const missingXP = {
+    ...record({ playerId: "naim", teamId: "teamB", runs: 10 }),
+    xpBreakdown: undefined
+  } as unknown as FinalisedPlayerMatchRecord;
+  const target = match({
+    id: "target-shared",
+    records: [sharedA, sharedB, missingXP]
+  });
+
+  assert.deepEqual(buildStoredMatchXPAwards(target), [
+    { playerId: "jogindar", awardedXP: 37 }
+  ]);
+});
+
+test("historical replay eligibility excludes demo cancelled and pending APK matches", () => {
+  assert.equal(
+    buildHistoricalPostMatchCelebrationSummary({
+      match: match({ id: "demo", isDemo: true }),
+      allMatches: []
+    }).isEligibleOfficialMatch,
+    false
+  );
+  assert.equal(
+    buildHistoricalPostMatchCelebrationSummary({
+      match: match({ id: "cancelled", status: "cancelled" }),
+      allMatches: []
+    }).isEligibleOfficialMatch,
+    false
+  );
+  assert.equal(
+    buildHistoricalPostMatchCelebrationSummary({
+      match: match({ id: "apk-pending-123" }),
+      allMatches: []
+    }).isEligibleOfficialMatch,
+    false
+  );
+});
+
+test("historical replay skips unsupported legacy event-backed boundary comparisons", () => {
+  const target = match({
+    id: "legacy-target",
+    records: [record({ playerId: "aninda", runs: 44 })],
+    events: []
+  });
+  const summary = buildHistoricalPostMatchCelebrationSummary({
+    match: target,
+    allMatches: [target]
+  });
+
+  assert.equal(summary.recordsBroken.some((item) => item.metric === "fours"), false);
+  assert.equal(summary.recordsBroken.some((item) => item.metric === "sixes"), false);
+  assert.equal(summary.personalBests.some((item) => item.metric === "fours"), false);
+  assert.equal(summary.personalBests.some((item) => item.metric === "sixes"), false);
+});
+
+test("historical celebration UI reuses scorecard integration without write APIs", () => {
+  const scorecard = readFileSync("components/matches/MatchScorecard.tsx", "utf8");
+  const component = readFileSync("components/matches/PostMatchCelebration.tsx", "utf8");
+
+  assert.match(scorecard, /View Match Celebration/);
+  assert.match(scorecard, /buildHistoricalPostMatchCelebrationSummary/);
+  assert.match(scorecard, /mode="historical"/);
+  assert.match(scorecard, /setIsCelebrationOpen\(true\)/);
+  assert.doesNotMatch(scorecard, /saveMatch|finalizeSupabaseAdminMatch|fetch\(/);
+  assert.match(component, /Celebration Replay/);
+  assert.match(component, /XP Earned in This Match/);
+  assert.match(component, /Match XP/);
+  assert.doesNotMatch(component, /Stored official match XP/);
+  assert.match(component, /Back to Scorecard/);
 });

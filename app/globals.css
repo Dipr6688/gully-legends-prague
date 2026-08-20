@@ -48,6 +48,7 @@ body {
 .post-match-celebration {
   position: relative;
   width: min(100%, 1040px);
+  max-width: 100vw;
   max-height: min(94vh, 1120px);
   overflow: hidden;
   border: 1px solid rgba(247, 199, 52, 0.44);
@@ -436,11 +437,13 @@ body {
 @media (max-width: 760px) {
   .post-match-celebration-backdrop {
     align-items: stretch;
+    justify-items: stretch;
     padding: 0;
   }
 
   .post-match-celebration {
     width: 100%;
+    max-width: 100vw;
     max-height: 100vh;
     border-radius: 0;
   }
@@ -451,8 +454,25 @@ body {
     padding-top: 56px;
   }
 
+  .post-match-winner-hero {
+    justify-self: center;
+    width: calc(100vw - 28px);
+    max-width: 100%;
+    padding-inline: 12px;
+  }
+
+  .post-match-pom-card,
+  .post-match-achievement-card,
+  .post-match-no-achievements,
+  .post-match-xp-section {
+    justify-self: center;
+    width: calc(100vw - 28px);
+    max-width: 100%;
+  }
+
   .post-match-winner-hero h2 {
-    font-size: clamp(2rem, 10vw, 2.75rem);
+    max-width: calc(100vw - 44px);
+    font-size: clamp(1.75rem, 8.5vw, 2.35rem);
     line-height: 0.94;
   }
 
@@ -463,7 +483,32 @@ body {
   .post-match-score-row,
   .post-match-achievement-grid,
   .post-match-pom-content {
+    width: 100%;
     grid-template-columns: 1fr;
+  }
+
+  .post-match-game-meta,
+  .post-match-score-row {
+    justify-self: center;
+    width: calc(100vw - 64px);
+    max-width: 100%;
+  }
+
+  .post-match-game-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, auto));
+  }
+
+  .post-match-game-meta span {
+    justify-self: center;
+  }
+
+  .post-match-game-meta span:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .post-match-score-row div {
+    min-width: 0;
   }
 
   .post-match-pom-artwork {
@@ -5265,6 +5310,32 @@ textarea {
   font-size: 0.88rem;
   font-weight: 950;
   text-transform: uppercase;
+}
+
+.match-scorecard-celebration-button {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(247, 199, 52, 0.52);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f7c734, #ff8f1f);
+  box-shadow: 0 12px 28px rgba(247, 199, 52, 0.2);
+  padding: 11px 16px;
+  color: #07111b;
+  font-size: 0.82rem;
+  font-weight: 1000;
+  text-transform: uppercase;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.match-scorecard-celebration-button:hover,
+.match-scorecard-celebration-button:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 34px rgba(247, 199, 52, 0.28);
 }
 
 .match-archive-action,
