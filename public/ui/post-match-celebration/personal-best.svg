@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Personal best cricket icon">
+  <defs>
+    <linearGradient id="pbBars" x1="37" x2="126" y1="121" y2="41" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#46dfff"/>
+      <stop offset=".55" stop-color="#9cff24"/>
+      <stop offset="1" stop-color="#f7c734"/>
+    </linearGradient>
+    <filter id="pbGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#46dfff" flood-opacity=".55"/>
+    </filter>
+  </defs>
+  <g stroke="#06111b" stroke-linecap="round" stroke-linejoin="round" stroke-width="7" filter="url(#pbGlow)">
+    <path fill="#12304c" d="M35 102h19v31H35zM68 82h19v51H68zM101 58h19v75h-19z"/>
+    <path fill="url(#pbBars)" d="M31 125h95v11H31zM44 106h19v19H44zM77 86h19v39H77zM110 62h19v63h-19z"/>
+    <path fill="#ffc857" d="M48 102l55-71 16 12-55 71z"/>
+    <path fill="#f7c734" d="M97 31l37-5-15 34z"/>
+    <circle cx="49" cy="123" r="15" fill="#f42135"/>
+    <path fill="none" stroke="#fff6d4" stroke-width="3" d="M40 113c9 4 15 10 18 20"/>
+    <path fill="none" stroke="#46dfff" stroke-width="4" d="M27 48l12 8M125 101l12 10"/>
+  </g>
+</svg>

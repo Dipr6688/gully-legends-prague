@@ -658,6 +658,90 @@ test("Admin finalisation route builds celebration only after atomic finalisation
   assert.match(repository, /getMatchRows/);
 });
 
+test("Post-match celebration UI renders official summary sections and actions", () => {
+  const component = readFileSync(
+    "components/matches/PostMatchCelebration.tsx",
+    "utf8"
+  );
+
+  assert.match(component, /role="dialog"/);
+  assert.match(component, /aria-modal="true"/);
+  assert.match(component, /getMatchResultHeadline\(match\)/);
+  assert.match(component, /getMatchScoreRowsInInningsOrder\(match\)/);
+  assert.match(component, /getMatchScheduledOversLabel\(match\)/);
+  assert.match(component, /Player of the Match/);
+  assert.match(component, /Gully Record Broken!/);
+  assert.match(component, /First Gully Record!/);
+  assert.match(component, /New Personal Best!/);
+  assert.match(component, /First Personal Mark!/);
+  assert.match(component, /Level Up!/);
+  assert.match(component, /XP Earned/);
+  assert.match(component, /View Scorecard/);
+  assert.match(component, /Home/);
+  assert.match(component, /Keep Reviewing/);
+  assert.match(component, /standalonePersonalBests/);
+});
+
+test("Post-match celebration uses custom public artwork assets", () => {
+  const component = readFileSync(
+    "components/matches/PostMatchCelebration.tsx",
+    "utf8"
+  );
+  const css = readFileSync("app/globals.css", "utf8");
+  const assets = [
+    "winner-trophy.svg",
+    "pom-star.svg",
+    "record-broken.svg",
+    "personal-best.svg",
+    "level-up.svg",
+    "xp-bolt.svg"
+  ];
+
+  for (const asset of assets) {
+    const path = `public/ui/post-match-celebration/${asset}`;
+    const source = readFileSync(path, "utf8");
+
+    assert.match(component, new RegExp(`/ui/post-match-celebration/${asset}`));
+    assert.match(source, /<svg/);
+    assert.doesNotMatch(source, /<rect[^>]+width="100%"/);
+  }
+
+  assert.match(css, /post-match-confetti-fall/);
+  assert.match(css, /prefers-reduced-motion:\s*reduce/);
+  assert.match(css, /max-width:\s*760px/);
+});
+
+test("Match form opens celebration only for new successful official finalisation", () => {
+  const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
+  const client = readFileSync("lib/admin-match-write-client.ts", "utf8");
+  const successIndex = form.indexOf("if (!finaliseResult.ok)");
+  const celebrationIndex = form.indexOf("setPostMatchCelebration({");
+  const refreshIndex = form.indexOf("router.refresh();", celebrationIndex);
+
+  assert.match(form, /PostMatchCelebration/);
+  assert.match(form, /postMatchCelebration/);
+  assert.match(form, /!finaliseResult\.alreadyApplied/);
+  assert.match(form, /finaliseResult\.celebration\?\.isEligibleOfficialMatch/);
+  assert.match(form, /onDismiss=\{\(\) => setPostMatchCelebration\(null\)\}/);
+  assert.ok(successIndex >= 0);
+  assert.ok(celebrationIndex > successIndex);
+  assert.ok(refreshIndex > celebrationIndex);
+  assert.doesNotMatch(form, /window\.location\.href = `\/matches\/\$\{matchId\}`/);
+  assert.match(client, /celebration\?: PostMatchCelebrationSummary/);
+});
+
+test("Celebration UI omits fake XP when progression snapshots are unavailable", () => {
+  const component = readFileSync(
+    "components/matches/PostMatchCelebration.tsx",
+    "utf8"
+  );
+
+  assert.match(component, /const hasProgression = summary\.progressionChanges\.length > 0/);
+  assert.match(component, /\{hasProgression \? \(/);
+  assert.match(component, /\{hasProgression \? <b>\{formatSignedXP\(pom\.matchXP\)\}<\/b> : null\}/);
+  assert.doesNotMatch(component, /\+0 XP/);
+});
+
 test("shared players and renamed display labels stay stable by player ID", () => {
   const current = match({
     id: "current",

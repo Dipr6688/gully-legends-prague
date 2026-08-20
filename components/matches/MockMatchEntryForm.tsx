@@ -97,6 +97,7 @@ import { reopenSupabaseMonthlyBeasts } from "@/lib/admin-monthly-beasts-client";
 import { isSupabaseDataSource } from "@/lib/data-source";
 import { localMatchRepository } from "@/lib/match-repository";
 import { useMatchRepository } from "@/components/matches/useMatchRepository";
+import { PostMatchCelebration } from "@/components/matches/PostMatchCelebration";
 import {
   getLiveMatchConflict,
   getNextAvailableMatchNumber,
@@ -127,6 +128,7 @@ import type {
   TeamId
 } from "@/lib/types/match";
 import type { Player } from "@/lib/types/player";
+import type { PostMatchCelebrationSummary } from "@/lib/post-match-celebration";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ReopenMonthlyBeastsDialog } from "@/components/monthly-beasts/MonthlyBeastsFeature";
@@ -563,6 +565,10 @@ export function MockMatchEntryForm({
   const [finalisedXPBreakdowns, setFinalisedXPBreakdowns] = useState<
     Record<string, PlayerMatchXPBreakdown>
   >({});
+  const [postMatchCelebration, setPostMatchCelebration] = useState<{
+    summary: PostMatchCelebrationSummary;
+    match: MatchRecord;
+  } | null>(null);
   const [message, setMessage] = useState(
     "Match workflow ready. Enter team, innings and player records."
   );
@@ -3330,6 +3336,16 @@ export function MockMatchEntryForm({
             return false;
           }
 
+          if (
+            !finaliseResult.alreadyApplied &&
+            finaliseResult.celebration?.isEligibleOfficialMatch
+          ) {
+            setPostMatchCelebration({
+              summary: finaliseResult.celebration,
+              match: finalisedMatch
+            });
+          }
+
           router.refresh();
         } else {
           applyFinalisedMatchToLocalCareerStats(finalisedMatch);
@@ -3377,13 +3393,11 @@ export function MockMatchEntryForm({
           setRestartSetupNoticeOpen(false);
         }
         setFinalisedXPBreakdowns({});
+        setPostMatchCelebration(null);
       }
 
       setStatus(nextStatus);
       setMessage(getStatusMessage(nextStatus, result.result));
-      if (nextStatus === "finalised" && supabaseWriteMode) {
-        window.location.href = `/matches/${matchId}`;
-      }
       return true;
     } catch {
       setMessage(
@@ -3572,6 +3586,7 @@ export function MockMatchEntryForm({
     setBowlingOvers({ teamA: [], teamB: [] });
     setStatus("draft");
     setFinalisedXPBreakdowns({});
+    setPostMatchCelebration(null);
     setSetupValidationAttempted(false);
     setQuickValidationAttempted(false);
     setWicketValidationAttempted(false);
@@ -4791,6 +4806,13 @@ export function MockMatchEntryForm({
         monthKey={reopenCrownMonthKey}
         onCancel={() => setReopenCrownMonthKey(null)}
         onConfirm={confirmMonthlyBeastReopenFromMatch}
+      />
+    ) : null}
+    {postMatchCelebration ? (
+      <PostMatchCelebration
+        summary={postMatchCelebration.summary}
+        match={postMatchCelebration.match}
+        onDismiss={() => setPostMatchCelebration(null)}
       />
     ) : null}
     </>

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Player of the match star icon">
+  <defs>
+    <linearGradient id="starGold" x1="31" x2="129" y1="23" y2="139" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff8a6"/>
+      <stop offset=".5" stop-color="#f7c734"/>
+      <stop offset="1" stop-color="#ff6d14"/>
+    </linearGradient>
+    <filter id="starGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#f7c734" flood-opacity=".55"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#46dfff" flood-opacity=".4"/>
+    </filter>
+  </defs>
+  <g stroke="#06111b" stroke-linecap="round" stroke-linejoin="round" stroke-width="7" filter="url(#starGlow)">
+    <path fill="url(#starGold)" d="M80 17l17 39 43 4-33 28 10 42-37-22-37 22 10-42-33-28 43-4z"/>
+    <circle cx="80" cy="79" r="23" fill="#f42135"/>
+    <path fill="none" stroke="#fff6d4" stroke-width="4" d="M67 63c13 7 22 17 27 33"/>
+    <path fill="none" stroke="#46dfff" stroke-width="4" d="M33 36l10 12M124 35l-10 12M29 105l14-4M130 104l-14-4"/>
+  </g>
+</svg>

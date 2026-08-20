@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Winner trophy cricket icon">
+  <defs>
+    <linearGradient id="gold" x1="35" x2="120" y1="10" y2="135" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff48a"/>
+      <stop offset=".45" stop-color="#f7c734"/>
+      <stop offset="1" stop-color="#ff8f1f"/>
+    </linearGradient>
+    <linearGradient id="bat" x1="40" x2="125" y1="120" y2="25" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff0a8"/>
+      <stop offset=".55" stop-color="#ffc857"/>
+      <stop offset="1" stop-color="#2f7dff"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#46dfff" flood-opacity=".55"/>
+      <feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#000" flood-opacity=".45"/>
+    </filter>
+  </defs>
+  <g fill="none" stroke="#06111b" stroke-linecap="round" stroke-linejoin="round" stroke-width="7" filter="url(#glow)">
+    <path fill="url(#gold)" d="M45 29h70v25c0 26-14 43-35 43S45 80 45 54z"/>
+    <path d="M45 42H28c-5 0-8 4-7 9 3 19 13 30 30 34"/>
+    <path d="M115 42h17c5 0 8 4 7 9-3 19-13 30-30 34"/>
+    <path fill="url(#gold)" d="M66 96h28l5 26H61z"/>
+    <path fill="url(#gold)" d="M49 122h62l8 16H41z"/>
+    <path fill="url(#bat)" d="M104 21l17 14-66 88-17-14z"/>
+    <circle cx="112" cy="110" r="17" fill="#f42135"/>
+    <path stroke="#fff6d4" stroke-width="3" d="M103 98c10 5 16 12 20 23"/>
+    <path stroke="#46dfff" stroke-width="4" d="M22 30l9 7M134 26l-10 10M26 126l11-6M135 126l-12-5"/>
+  </g>
+</svg>

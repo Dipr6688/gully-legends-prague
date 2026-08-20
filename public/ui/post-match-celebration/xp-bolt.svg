@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="XP progression bolt icon">
+  <defs>
+    <linearGradient id="coin" x1="39" x2="119" y1="30" y2="130" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff48a"/>
+      <stop offset=".5" stop-color="#f7c734"/>
+      <stop offset="1" stop-color="#ff8f1f"/>
+    </linearGradient>
+    <filter id="xpGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#46dfff" flood-opacity=".58"/>
+    </filter>
+  </defs>
+  <g stroke="#06111b" stroke-linecap="round" stroke-linejoin="round" stroke-width="7" filter="url(#xpGlow)">
+    <circle cx="78" cy="82" r="48" fill="url(#coin)"/>
+    <path fill="#12304c" d="M85 35L55 88h23l-11 42 39-62H82z"/>
+    <path fill="#46dfff" d="M90 30L60 84h24l-13 46 43-68H89z"/>
+    <circle cx="123" cy="47" r="12" fill="#f42135"/>
+    <path fill="#f7c734" d="M118 102l15 8-8 15-15-8zM31 51l13-11 11 13-13 11z"/>
+    <path fill="none" stroke="#9cff24" stroke-width="5" d="M25 99c12 21 32 33 58 33M113 23c14 8 24 20 29 35"/>
+  </g>
+</svg>

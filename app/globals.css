@@ -31,6 +31,458 @@ body {
   font-family: var(--font-barlow-condensed), "Segoe UI", Arial, sans-serif;
 }
 
+.post-match-celebration-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(247, 199, 52, 0.24), transparent 18rem),
+    radial-gradient(circle at 82% 12%, rgba(70, 223, 255, 0.2), transparent 20rem),
+    rgba(2, 6, 12, 0.88);
+  padding: clamp(10px, 2vw, 22px);
+}
+
+.post-match-celebration {
+  position: relative;
+  width: min(100%, 1040px);
+  max-height: min(94vh, 1120px);
+  overflow: hidden;
+  border: 1px solid rgba(247, 199, 52, 0.44);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 32%),
+    radial-gradient(circle at 12% 0%, rgba(247, 199, 52, 0.16), transparent 22rem),
+    radial-gradient(circle at 90% 5%, rgba(156, 255, 36, 0.13), transparent 20rem),
+    #07111b;
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, 0.42),
+    0 28px 80px rgba(0, 0, 0, 0.62),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.post-match-celebration-scroll {
+  display: grid;
+  gap: 16px;
+  max-height: min(94vh, 1120px);
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: clamp(16px, 3vw, 30px);
+}
+
+.post-match-celebration-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.58);
+  color: #f8f1d6;
+  cursor: pointer;
+}
+
+.post-match-celebration-close svg {
+  width: 20px;
+  height: 20px;
+}
+
+.post-match-confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.post-match-confetti span {
+  position: absolute;
+  top: -18px;
+  width: 9px;
+  height: 18px;
+  border-radius: 3px;
+  opacity: 0;
+  animation: post-match-confetti-fall 1800ms ease-out 1 forwards;
+}
+
+.post-match-winner-hero,
+.post-match-pom-card,
+.post-match-achievement-card,
+.post-match-no-achievements,
+.post-match-xp-section {
+  position: relative;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.07), transparent 38%),
+    rgba(0, 0, 0, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 16px 38px rgba(0, 0, 0, 0.28);
+}
+
+.post-match-winner-hero {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: clamp(20px, 4vw, 36px);
+  text-align: center;
+}
+
+.post-match-hero-icon {
+  width: clamp(82px, 12vw, 126px);
+  height: auto;
+  filter: drop-shadow(0 0 16px rgba(247, 199, 52, 0.55));
+}
+
+.post-match-winner-hero p,
+.post-match-section-title p,
+.post-match-achievement-card p {
+  color: #46dfff;
+  font-size: 0.82rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.post-match-winner-hero h2 {
+  max-width: 100%;
+  color: #f7c734;
+  font-size: clamp(2rem, 8vw, 6.2rem);
+  font-weight: 1000;
+  line-height: 0.88;
+  text-align: center;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+  text-shadow:
+    0 0 18px rgba(247, 199, 52, 0.32),
+    0 4px 0 rgba(0, 0, 0, 0.55);
+}
+
+.post-match-winner-hero > strong {
+  color: #f8f1d6;
+  font-size: clamp(1.15rem, 3vw, 2rem);
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.post-match-game-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.post-match-game-meta span {
+  max-width: 100%;
+  border: 1px solid rgba(247, 199, 52, 0.36);
+  border-radius: 999px;
+  background: rgba(247, 199, 52, 0.1);
+  padding: 7px 10px;
+  color: #f7c734;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.post-match-score-row {
+  display: grid;
+  width: min(100%, 760px);
+  max-width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.post-match-score-row div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(70, 223, 255, 0.28);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.34);
+  padding: 12px;
+}
+
+.post-match-score-row span,
+.post-match-score-row em,
+.post-match-achievement-card span,
+.post-match-achievement-card em,
+.post-match-achievement-card small,
+.post-match-no-achievements span,
+.post-match-xp-row span {
+  color: #c8d6d8;
+  font-weight: 800;
+}
+
+.post-match-score-row b {
+  color: #f8f1d6;
+  font-size: clamp(1.7rem, 4vw, 2.5rem);
+  font-weight: 1000;
+}
+
+.post-match-section-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.post-match-section-title img {
+  flex: 0 0 auto;
+  filter: drop-shadow(0 0 12px rgba(70, 223, 255, 0.42));
+}
+
+.post-match-section-title h3,
+.post-match-achievement-card h3,
+.post-match-no-achievements p {
+  color: #f8f1d6;
+  font-size: clamp(1.75rem, 4vw, 3rem);
+  font-weight: 1000;
+  line-height: 0.96;
+  text-transform: uppercase;
+}
+
+.post-match-pom-card,
+.post-match-xp-section {
+  display: grid;
+  gap: 16px;
+  padding: clamp(16px, 3vw, 24px);
+}
+
+.post-match-pom-content {
+  display: grid;
+  grid-template-columns: minmax(118px, 170px) minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+}
+
+.post-match-pom-artwork {
+  position: relative;
+  width: min(100%, 170px);
+  aspect-ratio: 2 / 3;
+}
+
+.post-match-pom-content span {
+  color: #f7c734;
+  font-size: 0.92rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.post-match-pom-content strong {
+  display: block;
+  margin-top: 8px;
+  color: #f8f1d6;
+  font-size: clamp(1.15rem, 3vw, 1.8rem);
+  font-weight: 950;
+}
+
+.post-match-pom-content b {
+  display: inline-flex;
+  margin-top: 12px;
+  border-radius: 999px;
+  background: #f7c734;
+  padding: 7px 11px;
+  color: #07100e;
+  font-weight: 1000;
+}
+
+.post-match-achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.post-match-achievement-card {
+  display: grid;
+  gap: 7px;
+  align-content: start;
+  padding: 16px;
+}
+
+.post-match-achievement-card img {
+  width: 58px;
+  height: 58px;
+  filter: drop-shadow(0 0 11px rgba(247, 199, 52, 0.4));
+}
+
+.post-match-achievement-card strong {
+  color: #f7c734;
+  font-size: clamp(1.35rem, 4vw, 2.2rem);
+  font-weight: 1000;
+  text-transform: uppercase;
+}
+
+.post-match-record-card {
+  border-color: rgba(247, 199, 52, 0.38);
+  background:
+    radial-gradient(circle at 85% 0%, rgba(247, 199, 52, 0.18), transparent 14rem),
+    rgba(0, 0, 0, 0.4);
+}
+
+.post-match-record-card p,
+.post-match-record-card small {
+  color: #f7c734;
+}
+
+.post-match-personal-card {
+  border-color: rgba(70, 223, 255, 0.32);
+}
+
+.post-match-level-card {
+  border-color: rgba(156, 255, 36, 0.32);
+}
+
+.post-match-level-card p {
+  color: #9cff24;
+}
+
+.post-match-no-achievements {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+}
+
+.post-match-xp-list {
+  display: grid;
+  gap: 10px;
+}
+
+.post-match-xp-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.28);
+  padding: 12px;
+}
+
+.post-match-xp-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.post-match-xp-row b,
+.post-match-xp-row strong {
+  color: #f8f1d6;
+  font-weight: 1000;
+  text-transform: uppercase;
+}
+
+.post-match-xp-row strong {
+  color: #9cff24;
+}
+
+.post-match-xp-row strong.is-negative {
+  color: #ff8f8f;
+}
+
+.post-match-xp-track {
+  grid-column: 1 / -1;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.post-match-xp-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #46dfff, #9cff24, #f7c734);
+}
+
+.post-match-celebration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(7, 17, 27, 0.62), #07111b 35%);
+  padding-top: 14px;
+}
+
+.post-match-celebration-actions > * {
+  min-height: 46px;
+}
+
+@keyframes post-match-confetti-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(-12px) rotate(0deg);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(240px) rotate(220deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .post-match-celebration-backdrop {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .post-match-celebration {
+    width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  .post-match-celebration-scroll {
+    max-height: 100vh;
+    padding: 14px;
+    padding-top: 56px;
+  }
+
+  .post-match-winner-hero h2 {
+    font-size: clamp(2rem, 10vw, 2.75rem);
+    line-height: 0.94;
+  }
+
+  .post-match-winner-hero > strong {
+    font-size: clamp(1rem, 5vw, 1.35rem);
+  }
+
+  .post-match-score-row,
+  .post-match-achievement-grid,
+  .post-match-pom-content {
+    grid-template-columns: 1fr;
+  }
+
+  .post-match-pom-artwork {
+    justify-self: center;
+    width: min(46vw, 150px);
+  }
+
+  .post-match-celebration-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .post-match-confetti span {
+    display: none;
+  }
+}
+
 a {
   color: inherit;
   text-decoration: none;
