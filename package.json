@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "tsc -p tsconfig.test.json && node --test .test-build/tests/progression.test.js .test-build/tests/team-balancing.test.js .test-build/tests/match-records.test.js .test-build/tests/formula-room.test.js .test-build/tests/leaderboard.test.js .test-build/tests/dashboard.test.js .test-build/tests/monthly-beasts.test.js .test-build/tests/gallery.test.js .test-build/tests/admin-auth.test.js .test-build/tests/advanced-cricket-stats.test.js .test-build/tests/app-sync.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test .test-build/tests/progression.test.js .test-build/tests/team-balancing.test.js .test-build/tests/match-records.test.js .test-build/tests/formula-room.test.js .test-build/tests/leaderboard.test.js .test-build/tests/dashboard.test.js .test-build/tests/monthly-beasts.test.js .test-build/tests/gallery.test.js .test-build/tests/admin-auth.test.js .test-build/tests/advanced-cricket-stats.test.js .test-build/tests/app-sync.test.js .test-build/tests/post-match-celebration.test.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 import { isAdminWithClient } from "@/lib/admin/auth";
 import { getPlayerById } from "@/lib/data/players";
 import { getMatchMonthKey } from "@/lib/monthly-beasts";
+import {
+  buildPostMatchCelebrationSummary,
+  type PostMatchCelebrationSummary,
+  type PostMatchProgressionSnapshot
+} from "@/lib/post-match-celebration";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { buildFinalisationPlan } from "@/lib/supabase/match-finalisation-plan";
 import {
@@ -13,6 +18,7 @@ import { validateSupabaseMatchPayload } from "@/lib/admin/supabase-data-check";
 import { validateMatchOnServer } from "@/server/match-validation";
 import type { MatchRecord } from "@/lib/types/match";
 import type { MatchValidationInput } from "@/lib/match-records";
+import type { SupabaseMatchRow } from "@/lib/supabase/read-repositories";
 
 type FinalizeMatchRequest = {
   match: MatchRecord;
@@ -110,6 +116,68 @@ function revalidateFinalisationPages(matchId: string, playerIds: string[]) {
     const player = getPlayerById(playerId);
     revalidatePath(`/players/${player?.slug ?? playerId}`);
   }
+}
+
+function matchRecordFromRow(row: SupabaseMatchRow): MatchRecord | null {
+  const result = validateSupabaseMatchPayload(row);
+
+  if (!result.match || result.issues.length > 0) return null;
+
+  return {
+    ...result.match,
+    isDemo: row.is_demo,
+    isDemoTestMatch: row.is_demo && result.match.isDemoTestMatch === true,
+    supabaseUpdatedAt: row.updated_at,
+    matchNumber: row.match_sequence ?? result.match.matchNumber ?? null,
+    deletedAt: row.deleted_at ?? result.match.deletedAt ?? null
+  };
+}
+
+function buildProgressionSnapshotsFromPlan({
+  plan,
+  includeProgression
+}: {
+  plan: ReturnType<typeof buildFinalisationPlan>;
+  includeProgression: boolean;
+}): PostMatchProgressionSnapshot[] {
+  if (!includeProgression) return [];
+
+  return plan.applications.map((application) => ({
+    playerId: application.playerId,
+    beforeTotalXP: application.expectedCareer.totalXP,
+    afterTotalXP: application.nextCareer.totalXP,
+    awardedXP: application.progression.xpBreakdown.awardedXP,
+    beforeLevel: application.expectedCareer.level,
+    afterLevel: application.nextCareer.level
+  }));
+}
+
+async function buildCelebrationAfterSuccessfulFinalisation({
+  repository,
+  match,
+  plan,
+  alreadyApplied
+}: {
+  repository: SupabaseMatchFinalisationRepository;
+  match: MatchRecord;
+  plan: ReturnType<typeof buildFinalisationPlan>;
+  alreadyApplied: boolean;
+}): Promise<PostMatchCelebrationSummary> {
+  const rows = await repository.getMatchRows();
+  const historicalMatches = rows.flatMap((row) => {
+    const parsedMatch = matchRecordFromRow(row);
+
+    return parsedMatch ? [parsedMatch] : [];
+  });
+
+  return buildPostMatchCelebrationSummary({
+    match,
+    historicalMatches,
+    progressionSnapshots: buildProgressionSnapshotsFromPlan({
+      plan,
+      includeProgression: !alreadyApplied
+    })
+  });
 }
 
 function errorResponse(error: unknown) {
@@ -255,6 +323,17 @@ export async function POST(request: Request) {
       existingApplications
     });
     const result = await auth.repository.finalizeAtomically(plan);
+    const celebration = await buildCelebrationAfterSuccessfulFinalisation({
+      repository: auth.repository,
+      match: {
+        ...body.match,
+        isDemo: currentRow.is_demo || body.match.isDemo,
+        isDemoTestMatch: currentRow.is_demo && body.match.isDemoTestMatch === true,
+        supabaseUpdatedAt: result.statsAppliedAt ?? body.match.supabaseUpdatedAt
+      },
+      plan,
+      alreadyApplied: result.alreadyApplied
+    });
 
     revalidateFinalisationPages(body.match.id, playerIds);
 
@@ -263,7 +342,8 @@ export async function POST(request: Request) {
       matchId: result.matchId,
       alreadyApplied: result.alreadyApplied,
       finalisedAt: result.finalisedAt,
-      statsAppliedAt: result.statsAppliedAt
+      statsAppliedAt: result.statsAppliedAt,
+      celebration
     });
   } catch (error) {
     return errorResponse(error);

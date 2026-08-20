@@ -1,4 +1,5 @@
 import type { MatchRecord } from "@/lib/types/match";
+import type { PostMatchCelebrationSummary } from "@/lib/post-match-celebration";
 
 export type AdminMatchWriteResult =
   | {
@@ -8,6 +9,7 @@ export type AdminMatchWriteResult =
       alreadyApplied?: boolean;
       finalisedAt?: string | null;
       statsAppliedAt?: string | null;
+      celebration?: PostMatchCelebrationSummary;
     }
   | {
       ok: false;

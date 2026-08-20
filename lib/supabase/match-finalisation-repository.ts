@@ -98,6 +98,37 @@ export class SupabaseMatchFinalisationRepository {
     return data;
   }
 
+  async getMatchRows(): Promise<SupabaseMatchRow[]> {
+    const { data, error } = (await this.client
+      .from("matches")
+      .select(
+        [
+          "id",
+          "match_date",
+          "start_time",
+          "match_sequence",
+          "name",
+          "venue",
+          "status",
+          "is_demo",
+          "payload",
+          "finalised_at",
+          "stats_applied_at",
+          "deleted_at",
+          "updated_at"
+        ].join(", ")
+      )) as unknown as {
+      data: SupabaseMatchRow[] | null;
+      error: SupabaseErrorLike | null;
+    };
+
+    if (error) {
+      throw new SupabaseMatchFinalisationError("COULD NOT FINALISE MATCH", "rpc_failed");
+    }
+
+    return data ?? [];
+  }
+
   async getCareerRows(playerIds: string[]): Promise<SupabaseCareerStatsRow[]> {
     const { data, error } = (await this.client
       .from("player_career_stats")
