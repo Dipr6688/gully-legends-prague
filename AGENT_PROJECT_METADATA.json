@@ -1,6 +1,6 @@
 {
-  "metadataVersion": 4,
-  "lastUpdated": "2026-08-19",
+  "metadataVersion": 5,
+  "lastUpdated": "2026-08-20",
   "project": {
     "name": "Gully Legends Prague",
     "purpose": "Gaming/comic styled cricket website, Supabase-backed cricket match management, player progression, Hall of Legends rankings, Monthly Beasts awards, Formula Room documentation, and shared Gallery for the Gully Legends Prague cricket group.",
@@ -9,8 +9,8 @@
     "styling": "Tailwind CSS plus custom CSS in app/globals.css",
     "primaryDataSource": "Supabase when NEXT_PUBLIC_DATA_SOURCE is unset or set to supabase",
     "localFallbackMode": "NEXT_PUBLIC_DATA_SOURCE=local preserves local browser fallback behavior for development",
-    "databaseStatus": "Supabase Auth, Postgres, RLS, RPC finalisation, Monthly Beast writes, Demo Reset, and Gallery Storage persistence are implemented.",
-    "phaseStatus": "Current project is stable on main: 21-player roster, approved responsive dashboard, Supabase-backed public reads, Admin-only writes, Quick Scoring, atomic match finalisation, reset-safe player progression, Monthly Beasts Crown/Reopen, Demo Reset, demo test match helper, Supabase Gallery persistence, private server-side Team Balance / Shuffle, and illustrated match scoring documentation are implemented."
+    "databaseStatus": "Supabase Auth, Postgres, RLS, RPC finalisation, Monthly Beast writes, Demo Reset, Gallery Storage persistence, and APK Pending Review persistence are implemented.",
+    "phaseStatus": "Current project is stable on Production main at 6e41645: 21-player roster, approved responsive dashboard, Supabase-backed public reads, Admin-only writes, APK Pending Review / Admin correction, Quick Scoring, atomic match finalisation, Post-Match Celebration, Historical Match Celebration Replay, reset-safe player progression, Monthly Beasts Crown/Reopen, Demo Reset, demo test match helper, Supabase Gallery persistence, private server-side Team Balance / Shuffle, and illustrated match scoring documentation are implemented."
   },
   "commands": {
     "windowsNote": "Use npm.cmd in PowerShell because npm.ps1 may be blocked by execution policy.",
@@ -20,6 +20,29 @@
     "typecheck": "npm.cmd run typecheck",
     "test": "npm.cmd run test",
     "build": "npm.cmd run build"
+  },
+  "releaseState": {
+    "productionBranch": "main",
+    "productionHead": "6e41645 Add historical match celebration replay",
+    "postMatchCelebrationCommits": [
+      "be0cc79 Add post-match celebration foundation",
+      "2e5902c Add post-match celebration experience",
+      "6e41645 Add historical match celebration replay"
+    ],
+    "apkReviewCorrectionStatus": "APK Pending Review and Admin correction functionality is included in Production main.",
+    "featurePostMatchCelebrationBranch": "feature/post-match-celebration may remain as the completed release branch.",
+    "verification": [
+      "Vercel Preview passed.",
+      "Production deployment passed.",
+      "Production smoke test passed on https://www.gullylegends.eu.",
+      "Historical celebrations tested successfully on gullylegends.eu.",
+      "Localhost historical replay visually inspected.",
+      "Desktop/mobile visual QA passed.",
+      "493/493 tests passing.",
+      "lint passed.",
+      "typecheck passed.",
+      "build passed."
+    ]
   },
   "environment": {
     "exampleFile": ".env.example",
@@ -61,6 +84,8 @@
     "matchArchive": "components/matches/MatchArchive.tsx",
     "matchLogic": "lib/match-records.ts",
     "quickScoringLogic": "lib/quick-scoring.ts",
+    "postMatchCelebration": "components/matches/PostMatchCelebration.tsx",
+    "postMatchCelebrationDomain": "lib/post-match-celebration.ts",
     "teamBalancingCore": "lib/team-balancing-core.ts",
     "teamBalancingServer": "server/team-balancing.ts",
     "teamBalanceApi": "app/api/team-balance/route.ts",
@@ -80,6 +105,9 @@
     "galleryTypes": "lib/gallery.ts",
     "galleryImageOptimiser": "lib/gallery-image.ts",
     "adminPage": "app/admin/page.tsx",
+    "apkPendingReviewPage": "app/admin/apk-imports/page.tsx",
+    "apkPendingReviewDetail": "app/admin/apk-imports/[importId]/page.tsx",
+    "apkImportRepository": "lib/supabase/apk-import-repository.ts",
     "adminAuth": "lib/admin/auth.ts",
     "adminEnv": "lib/admin/env.ts",
     "supabaseMigrations": "supabase/migrations",
@@ -93,7 +121,9 @@
       "tests/monthly-beasts.test.ts",
       "tests/gallery.test.ts",
       "tests/admin-auth.test.ts",
-      "tests/advanced-cricket-stats.test.ts"
+      "tests/advanced-cricket-stats.test.ts",
+      "tests/app-sync.test.ts",
+      "tests/post-match-celebration.test.ts"
     ]
   },
   "designRules": {
@@ -251,19 +281,23 @@
       "public.player_career_stats",
       "public.match_stat_applications",
       "public.monthly_beast_crowns",
-      "public.gallery_photos"
+      "public.gallery_photos",
+      "public.apk_match_imports"
     ],
     "importantFunctions": [
       "public.is_admin()",
       "public.finalize_match_atomic(finalisation_plan jsonb)",
       "public.crown_monthly_beasts_atomic(crown_plan jsonb)",
       "public.reopen_monthly_beast_crown(month_key text)",
-      "public.reset_demo_data_atomic(reset_plan jsonb)"
+      "public.reset_demo_data_atomic(reset_plan jsonb)",
+      "public.upsert_apk_match_import_atomic(jsonb, jsonb, jsonb, date, text)",
+      "public.finalize_apk_import_atomic(uuid, jsonb)"
     ],
     "securityRules": [
       "public.is_admin() uses SECURITY DEFINER and set search_path = ''.",
       "Fresh match finalisation requires database match status in_progress.",
       "Finalisation, Monthly Beast Crown/Reopen, and Demo Reset use advisory locks to avoid unsafe races.",
+      "APK imports are Admin-only and must not have public or anonymous access.",
       "Normal public visitors cannot upload/edit/delete Gallery photos or modify cricket data.",
       "Do not use service-role credentials in application code."
     ],
@@ -271,7 +305,8 @@
       "supabase/migrations/20260807090000_admin_users.sql",
       "supabase/migrations/20260807093000_phase_2a_core_schema.sql",
       "supabase/migrations/20260807103000_atomic_match_finalisation.sql",
-      "supabase/migrations/20260807110000_monthly_beast_writes_and_demo_reset.sql"
+      "supabase/migrations/20260807110000_monthly_beast_writes_and_demo_reset.sql",
+      "supabase/migrations/20260819120000_apk_pending_imports.sql"
     ]
   },
   "matchWorkflow": {
@@ -334,6 +369,24 @@
       "rule": "Server creates temporary demo draft with is_demo=true; normal Create Match remains is_demo=false and has no demo checkbox."
     }
   },
+  "apkIntegration": {
+    "productionStatus": "APK Pending Review / Admin correction is included in Production main and must not be described as feature-branch-only work.",
+    "adminRoutes": [
+      "app/admin/apk-imports/page.tsx",
+      "app/admin/apk-imports/[importId]/page.tsx"
+    ],
+    "repository": "lib/supabase/apk-import-repository.ts",
+    "table": "public.apk_match_imports",
+    "rules": [
+      "APK-submitted matches land in Pending Review.",
+      "Admin can inspect raw APK payload data, edit the website working copy, reject an import, or finalise a valid non-demo import.",
+      "Demo APK imports cannot create official matches.",
+      "Finalised APK imports use the same authoritative website scoring, result, POM, XP, progression ledger, scorecard, and archive paths.",
+      "Raw APK payload data is preserved separately from the Admin working copy.",
+      "APK imports are Admin-only with no public or anonymous access.",
+      "Do not expose Admin credentials, Supabase tokens, APK secrets, raw payload internals, or private review details in public UI, public APIs, logs, or public-facing docs."
+    ]
+  },
   "progressionSystem": {
     "file": "lib/progression.ts",
     "xpRules": {
@@ -360,6 +413,84 @@
       "fieldReflex": "Fielding performance; zero matches returns 0.",
       "display": "Player cards and player detail both use player.ratings as the single source."
     }
+  },
+  "postMatchCelebration": {
+    "productionStatus": {
+      "branch": "main",
+      "head": "6e41645 Add historical match celebration replay",
+      "previousCommits": [
+        "2e5902c Add post-match celebration experience",
+        "be0cc79 Add post-match celebration foundation"
+      ],
+      "deployed": true,
+      "productionSmokeTested": true,
+      "productionUrl": "https://www.gullylegends.eu"
+    },
+    "coreFiles": [
+      "lib/post-match-celebration.ts",
+      "components/matches/PostMatchCelebration.tsx",
+      "components/matches/MatchScorecard.tsx",
+      "app/api/admin/matches/finalize/route.ts",
+      "public/ui/post-match-celebration"
+    ],
+    "architecture": [
+      "PostMatchCelebrationSummary is the typed celebration summary.",
+      "Live celebration summary is created only after successful official Admin finalisation.",
+      "Existing finalisation, XP, result, POM, progression, and scorecard engines remain authoritative.",
+      "There is no second XP engine.",
+      "Demo completion, failed finalisation, pending APK imports, rejected imports, and correction-pending imports must not trigger live celebration.",
+      "alreadyApplied retries do not replay unavailable progression snapshots."
+    ],
+    "liveExperience": [
+      "Winner/result hero",
+      "Official Game Number, scores, and result text",
+      "Official Player of the Match",
+      "Gully Records",
+      "Personal Bests",
+      "Level-up cards when authoritative before/after progression snapshots exist",
+      "XP earned",
+      "Responsive celebration UI",
+      "Custom celebration SVG assets"
+    ],
+    "historicalReplay": {
+      "entryPoint": "Official historical match scorecard button: VIEW MATCH CELEBRATION",
+      "mode": "Read-only historical mode using the same PostMatchCelebration UI.",
+      "baselineRules": [
+        "Baseline contains only official finalised matches before the target.",
+        "Same-day chronology uses official matchNumber / Game Number.",
+        "Target match is excluded from its own baseline.",
+        "Later matches never affect earlier historical celebration."
+      ],
+      "recordRules": [
+        "Strict record improvement means broken.",
+        "Equal record is not broken.",
+        "No earlier record is firstRecord."
+      ],
+      "personalBestRules": [
+        "Personal Best requires strict improvement.",
+        "First qualifying Personal Best is supported.",
+        "matchXP is intentionally not shown as a Personal Best card.",
+        "Cricket PB metrics remain: runs, wickets, catches, run-outs, stumpings, fours, and sixes."
+      ],
+      "xpSafety": [
+        "Only stored xpBreakdown.awardedXP is displayed.",
+        "Missing XP is omitted and never treated as zero.",
+        "Historical before/after levels are not reconstructed when not provable.",
+        "No fake level-up or XP progress bar is shown."
+      ],
+      "legacyDataSafety": [
+        "Missing event-backed fours, sixes, strike rate, economy, and similar stats remain unknown.",
+        "Never fabricate zeros for missing legacy event-backed data.",
+        "Event-backed historical comparisons run only where valid."
+      ]
+    },
+    "visualQa": [
+      "Vercel Preview passed.",
+      "Production deployment passed.",
+      "Historical celebrations tested successfully on gullylegends.eu.",
+      "Localhost historical replay visually inspected.",
+      "Desktop/mobile visual QA passed."
+    ]
   },
   "leaderboardAndFormulaRoom": {
     "hallOfLegends": {
@@ -426,7 +557,7 @@
   "tests": {
     "script": "npm.cmd run test",
     "runner": "node:test after compiling with tsconfig.test.json",
-    "currentPassingCount": 426,
+    "currentPassingCount": 493,
     "coverageThemes": [
       "Supabase Auth and Admin security",
       "Supabase public read mapping",
@@ -443,20 +574,23 @@
       "Hall of Legends and Monthly Beasts distinction",
       "Formula Room source-of-truth formulas",
       "Dashboard behavior",
-      "Supabase Gallery persistence and local fallback"
+      "Supabase Gallery persistence and local fallback",
+      "APK Pending Review and Admin correction safety",
+      "Post-Match Celebration live finalisation summaries",
+      "Historical Match Celebration Replay and legacy-data safety"
     ],
     "generatedArtifact": ".test-build is generated by npm run test and should not be committed."
   },
   "lastVerified": {
-    "date": "2026-08-19",
+    "date": "2026-08-20",
     "commandsRun": [
       "npm.cmd run lint",
       "npm.cmd run typecheck",
       "npm.cmd run test",
       "npm.cmd run build"
     ],
-    "result": "All passed after the stable Team Balance / Shuffle metadata update.",
-    "testCount": "426/426 tests passed"
+    "result": "All passed for Production main after Post-Match Celebration and Historical Match Celebration Replay release.",
+    "testCount": "493/493 tests passed"
   },
   "agentGuidance": {
     "beforeVisualChanges": [
@@ -473,7 +607,9 @@
     "beforeMatchWorkflowChanges": [
       "Inspect lib/types/match.ts, lib/match-records.ts, lib/progression.ts, components/matches/MockMatchEntryForm.tsx, and Supabase match repositories.",
       "Preserve the existing atomic finalisation path.",
-      "Keep normal Create Match is_demo=false."
+      "Keep normal Create Match is_demo=false.",
+      "Preserve Post-Match Celebration as a presentation layer over authoritative finalisation, result, POM, XP, and progression data.",
+      "Do not list Match Records Broken / Personal Best celebration as wholly deferred; it is implemented for Post-Match Celebration."
     ],
     "filesystemSafety": [
       "Do not reset or revert user changes.",

@@ -2,9 +2,9 @@
 
 **Purpose:** Upload this file at the start of a new ChatGPT/Codex conversation so the assistant can understand the project without needing the full old chat history.
 
-**Last updated:** 19 August 2026
+**Last updated:** 20 August 2026
 
-**Current overall status:** The project is in a stable state on `main`. The production website is live at the custom domain. Quick Scoring, simplified match setup, Supabase persistence, Gallery, Hall of Legends, Monthly Beasts, Fielding Helpers, private server-side Team Balance / Shuffle, and the illustrated user manual are implemented. Latest local validation: lint passed, typecheck passed, tests passed `426/426`, production build passed.
+**Current overall status:** The project is in a stable state on Production `main`. The production website is live at the custom domain. APK Pending Review / Admin correction, Quick Scoring, simplified match setup, Supabase persistence, Gallery, Hall of Legends, Monthly Beasts, Fielding Helpers, private server-side Team Balance / Shuffle, Post-Match Celebration, Historical Match Celebration Replay, and the illustrated user manual are implemented. Current release validation: lint passed, typecheck passed, tests passed `493/493`, production build passed. Vercel Preview passed, Production deployment passed, and smoke testing on `https://www.gullylegends.eu` passed.
 
 **Privacy note for agents:** Automatic Team Balance / Shuffle uses private server-side inputs. Do not expose balancing weights, groups, totals, pair rules, or separation reasons in UI copy, public API responses, README text, screenshots, accessibility labels, or public-facing docs.
 
@@ -70,6 +70,10 @@ Future feature branches will receive their own Preview URLs.
 At the time of this handoff:
 
 `main`
+
+Production `main` HEAD:
+
+`6e41645 Add historical match celebration replay`
 
 The current local project state is stable and validated. Use a new feature branch for future changes unless the user explicitly asks to work directly on `main`.
 
@@ -201,11 +205,13 @@ Do not omit/simplify this sequence.
 - Player detail
 - Matches
 - Scorecards
+- Match Celebration Replay from eligible official scorecards
 - Hall of Legends (`/leaderboard`)
 - Monthly Beasts
 - Formula Room (`/stats`)
 - Gallery
 - Admin (protected)
+- APK Pending Review / Admin correction screens under Admin
 
 Public users do not need accounts.
 
@@ -639,6 +645,110 @@ Before activation, the migration must be manually reviewed/applied and the calle
 
 ---
 
+# 20A. Post-Match Celebration — PRODUCTION
+
+Post-Match Celebration is implemented, committed, fast-forward merged into
+Production `main`, deployed, and smoke-tested successfully.
+
+Important commits:
+
+- `be0cc79 Add post-match celebration foundation`
+- `2e5902c Add post-match celebration experience`
+- `6e41645 Add historical match celebration replay`
+
+Core implementation:
+
+- `lib/post-match-celebration.ts`
+- `components/matches/PostMatchCelebration.tsx`
+- `components/matches/MatchScorecard.tsx`
+- `app/api/admin/matches/finalize/route.ts`
+- `public/ui/post-match-celebration/*.svg`
+
+### Celebration architecture
+
+- `PostMatchCelebrationSummary` is the typed summary passed to the UI.
+- A live celebration summary is created only after successful official Admin
+  finalisation.
+- Existing finalisation, XP, result, POM, progression, and scorecard engines
+  remain authoritative.
+- There is no second XP engine and no duplicate result/POM calculation engine.
+- The celebration is UI/read-model work; it does not write cricket data.
+- Demo completion, failed finalisation, pending APK imports, rejected imports,
+  and correction-pending APK states must not trigger the live celebration.
+- Exact `alreadyApplied` retries must not replay unavailable progression
+  snapshots or fabricate XP/level movement.
+
+### Live celebration
+
+The live celebration includes:
+
+- Winner/result hero
+- official Game Number
+- official team scores and result text
+- official Player of the Match
+- Gully Records
+- Personal Bests
+- Level-up cards when authoritative before/after progression snapshots exist
+- XP earned
+- responsive mobile-friendly overlay
+- custom celebration SVG assets
+
+### Historical Match Celebration Replay
+
+Historical replay is available from eligible official finalised scorecards via:
+
+`VIEW MATCH CELEBRATION`
+
+Rules:
+
+- read-only
+- uses the same `PostMatchCelebration` UI in historical mode
+- baseline contains only official finalised matches before the target match
+- same-day chronology uses official `matchNumber` / Game Number
+- target match is excluded from its own baseline
+- later matches never affect earlier historical celebration
+- strict record improvement = broken
+- equal record = not broken
+- no earlier record = `firstRecord`
+- Personal Best requires strict improvement
+- first qualifying Personal Best is supported
+
+### Historical XP and level safety
+
+- Historical XP display uses only stored `xpBreakdown.awardedXP`.
+- Missing XP is omitted and is never treated as zero.
+- Historical before/after levels are not reconstructed when not provable.
+- No fake historical level-up or XP progress bar should be shown.
+- Live finalisation still supports authoritative before/after progression
+  snapshots.
+- Already-applied retry paths must not replay unavailable progression.
+
+### Legacy-data safety
+
+- Missing event-backed fours, sixes, strike-rate, economy, or related data is
+  unknown, not zero.
+- Event-backed historical comparisons run only when stored data supports them.
+- Do not fabricate legacy metrics.
+
+### Personal Best UI
+
+- `matchXP` is intentionally not shown as a Personal Best card.
+- Cricket Personal Best metrics remain: runs, wickets, catches, run-outs,
+  stumpings, fours, and sixes.
+- XP has its own Match XP section.
+- Celebration metric text uses correct singular/plural labels such as
+  `1 Run`, `2 Runs`, `1 Wicket`, `2 Wickets`, `1 Catch`, `2 Catches`.
+
+### Verification
+
+- Vercel Preview passed.
+- Production deployment passed.
+- Historical celebrations tested successfully on `https://www.gullylegends.eu`.
+- Localhost historical replay was visually inspected.
+- Desktop/mobile visual QA passed.
+
+---
+
 # 21. Finalisation architecture
 
 Normal finalisation must continue using:
@@ -662,6 +772,8 @@ Finalisation updates:
 - Hall of Legends
 - Monthly Beasts
 - other existing derived systems
+- live Post-Match Celebration summary only after successful official
+  finalisation
 
 ---
 
@@ -806,9 +918,13 @@ Core:
 - `match_stat_applications`
 - `monthly_beast_crowns`
 - `gallery_photos`
+- `apk_match_imports`
 
 Important:
 - `matches.is_demo`
+- `apk_match_imports.review_status`
+- `apk_match_imports.raw_payload`
+- `apk_match_imports.derived_payload`
 - `monthly_beast_crowns.is_demo`
 - `gallery_photos.is_demo`
 - progression ledger is `match_stat_applications`
@@ -830,6 +946,36 @@ Important:
 
 ---
 
+# 30A. APK Pending Review / Admin correction — PRODUCTION
+
+APK Pending Review and Admin correction functionality is included in Production
+`main`. Do not treat it as feature-branch-only work.
+
+Implemented behavior:
+
+- APK-submitted matches land in Pending Review.
+- Admin can inspect raw APK payload data.
+- Admin can edit the website-side working copy.
+- Admin can reject an import.
+- Admin can finalise a valid non-demo import through the website finalisation
+  engine.
+- Demo APK imports cannot create official matches.
+- Finalised APK imports use the same authoritative website scoring, result,
+  POM, XP, progression ledger, and archive systems as normal website matches.
+- Raw APK payload data is preserved separately from the Admin working copy.
+- Newer APK revisions can mark older working copies stale.
+
+Security and architecture:
+
+- APK imports are Admin-only.
+- No public/anonymous access should exist for `apk_match_imports`.
+- There is no normal public delete flow.
+- Do not bypass the website finalisation engine.
+- Do not expose admin credentials, sync tokens, or private implementation
+  details in APK UI, website UI, public APIs, logs, or documentation.
+
+---
+
 # 31. Atomic Supabase operations currently installed
 
 Installed/working RPCs include:
@@ -838,6 +984,8 @@ Installed/working RPCs include:
 - `public.crown_monthly_beasts_atomic(crown_plan jsonb)`
 - `public.reopen_monthly_beast_crown(month_key text)`
 - `public.reset_demo_data_atomic(reset_plan jsonb)`
+- `public.upsert_apk_match_import_atomic(jsonb, jsonb, jsonb, date, text)`
+- `public.finalize_apk_import_atomic(uuid, jsonb)`
 
 General design:
 - SECURITY DEFINER
@@ -916,8 +1064,15 @@ Latest stable validation:
 
 - lint: passed
 - typecheck: passed
-- tests: **426 passing**
+- tests: **493 passing**
 - build: passed
+- Vercel Preview: passed
+- Production deployment: passed
+- Production smoke test: passed on `https://www.gullylegends.eu`
+
+Production HEAD:
+
+`6e41645 Add historical match celebration replay`
 
 ### Current metadata update scope
 This handoff metadata, `README.md`, and `AGENT_PROJECT_METADATA.json` describe the stable project state. Do not infer that unrelated untracked files are automatically approved for release unless the user says so.
@@ -974,7 +1129,7 @@ After Preview passes:
 ```powershell
 git switch main
 git pull origin main
-git merge feature/example
+git merge --ff-only feature/example
 git push origin main
 ```
 
@@ -1017,16 +1172,22 @@ Always test Quick Scoring on a real phone through Vercel Preview before Producti
 
 # 38. Current launch / release state
 
-As of **19 August 2026**:
+As of **20 August 2026**:
 
 ### Production
 - Production site live and working
+- Production branch: `main`
+- Production HEAD: `6e41645 Add historical match celebration replay`
 - custom domain working
 - GitHub ↔ Vercel working
 - Supabase working
 - Porkbun DNS valid
 - canonical site:
   `https://www.gullylegends.eu`
+- Vercel Preview passed for the Post-Match Celebration release
+- Production deployment passed
+- smoke-tested successfully on `https://www.gullylegends.eu`
+- historical celebrations tested successfully on Production
 
 ### Data
 - demo data reset before real tracking
@@ -1038,13 +1199,21 @@ As of **19 August 2026**:
 The current project state is stable on `main` and has passed:
 - lint
 - typecheck
-- 426 tests
+- 493 tests
 - build
+- desktop/mobile visual QA for the celebration replay
 
 Future changes should still use the normal branch / preview / validation flow unless the user explicitly chooses a direct `main` update.
 
 ### Prepared/deferred until later
 - activation of post-finalisation POM correction RPC/migration
+- shareable Match Result Card / export
+- deeper focus-trap / keyboard-cycle accessibility polish
+- historical level replay only if authoritative historical snapshots become available
+
+### No longer wholly deferred
+- Match Records Broken / Personal Best celebration support is implemented in
+  the Post-Match Celebration system.
 
 ---
 
@@ -1071,7 +1240,10 @@ Future changes should still use the normal branch / preview / validation flow un
 19. Did Bat is separate and remains false until a player enters the innings.
 20. POM recommendation uses **pre-POM XP**; +15 is applied only to final selected POM.
 21. Post-finalisation POM correction is not active until its migration/RPC is installed and tested.
-22. Deferred player name/avatar changes require a source-of-truth audit in Supabase mode before implementation.
+22. APK Pending Review / Admin correction is included in Production `main`; do not describe it as feature-branch-only.
+23. Post-Match Celebration and Historical Match Celebration Replay are included in Production `main`.
+24. Historical celebration replay is read-only and must not fabricate missing XP, levels, or event-backed stats.
+25. Deferred player name/avatar changes require a source-of-truth audit in Supabase mode before implementation.
 
 ---
 

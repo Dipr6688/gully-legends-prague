@@ -31,8 +31,11 @@ Implemented:
 - Public Supabase-backed website reads
 - Secure Admin login with password reset
 - Admin-only Create Match, match scoring, and atomic finalisation
+- APK Pending Review / Admin correction workflow for APK-submitted matches
 - Quick Scoring with single-batter/two-batter modes, innings breaks, undo, wides,
   no-balls, wickets, run-outs, and mobile-friendly scoring controls
+- Post-Match Celebration after official finalisation, plus historical celebration
+  replay from official scorecards
 - Private server-side automatic Team Balance / Shuffle for Available Today
   players
 - Match-day Fielding Helpers for catches and run-outs without changing team
@@ -74,6 +77,9 @@ Not done in this repository:
   match-result calculations.
 - `/gallery` - Shared Gully photo memory wall backed by Supabase Storage.
 - `/admin` - Admin Control Room.
+- `/admin/apk-imports` - Admin-only APK Pending Review and correction workflow.
+- `/admin/apk-imports/[importId]` - Review, correct, reject, or finalise an APK
+  import through the website engine.
 - `/admin/supabase-data-check` - Admin-only Supabase data diagnostics.
 - `/admin/import-local-data` - Admin-only local demo import utility.
 
@@ -170,6 +176,24 @@ Important RPCs:
 The match finalisation RPC applies career stats and progression atomically and
 preserves idempotency through `match_stat_applications`.
 
+## APK Pending Review
+
+APK review/correction functionality is included in Production `main`.
+
+The APK can upload match payloads to the website for Admin review. Imports land
+in Pending Review rather than becoming official immediately. The website Admin
+can inspect the raw APK data, edit the Admin working copy, reject the import, or
+finalise it through the existing website finalisation engine.
+
+Key rules:
+
+- APK imports are Admin-only and have no public/anonymous access.
+- Demo APK imports cannot create official matches.
+- Corrections use the Admin working copy and preserve the raw payload.
+- Finalising an APK import still uses the website's authoritative scoring,
+  result, POM, XP, progression, and ledger architecture.
+- The APK integration does not replace normal Create Match / Quick Scoring.
+
 ## Admin Authentication
 
 Admin login uses:
@@ -213,7 +237,9 @@ The match workflow supports:
 - Dismissal details only for wickets that have actually occurred
 - Automatic innings stop rules
 - Atomic Supabase finalisation
+- Post-finalisation celebration for newly finalised official matches
 - Read-only finalised scorecard view
+- Read-only historical celebration replay from official scorecards
 - Scheduled fixture deletion before play starts
 
 Result rules:
@@ -284,6 +310,67 @@ Monthly Beasts are discipline awards:
 
 Hall of Legends is separate from Monthly Beasts. It ranks raw statistical and
 career leaders such as runs, bowler wickets, catches, XP, and Level.
+
+## Post-Match Celebration
+
+Production `main` includes the Post-Match Celebration system.
+
+Core files:
+
+- `lib/post-match-celebration.ts`
+- `components/matches/PostMatchCelebration.tsx`
+- `components/matches/MatchScorecard.tsx`
+- `public/ui/post-match-celebration/*.svg`
+
+Architecture:
+
+- `PostMatchCelebrationSummary` is the typed celebration payload.
+- A live summary is created only after successful official Admin finalisation.
+- Existing finalisation, XP, result, and POM engines remain authoritative.
+- There is no second XP engine.
+- Demo completion, failed finalisation, pending APK imports, and idempotent
+  retries without progression snapshots do not replay fake progression.
+
+Live celebration includes:
+
+- winner/result hero
+- official Game Number, scores, and result text
+- official Player of the Match
+- Gully Records
+- Personal Bests
+- level-up cards when authoritative before/after progression exists
+- XP earned
+- responsive celebration UI with custom SVG assets
+
+Historical Match Celebration Replay:
+
+- available from official historical scorecards through `VIEW MATCH CELEBRATION`
+- read-only
+- reuses the same UI in historical mode
+- baseline contains only official finalised matches before the target match
+- same-day chronology uses official `matchNumber` / Game Number
+- target match is excluded from its own baseline
+- later matches never affect earlier historical celebrations
+- strict record improvement means broken; equal record is not broken; no earlier
+  record is `firstRecord`
+- Personal Best requires strict improvement, with first qualifying PB supported
+
+Historical XP and legacy-data safety:
+
+- only stored `xpBreakdown.awardedXP` is displayed
+- missing XP is omitted, never treated as zero
+- historical before/after levels are not reconstructed when not provable
+- no fake level-up or XP progress bar is shown
+- missing event-backed fours, sixes, and related metrics remain unknown and are
+  not fabricated as zero
+
+Personal Best UI:
+
+- cricket PB metrics remain: runs, wickets, catches, run-outs, stumpings, fours,
+  and sixes
+- `matchXP` is intentionally not shown as a Personal Best card
+- XP has its own Match XP section
+- cricket metric singular/plural formatting is handled in the celebration UI
 
 ## Gallery
 
@@ -376,9 +463,20 @@ npm.cmd run build
 ```
 
 The current test suite covers progression, Player Power reset behavior, team
-balancing, match records, scorecard validation, Hall of Legends, Monthly
-Beasts, Formula Room, Dashboard behavior, Gallery persistence, and Admin
-security checks. As of the latest stable verification, all `426` tests pass.
+balancing, match records, scorecard validation, APK review safety, Hall of
+Legends, Monthly Beasts, Formula Room, Dashboard behavior, Gallery persistence,
+Post-Match Celebration, historical celebration replay, and Admin security
+checks.
+
+Current production release verification:
+
+- `493/493` tests passing
+- lint passed
+- typecheck passed
+- build passed
+- Vercel Preview passed
+- Production deployment passed
+- smoke-tested successfully on `https://www.gullylegends.eu`
 
 ## Agent Handoff
 
