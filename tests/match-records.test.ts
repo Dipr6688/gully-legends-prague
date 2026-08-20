@@ -1102,8 +1102,44 @@ test("Quick Scoring rejects the same bowler for consecutive overs", () => {
     ])
   );
 
-  assert.equal(derived.legalBalls, 6);
-  assert.match(derived.missingInformation.join(" "), /previous over bowler/);
+  assert.equal(derived.legalBalls, 7);
+  assert.equal(derived.bowlingOvers[0]?.bowlerId, "aninda");
+  assert.equal(derived.bowlingOvers[1]?.bowlerId, "aninda");
+  assert.match(derived.missingInformation.join(" "), /Over 2 uses the same bowler as Over 1/);
+});
+
+test("Quick Scoring keeps invalid repeated-bowler overs counted and reports once per over", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      ...quickLegalOver(1, "aninda"),
+      ...quickLegalOver(7, "aninda")
+    ])
+  );
+
+  assert.equal(derived.legalBalls, 12);
+  assert.equal(derived.completedOvers, 2);
+  assert.equal(derived.bowlingOvers.length, 2);
+  assert.deepEqual(derived.bowlingOvers.map((over) => over.legalBalls), [6, 6]);
+  assert.deepEqual(derived.missingInformation, [
+    "Over 2 uses the same bowler as Over 1."
+  ]);
+});
+
+test("Quick Scoring reports separate repeated-bowler violations for separate overs", () => {
+  const derived = deriveQuickScoringInnings(
+    quickInput([
+      ...quickLegalOver(1, "aninda"),
+      ...quickLegalOver(7, "aninda"),
+      ...quickLegalOver(13, "dipanjan"),
+      ...quickLegalOver(19, "dipanjan")
+    ])
+  );
+
+  assert.equal(derived.legalBalls, 24);
+  assert.deepEqual(derived.missingInformation, [
+    "Over 2 uses the same bowler as Over 1.",
+    "Over 4 uses the same bowler as Over 3."
+  ]);
 });
 
 test("Quick Scoring sixth-ball undo reopens the over", () => {

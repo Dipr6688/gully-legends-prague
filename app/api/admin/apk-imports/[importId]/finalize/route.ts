@@ -6,6 +6,10 @@ import {
   assemblePendingImportMatch,
   buildApkOfficialMatchId
 } from "@/lib/app-sync/assemble-pending-import";
+import {
+  getApkReviewPayload,
+  isApkReviewWorkingCopyStale
+} from "@/lib/app-sync/review-working-copy";
 import { isValidIsoCalendarDate } from "@/lib/app-sync/prague-date";
 import { buildFinalisationPlan } from "@/lib/supabase/match-finalisation-plan";
 import {
@@ -41,6 +45,16 @@ function getPlayedPlayerIds(match: MatchRecord): string[] {
         .map((performance) => performance.playerId)
     )
   ).sort();
+}
+
+function parseExpectedReviewVersion(value: FormDataEntryValue | null): number | null {
+  const rawValue = String(value ?? "").trim();
+
+  if (!rawValue) return null;
+
+  const parsed = Number.parseInt(rawValue, 10);
+
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function revalidateFinalisedImportPages(importId: string, matchId: string, playerIds: string[]) {
@@ -79,6 +93,9 @@ export async function POST(
   const formData = await request.formData();
   const correctedMatchDate = String(formData.get("matchDate") ?? "").trim();
   const selectedPom = String(formData.get("playerOfMatchId") ?? "").trim() || null;
+  const expectedReviewVersion = parseExpectedReviewVersion(
+    formData.get("expectedReviewVersion")
+  );
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getUser();
 
@@ -116,6 +133,23 @@ export async function POST(
       );
     }
 
+    if (isApkReviewWorkingCopyStale(importRecord)) {
+      throw new SupabaseApkImportError(
+        "A NEWER APK SYNC VERSION IS AVAILABLE. Reset or review the latest raw APK data before finalising.",
+        "not_allowed"
+      );
+    }
+
+    if (
+      importRecord.reviewStatus === "pending_review" &&
+      expectedReviewVersion !== (importRecord.reviewVersion ?? 0)
+    ) {
+      throw new SupabaseApkImportError(
+        "This match was changed in another Admin session. Reload the latest version before finalising.",
+        "conflict"
+      );
+    }
+
     const matchDate = correctedMatchDate || importRecord.matchDate;
 
     if (!matchDate || !isValidIsoCalendarDate(matchDate)) {
@@ -127,7 +161,7 @@ export async function POST(
 
     const officialMatchId = buildApkOfficialMatchId(importRecord.id);
     const assembly = assemblePendingImportMatch({
-      payload: importRecord.rawPayload,
+      payload: getApkReviewPayload(importRecord),
       matchId: officialMatchId,
       matchDate,
       matchNumber: null,

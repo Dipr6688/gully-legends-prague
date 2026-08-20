@@ -23,6 +23,13 @@ export type ApkMatchImportRow = {
   raw_payload: AppSyncMatchPayload;
   derived_match_payload: MatchRecord | null;
   validation_result: Record<string, unknown> | null;
+  review_payload?: AppSyncMatchPayload | null;
+  review_derived_match_payload?: MatchRecord | null;
+  review_validation_result?: Record<string, unknown> | null;
+  review_source_sync_version?: number | null;
+  review_version?: number | null;
+  review_updated_at?: string | null;
+  review_is_stale?: boolean | null;
   finalised_match_id: string | null;
   created_by: string | null;
   updated_by: string | null;
@@ -58,6 +65,7 @@ export class SupabaseApkImportError extends Error {
     readonly code:
       | "not_found"
       | "not_allowed"
+      | "conflict"
       | "write_failed"
       | "same_day_pending"
       | "invalid_request"
@@ -79,10 +87,17 @@ function rowToImport(row: ApkMatchImportRow): ApkMatchImport {
     matchDate: row.match_date,
     importedAt: row.imported_at,
     updatedAt: row.updated_at,
-    rawPayload: row.raw_payload,
-    derivedMatch: row.derived_match_payload,
-    validationResult: row.validation_result ?? {},
-    finalisedMatchId: row.finalised_match_id,
+      rawPayload: row.raw_payload,
+      derivedMatch: row.derived_match_payload,
+      validationResult: row.validation_result ?? {},
+      reviewPayload: row.review_payload ?? null,
+      reviewDerivedMatch: row.review_derived_match_payload ?? null,
+      reviewValidationResult: row.review_validation_result ?? null,
+      reviewSourceSyncVersion: row.review_source_sync_version ?? null,
+      reviewVersion: row.review_version ?? 0,
+      reviewUpdatedAt: row.review_updated_at ?? null,
+      reviewIsStale: row.review_is_stale ?? false,
+      finalisedMatchId: row.finalised_match_id,
     createdBy: row.created_by,
     updatedBy: row.updated_by
   };
@@ -221,6 +236,7 @@ export class SupabaseApkImportRepository {
     const { data, error } = (await this.client
       .from("apk_match_imports")
       .select("*")
+      .in("review_status", ["pending_review", "correction_pending"])
       .order("match_date", { ascending: false, nullsFirst: false })
       .order("started_at", { ascending: false, nullsFirst: false })
       .order("imported_at", { ascending: false })) as unknown as {
@@ -271,6 +287,7 @@ export class SupabaseApkImportRepository {
         updated_by: userId
       })
       .eq("id", importId)
+      .eq("review_status", "pending_review")
       .select("*")
       .single()) as unknown as {
       data: ApkMatchImportRow | null;
@@ -278,7 +295,58 @@ export class SupabaseApkImportRepository {
     };
 
     if (error || !data) {
-      throw new SupabaseApkImportError("COULD NOT REJECT APK IMPORT", "write_failed");
+      throw new SupabaseApkImportError("IMPORT NOT PENDING REVIEW", "not_allowed");
+    }
+
+    return rowToImport(data);
+  }
+
+  async saveReviewPayload({
+    importId,
+    payload,
+    derivedMatch,
+    validationResult,
+    matchDate,
+    userId,
+    sourceSyncVersion,
+    expectedReviewVersion
+  }: {
+    importId: string;
+    payload: AppSyncMatchPayload;
+    derivedMatch: MatchRecord | null;
+    validationResult: Record<string, unknown>;
+    matchDate: string | null;
+    userId: string;
+    sourceSyncVersion: number;
+    expectedReviewVersion: number;
+  }): Promise<ApkMatchImport> {
+    const { data, error } = (await this.client
+      .from("apk_match_imports")
+      .update({
+        review_payload: payload,
+        review_derived_match_payload: derivedMatch,
+        review_validation_result: validationResult,
+        review_source_sync_version: sourceSyncVersion,
+        review_version: expectedReviewVersion + 1,
+        review_updated_at: new Date().toISOString(),
+        review_is_stale: false,
+        match_date: matchDate,
+        updated_by: userId
+      })
+      .eq("id", importId)
+      .eq("review_status", "pending_review")
+      .eq("review_version", expectedReviewVersion)
+      .select("*")
+      .single()) as unknown as {
+      data: ApkMatchImportRow | null;
+      error: SupabaseErrorLike | null;
+    };
+
+    if (error || !data) {
+      throw new SupabaseApkImportError(
+        "REVIEW COPY CHANGED - RELOAD BEFORE SAVING",
+        "conflict"
+      );
     }
 
     return rowToImport(data);
@@ -292,7 +360,7 @@ export class SupabaseApkImportRepository {
       .select("*")
       .eq("match_date", current.matchDate)
       .eq("is_demo", false)
-      .eq("review_status", "pending_review")
+      .in("review_status", ["pending_review", "correction_pending"])
       .neq("id", current.id)) as unknown as {
       data: ApkMatchImportRow[] | null;
       error: SupabaseErrorLike | null;

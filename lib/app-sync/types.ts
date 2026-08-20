@@ -48,6 +48,13 @@ export type ApkMatchImport = {
   rawPayload: AppSyncMatchPayload;
   derivedMatch: MatchRecord | null;
   validationResult: Record<string, unknown> | null;
+  reviewPayload?: AppSyncMatchPayload | null;
+  reviewDerivedMatch?: MatchRecord | null;
+  reviewValidationResult?: Record<string, unknown> | null;
+  reviewSourceSyncVersion?: number | null;
+  reviewVersion?: number | null;
+  reviewUpdatedAt?: string | null;
+  reviewIsStale?: boolean | null;
   finalisedMatchId: string | null;
   createdBy?: string | null;
   updatedBy?: string | null;

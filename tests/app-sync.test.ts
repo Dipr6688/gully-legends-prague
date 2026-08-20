@@ -5,8 +5,15 @@ import {
   getPragueMatchDateFromTimestamp,
   isValidIsoCalendarDate
 } from "../lib/app-sync/prague-date";
+import { buildBowlingFigures } from "../lib/match-scorecard";
+import { calculateCompletedBowlingOvers } from "../lib/match-records";
 import { XP_RULES, calculateSharedPlayerMatchXP } from "../lib/progression";
 import { deriveQuickScoringInnings, undoLastQuickScoringEvent } from "../lib/quick-scoring";
+import {
+  SupabaseApkImportError,
+  SupabaseApkImportRepository
+} from "../lib/supabase/apk-import-repository";
+import type { AppSyncMatchPayload } from "../lib/app-sync/types";
 import type { PlayerMatchPerformance, QuickScoringEvent } from "../lib/types/match";
 
 const timestamp = "2026-08-19T10:00:00.000Z";
@@ -32,6 +39,135 @@ function event(
     ...overrides
   };
 }
+
+function appSyncPayload(
+  overrides: Partial<AppSyncMatchPayload> = {}
+): AppSyncMatchPayload {
+  return {
+    offlineMatchId: "offline-1",
+    syncVersion: 1,
+    isDemo: false,
+    startedAt: timestamp,
+    completedAt: timestamp,
+    matchName: "APK Review Test",
+    venue: "CZU Gully Arena",
+    scheduledOversPerInnings: 2,
+    battingMode: "two_batter",
+    battingFirstTeamId: "teamA",
+    teamAPlayerIds: ["aninda", "arunabha"],
+    teamBPlayerIds: ["atripan", "biplab"],
+    sharedPlayerId: null,
+    fieldingHelperIds: [],
+    inningsAEvents: [],
+    inningsBEvents: [],
+    ...overrides
+  };
+}
+
+function apkImportRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "import-1",
+    offline_match_id: "offline-1",
+    source: "apk",
+    is_demo: false,
+    sync_version: 1,
+    review_status: "pending_review",
+    started_at: timestamp,
+    completed_at: timestamp,
+    match_date: "2026-08-19",
+    imported_at: timestamp,
+    updated_at: timestamp,
+    raw_payload: appSyncPayload(),
+    derived_match_payload: null,
+    validation_result: {},
+    review_payload: null,
+    review_derived_match_payload: null,
+    review_validation_result: null,
+    review_source_sync_version: null,
+    review_version: 0,
+    review_updated_at: null,
+    review_is_stale: false,
+    finalised_match_id: null,
+    created_by: "admin-user",
+    updated_by: "admin-user",
+    ...overrides
+  };
+}
+
+function createMutationClient(initialRow: Record<string, unknown>) {
+  let row = { ...initialRow };
+  const calls: Array<{
+    table: string;
+    values: Record<string, unknown>;
+    filters: Array<[string, unknown]>;
+  }> = [];
+
+  return {
+    calls,
+    get row() {
+      return row;
+    },
+    from(table: string) {
+      return {
+        update(values: Record<string, unknown>) {
+          const filters: Array<[string, unknown]> = [];
+          const call = { table, values, filters };
+          calls.push(call);
+          const chain = {
+            eq(column: string, value: unknown) {
+              filters.push([column, value]);
+              return chain;
+            },
+            select() {
+              return chain;
+            },
+            single() {
+              const matches = filters.every(([column, value]) => row[column] === value);
+
+              if (!matches) {
+                return {
+                  data: null,
+                  error: { message: "No rows", code: "PGRST116" }
+                };
+              }
+
+              row = { ...row, ...values };
+
+              return { data: row, error: null };
+            }
+          };
+
+          return chain;
+        }
+      };
+    }
+  };
+}
+
+function legalOver(firstSequence: number, bowlerId: string): QuickScoringEvent[] {
+  return Array.from({ length: 6 }, (_, index) =>
+    event(firstSequence + index, { bowlerId })
+  );
+}
+
+function changeOverBowler(
+  events: QuickScoringEvent[],
+  overNumber: number,
+  bowlerId: string
+): QuickScoringEvent[] {
+  let legalBalls = 0;
+
+  return events.map((quickEvent) => {
+    const currentOver = Math.floor(legalBalls / 6) + 1;
+
+    if (quickEvent.legalDelivery) legalBalls += 1;
+
+    return currentOver === overNumber
+      ? { ...quickEvent, bowlerId }
+      : quickEvent;
+  });
+}
+
 
 test("app-sync derives Prague match date from startedAt instead of UTC slicing", () => {
   assert.equal(
@@ -468,7 +604,303 @@ test("finalise-from-pending blocks demo imports and same-day earlier pending imp
   assert.doesNotMatch(route, /markFinalised/);
   assert.doesNotMatch(route, /getNextAvailableMatchNumber/);
   assert.match(repository, /\.eq\("is_demo", false\)/);
-  assert.match(repository, /\.eq\("review_status", "pending_review"\)/);
+  assert.match(repository, /\.in\("review_status", \["pending_review", "correction_pending"\]\)/);
+  assert.match(route, /getApkReviewPayload\(importRecord\)/);
+  assert.match(route, /isApkReviewWorkingCopyStale\(importRecord\)/);
+});
+
+test("APK Pending Review list excludes rejected and finalised imports", () => {
+  const repository = readFileSync("lib/supabase/apk-import-repository.ts", "utf8");
+  const page = readFileSync("app/admin/apk-imports/page.tsx", "utf8");
+  const detailPage = readFileSync("app/admin/apk-imports/[importId]/page.tsx", "utf8");
+
+  assert.match(repository, /\.in\("review_status", \["pending_review", "correction_pending"\]\)/);
+  assert.match(page, /listForReview/);
+  assert.doesNotMatch(page, /reviewStatus !== "finalised"[\s\S]*REJECT/);
+  assert.match(detailPage, /REJECTED - audit record preserved/);
+  assert.match(detailPage, /importRecord\.reviewStatus === "pending_review" \? \(/);
+  assert.doesNotMatch(
+    detailPage,
+    /importRecord\.reviewStatus !== "finalised" \? \([\s\S]*REJECT IMPORT/
+  );
+});
+
+test("APK review working copy migration preserves raw payload and marks stale corrections", () => {
+  const migration = readFileSync(
+    "supabase/migrations/20260820120000_apk_review_working_copy.sql",
+    "utf8"
+  );
+  const repository = readFileSync("lib/supabase/apk-import-repository.ts", "utf8");
+  const route = readFileSync(
+    "app/api/admin/apk-imports/[importId]/working-copy/route.ts",
+    "utf8"
+  );
+  const helper = readFileSync("lib/app-sync/review-working-copy.ts", "utf8");
+
+  assert.match(migration, /add column if not exists review_payload jsonb/);
+  assert.match(migration, /add column if not exists review_source_sync_version integer/);
+  assert.match(migration, /add column if not exists review_is_stale boolean not null default false/);
+  assert.match(migration, /review_is_stale = public\.apk_match_imports\.review_payload is not null/);
+  assert.match(migration, /raw_payload = excluded\.raw_payload/);
+  assert.doesNotMatch(migration, /drop table|truncate table|delete from public\.apk_match_imports/i);
+  assert.match(repository, /saveReviewPayload/);
+  assert.match(repository, /review_payload: payload/);
+  assert.doesNotMatch(repository, /raw_payload: payload/);
+  assert.match(route, /getApkReviewPayload/);
+  assert.match(route, /rawPayload/);
+  assert.match(route, /A newer APK upload is available/);
+  assert.match(helper, /updateApkReviewOverBowler/);
+  assert.match(helper, /groupApkReviewEventsByOver/);
+  assert.match(helper, /insertApkReviewEventAfter/);
+  assert.match(helper, /assembleApkReviewWorkingCopy/);
+});
+
+test("APK review working-copy saves use optimistic review-version concurrency", async () => {
+  const raw = appSyncPayload({ syncVersion: 1 });
+  const tabA = appSyncPayload({
+    syncVersion: 1,
+    matchName: "Tab A Correction"
+  });
+  const tabB = appSyncPayload({
+    syncVersion: 1,
+    matchName: "Tab B Correction"
+  });
+  const client = createMutationClient(
+    apkImportRow({
+      raw_payload: raw,
+      review_payload: raw,
+      review_source_sync_version: 1,
+      review_version: 3
+    })
+  );
+  const repository = new SupabaseApkImportRepository(client as never);
+
+  const firstSave = await repository.saveReviewPayload({
+    importId: "import-1",
+    payload: tabA,
+    derivedMatch: null,
+    validationResult: { ok: true, errors: [] },
+    matchDate: "2026-08-19",
+    userId: "admin-user",
+    sourceSyncVersion: 1,
+    expectedReviewVersion: 3
+  });
+
+  assert.equal(firstSave.reviewVersion, 4);
+  assert.equal(client.row.review_payload, tabA);
+  assert.deepEqual(client.calls[0]?.filters, [
+    ["id", "import-1"],
+    ["review_status", "pending_review"],
+    ["review_version", 3]
+  ]);
+
+  await assert.rejects(
+    () =>
+      repository.saveReviewPayload({
+        importId: "import-1",
+        payload: tabB,
+        derivedMatch: null,
+        validationResult: { ok: true, errors: [] },
+        matchDate: "2026-08-19",
+        userId: "admin-user",
+        sourceSyncVersion: 1,
+        expectedReviewVersion: 3
+      }),
+    (error) =>
+      error instanceof SupabaseApkImportError &&
+      error.code === "conflict" &&
+      error.message.includes("REVIEW COPY CHANGED")
+  );
+  assert.equal(client.row.review_payload, tabA);
+  assert.equal(client.row.review_version, 4);
+
+  const reloadedSave = await repository.saveReviewPayload({
+    importId: "import-1",
+    payload: tabB,
+    derivedMatch: null,
+    validationResult: { ok: true, errors: [] },
+    matchDate: "2026-08-19",
+    userId: "admin-user",
+    sourceSyncVersion: 1,
+    expectedReviewVersion: 4
+  });
+
+  assert.equal(reloadedSave.reviewVersion, 5);
+  assert.equal(client.row.review_payload, tabB);
+});
+
+test("APK review routes carry expectedReviewVersion for every mutation and finalise", () => {
+  const detailPage = readFileSync("app/admin/apk-imports/[importId]/page.tsx", "utf8");
+  const workingCopyRoute = readFileSync(
+    "app/api/admin/apk-imports/[importId]/working-copy/route.ts",
+    "utf8"
+  );
+  const finaliseRoute = readFileSync(
+    "app/api/admin/apk-imports/[importId]/finalize/route.ts",
+    "utf8"
+  );
+  const repository = readFileSync("lib/supabase/apk-import-repository.ts", "utf8");
+
+  assert.match(detailPage, /name="expectedReviewVersion"/);
+  assert.match(workingCopyRoute, /getExpectedReviewVersion\(formData\)/);
+  assert.match(workingCopyRoute, /importRecord\.reviewVersion \?\? 0/);
+  assert.match(repository, /\.eq\("review_version", expectedReviewVersion\)/);
+  assert.match(finaliseRoute, /parseExpectedReviewVersion/);
+  assert.match(finaliseRoute, /Reload the latest version before finalising/);
+});
+
+test("APK import reject is limited to pending_review and preserves other statuses", async () => {
+  const pendingClient = createMutationClient(apkImportRow({ review_status: "pending_review" }));
+  const pendingRepository = new SupabaseApkImportRepository(pendingClient as never);
+  const rejected = await pendingRepository.rejectImport("import-1", "admin-user");
+
+  assert.equal(rejected.reviewStatus, "rejected");
+  assert.deepEqual(pendingClient.calls[0]?.filters, [
+    ["id", "import-1"],
+    ["review_status", "pending_review"]
+  ]);
+
+  for (const status of ["finalised", "correction_pending", "rejected"]) {
+    const client = createMutationClient(
+      apkImportRow({
+        review_status: status,
+        finalised_match_id: status === "finalised" ? "match-1" : null
+      })
+    );
+    const repository = new SupabaseApkImportRepository(client as never);
+
+    await assert.rejects(
+      () => repository.rejectImport("import-1", "admin-user"),
+      (error) =>
+        error instanceof SupabaseApkImportError &&
+        error.code === "not_allowed" &&
+        error.message === "IMPORT NOT PENDING REVIEW"
+    );
+    assert.equal(client.row.review_status, status);
+    assert.equal(
+      client.row.finalised_match_id,
+      status === "finalised" ? "match-1" : null
+    );
+  }
+});
+
+test("APK review working-copy over-bowler correction re-derives two overs cleanly", () => {
+  const repeatedBowlerEvents = [
+    ...legalOver(1, "atripan"),
+    ...legalOver(7, "atripan")
+  ];
+  const before = deriveQuickScoringInnings({
+    battingTeamId: "teamA",
+    bowlingTeamId: "teamB",
+    battingPlayerIds: ["aninda", "arunabha"],
+    bowlingPlayerIds: ["atripan", "biplab"],
+    events: repeatedBowlerEvents,
+    battingMode: "two_batter"
+  });
+  const beforeFigures = buildBowlingFigures(before.bowlingOvers, (playerId) => playerId);
+
+  assert.equal(calculateCompletedBowlingOvers(before.bowlingOvers), 2);
+  assert.equal(beforeFigures.find((figure) => figure.playerId === "atripan")?.overs, "2.0");
+  assert.deepEqual(before.missingInformation, [
+    "Over 2 uses the same bowler as Over 1."
+  ]);
+
+  const correctedEvents = changeOverBowler(repeatedBowlerEvents, 2, "biplab");
+  const after = deriveQuickScoringInnings({
+    battingTeamId: "teamA",
+    bowlingTeamId: "teamB",
+    battingPlayerIds: ["aninda", "arunabha"],
+    bowlingPlayerIds: ["atripan", "biplab"],
+    events: correctedEvents,
+    battingMode: "two_batter"
+  });
+  const afterFigures = buildBowlingFigures(after.bowlingOvers, (playerId) => playerId);
+
+  assert.equal(calculateCompletedBowlingOvers(after.bowlingOvers), 2);
+  assert.equal(afterFigures.find((figure) => figure.playerId === "atripan")?.overs, "1.0");
+  assert.equal(afterFigures.find((figure) => figure.playerId === "biplab")?.overs, "1.0");
+  assert.equal(after.missingInformation.length, 0);
+  assert.equal(after.runs, before.runs);
+  assert.equal(after.legalBalls, before.legalBalls);
+});
+
+test("APK finalisation source uses corrected working copy and blocks stale review copies", () => {
+  const finaliseRoute = readFileSync(
+    "app/api/admin/apk-imports/[importId]/finalize/route.ts",
+    "utf8"
+  );
+  const helper = readFileSync("lib/app-sync/review-working-copy.ts", "utf8");
+  const rawPayload = appSyncPayload({
+    inningsAEvents: [...legalOver(1, "atripan"), ...legalOver(7, "atripan")]
+  });
+  const correctedPayload = {
+    ...rawPayload,
+    inningsAEvents: changeOverBowler(rawPayload.inningsAEvents, 2, "biplab")
+  };
+  const importRecord = {
+    ...apkImportRow({
+      sync_version: 2,
+      raw_payload: rawPayload,
+      review_payload: correctedPayload,
+      review_source_sync_version: 2,
+      review_version: 4,
+      review_is_stale: false
+    }),
+    syncVersion: 2,
+    rawPayload,
+    reviewPayload: correctedPayload,
+    reviewSourceSyncVersion: 2,
+    reviewVersion: 4,
+    reviewIsStale: false
+  };
+
+  assert.match(finaliseRoute, /payload: getApkReviewPayload\(importRecord\)/);
+  assert.match(finaliseRoute, /isApkReviewWorkingCopyStale\(importRecord\)/);
+  assert.match(helper, /return importRecord\.reviewPayload \?\? importRecord\.rawPayload/);
+  assert.equal(importRecord.reviewPayload.inningsAEvents[6]?.bowlerId, "biplab");
+  assert.equal(importRecord.rawPayload.inningsAEvents[6]?.bowlerId, "atripan");
+});
+
+test("APK v2 keeps Admin review copy but marks it stale until reset", () => {
+  const migration = readFileSync(
+    "supabase/migrations/20260820120000_apk_review_working_copy.sql",
+    "utf8"
+  );
+  const helper = readFileSync("lib/app-sync/review-working-copy.ts", "utf8");
+  const route = readFileSync(
+    "app/api/admin/apk-imports/[importId]/working-copy/route.ts",
+    "utf8"
+  );
+  const finaliseRoute = readFileSync(
+    "app/api/admin/apk-imports/[importId]/finalize/route.ts",
+    "utf8"
+  );
+
+  assert.match(migration, /raw_payload = excluded\.raw_payload/);
+  assert.doesNotMatch(migration, /review_payload = excluded\.raw_payload/);
+  assert.match(migration, /review_is_stale = public\.apk_match_imports\.review_payload is not null/);
+  assert.match(helper, /importRecord\.syncVersion > importRecord\.reviewSourceSyncVersion/);
+  assert.match(helper, /importRecord\.reviewIsStale === true/);
+  assert.match(route, /action !== "reset_to_raw"/);
+  assert.match(finaliseRoute, /A NEWER APK SYNC VERSION IS AVAILABLE/);
+});
+
+test("Demo APK imports remain editable for review but cannot become official", () => {
+  const detailPage = readFileSync("app/admin/apk-imports/[importId]/page.tsx", "utf8");
+  const workingCopyRoute = readFileSync(
+    "app/api/admin/apk-imports/[importId]/working-copy/route.ts",
+    "utf8"
+  );
+  const finaliseRoute = readFileSync(
+    "app/api/admin/apk-imports/[importId]/finalize/route.ts",
+    "utf8"
+  );
+
+  assert.doesNotMatch(workingCopyRoute, /importRecord\.isDemo[\s\S]*ONLY PENDING APK IMPORTS CAN BE EDITED/);
+  assert.match(detailPage, /importRecord\.isDemo \? "DEMO TEST MATCH"/);
+  assert.match(detailPage, /Demo imports cannot create official matches/);
+  assert.match(finaliseRoute, /DEMO APK IMPORTS CANNOT CREATE OFFICIAL MATCHES/);
+  assert.doesNotMatch(finaliseRoute, /getNextAvailableMatchNumber/);
 });
 
 test("APK selected POM must be a website-eligible match participant", () => {

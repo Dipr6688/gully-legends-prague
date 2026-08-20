@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Edit3, Lock } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { requireAdmin } from "@/lib/admin/auth";
@@ -11,14 +11,22 @@ import {
   getOrderedInnings,
   type ScorecardInnings
 } from "@/lib/match-scorecard";
+import {
+  getApkReviewDerivedMatch,
+  getApkReviewPayload,
+  getApkReviewValidationResult,
+  groupApkReviewEventsByOver,
+  isApkReviewWorkingCopyStale
+} from "@/lib/app-sync/review-working-copy";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { SupabaseApkImportRepository } from "@/lib/supabase/apk-import-repository";
-import type { ApkMatchImport } from "@/lib/app-sync/types";
+import type { ApkMatchImport, AppSyncMatchPayload } from "@/lib/app-sync/types";
+import type { QuickScoringEvent } from "@/lib/types/match";
 
 export const dynamic = "force-dynamic";
 
 function getValidationErrors(importRecord: ApkMatchImport): string[] {
-  const errors = importRecord.validationResult?.errors;
+  const errors = getApkReviewValidationResult(importRecord)?.errors;
 
   return Array.isArray(errors)
     ? errors.filter((error): error is string => typeof error === "string")
@@ -26,13 +34,337 @@ function getValidationErrors(importRecord: ApkMatchImport): string[] {
 }
 
 function getRecommendation(importRecord: ApkMatchImport): string | null {
-  const recommendation = importRecord.validationResult?.pomRecommendation;
+  const recommendation = getApkReviewValidationResult(importRecord)?.pomRecommendation;
 
   if (!recommendation || typeof recommendation !== "object") return null;
 
   const playerId = (recommendation as Record<string, unknown>).recommendedPlayerId;
 
   return typeof playerId === "string" ? playerId : null;
+}
+
+function playerOptions(playerIds: string[], selected?: string | null) {
+  return (
+    <>
+      <option value="">-</option>
+      {playerIds.map((playerId) => (
+        <option key={playerId} value={playerId}>
+          {getPlayerById(playerId)?.name ?? playerId}
+        </option>
+      ))}
+      {selected && !playerIds.includes(selected) ? (
+        <option value={selected}>{getPlayerById(selected)?.name ?? selected}</option>
+      ) : null}
+    </>
+  );
+}
+
+function EventEditor({
+  importId,
+  payload,
+  inningsKey,
+  event,
+  overNumber,
+  legalBallInOver,
+  canEdit,
+  expectedReviewVersion
+}: {
+  importId: string;
+  payload: AppSyncMatchPayload;
+  inningsKey: "inningsAEvents" | "inningsBEvents";
+  event: QuickScoringEvent;
+  overNumber: number;
+  legalBallInOver: number | null;
+  canEdit: boolean;
+  expectedReviewVersion: number;
+}) {
+  const battingPlayerIds =
+    event.battingTeamId === "teamA"
+      ? payload.teamAPlayerIds
+      : payload.teamBPlayerIds;
+  const bowlingPlayerIds =
+    event.bowlingTeamId === "teamA"
+      ? payload.teamAPlayerIds
+      : payload.teamBPlayerIds;
+  const fieldingPlayerIds = Array.from(
+    new Set([...bowlingPlayerIds, ...(payload.fieldingHelperIds ?? [])])
+  );
+  const eventType = event.wicket
+    ? "wicket"
+    : event.extraType === "wide"
+      ? "wide"
+      : event.extraType === "no_ball"
+        ? "no_ball"
+        : "runs";
+
+  return (
+    <form
+      action={`/api/admin/apk-imports/${importId}/working-copy`}
+      method="post"
+      className="grid gap-3 rounded-[8px] border border-white/10 bg-black/45 p-3 lg:grid-cols-[0.8fr_1fr_1fr_1fr_1fr_1fr_auto]"
+    >
+      <input type="hidden" name="inningsKey" value={inningsKey} />
+      <input type="hidden" name="eventId" value={event.id} />
+      <input type="hidden" name="expectedReviewVersion" value={expectedReviewVersion} />
+      <div>
+        <p className="text-[0.65rem] font-black uppercase text-stone-500">Ball</p>
+        <b className="text-white">
+          {overNumber}.{legalBallInOver ?? "x"}
+        </b>
+      </div>
+      <label className="grid gap-1 text-[0.65rem] font-black uppercase text-stone-400">
+        Type
+        <select
+          name="eventType"
+          defaultValue={eventType}
+          disabled={!canEdit}
+          className="rounded-[8px] border border-white/15 bg-black/60 px-2 py-2 text-sm text-white"
+        >
+          <option value="runs">Runs</option>
+          <option value="wide">Wide</option>
+          <option value="no_ball">No Ball</option>
+          <option value="wicket">Wicket</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-[0.65rem] font-black uppercase text-stone-400">
+        Batter Runs
+        <select
+          name="batterRuns"
+          defaultValue={event.batterRuns}
+          disabled={!canEdit}
+          className="rounded-[8px] border border-white/15 bg-black/60 px-2 py-2 text-sm text-white"
+        >
+          {[0, 1, 2, 3, 4, 6].map((run) => (
+            <option key={run} value={run}>{run}</option>
+          ))}
+        </select>
+      </label>
+      <label className="grid gap-1 text-[0.65rem] font-black uppercase text-stone-400">
+        NB Runs
+        <select
+          name="noBallRuns"
+          defaultValue={event.extraType === "no_ball" ? event.batterRuns : 0}
+          disabled={!canEdit}
+          className="rounded-[8px] border border-white/15 bg-black/60 px-2 py-2 text-sm text-white"
+        >
+          {[0, 1, 2, 3, 4, 6].map((run) => (
+            <option key={run} value={run}>{run}</option>
+          ))}
+        </select>
+      </label>
+      <label className="grid gap-1 text-[0.65rem] font-black uppercase text-stone-400">
+        Bowler
+        <select
+          name="bowlerId"
+          defaultValue={event.bowlerId}
+          disabled={!canEdit}
+          className="rounded-[8px] border border-white/15 bg-black/60 px-2 py-2 text-sm text-white"
+        >
+          {playerOptions(bowlingPlayerIds, event.bowlerId)}
+        </select>
+      </label>
+      <details className="rounded-[8px] border border-white/10 bg-pitch-950/60 p-2 text-xs text-stone-300">
+        <summary className="cursor-pointer font-black uppercase text-neon-cyan">
+          Wicket Details
+        </summary>
+        <div className="mt-2 grid gap-2">
+          <label className="grid gap-1">
+            Dismissal
+            <select
+              name="wicketType"
+              defaultValue={event.wicket?.type ?? "bowled"}
+              disabled={!canEdit}
+              className="rounded-[8px] border border-white/15 bg-black/60 px-2 py-2 text-white"
+            >
+              <option value="bowled">Bowled</option>
+              <option value="caught">Caught</option>
+              <option value="run_out">Run Out</option>
+              <option value="stumped">Stumped</option>
+              <option value="other_bowler_wicket">Other Bowler Wicket</option>
+            </select>
+          </label>
+          <label className="grid gap-1">
+            Dismissed Batter
+            <select
+              name="dismissedPlayerId"
+              defaultValue={event.wicket?.dismissedPlayerId ?? event.strikerId}
+              disabled={!canEdit}
+              className="rounded-[8px] border border-white/15 bg-black/60 px-2 py-2 text-white"
+            >
+              {playerOptions(battingPlayerIds, event.wicket?.dismissedPlayerId)}
+            </select>
+          </label>
+          <label className="grid gap-1">
+            Fielder / Stumper
+            <select
+              name="fielderId"
+              defaultValue={event.wicket?.fielderId ?? ""}
+              disabled={!canEdit}
+              className="rounded-[8px] border border-white/15 bg-black/60 px-2 py-2 text-white"
+            >
+              {playerOptions(fieldingPlayerIds, event.wicket?.fielderId)}
+            </select>
+          </label>
+          <label className="grid gap-1">
+            New Batter
+            <select
+              name="newBatterId"
+              defaultValue={event.wicket?.newBatterId ?? ""}
+              disabled={!canEdit}
+              className="rounded-[8px] border border-white/15 bg-black/60 px-2 py-2 text-white"
+            >
+              {playerOptions(battingPlayerIds, event.wicket?.newBatterId)}
+            </select>
+          </label>
+        </div>
+      </details>
+      <div className="flex flex-wrap items-end gap-2">
+        <Button type="submit" name="action" value="update_event" disabled={!canEdit}>SAVE</Button>
+        <Button
+          type="submit"
+          name="action"
+          value="insert_after"
+          variant="secondary"
+          disabled={!canEdit}
+        >
+          INSERT
+        </Button>
+        <Button
+          type="submit"
+          name="action"
+          value="delete_event"
+          variant="ghost"
+          disabled={!canEdit}
+        >
+          DELETE
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function EditMatchData({
+  importRecord,
+  payload,
+  canEdit,
+  stale
+}: {
+  importRecord: ApkMatchImport;
+  payload: AppSyncMatchPayload;
+  canEdit: boolean;
+  stale: boolean;
+}) {
+  const expectedReviewVersion = importRecord.reviewVersion ?? 0;
+  const innings = [
+    { key: "inningsAEvents" as const, title: "Team A Batting", events: payload.inningsAEvents },
+    { key: "inningsBEvents" as const, title: "Team B Batting", events: payload.inningsBEvents }
+  ];
+
+  return (
+    <section className="mt-6 rounded-[8px] border border-neon-cyan/30 bg-pitch-950/80 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Edit3 className="h-5 w-5 text-neon-cyan" aria-hidden="true" />
+          <h2 className="font-display text-2xl uppercase text-white">Edit Match Data</h2>
+        </div>
+        <form action={`/api/admin/apk-imports/${importRecord.id}/working-copy`} method="post">
+          <input type="hidden" name="action" value="reset_to_raw" />
+          <input type="hidden" name="expectedReviewVersion" value={expectedReviewVersion} />
+          <Button type="submit" variant="secondary" disabled={importRecord.reviewStatus !== "pending_review"}>
+            RESET TO RAW APK DATA
+          </Button>
+        </form>
+      </div>
+      <p className="mt-2 text-sm text-stone-300">
+        Raw APK data is preserved below. These controls edit the Admin working copy
+        that is re-derived and revalidated before finalisation.
+      </p>
+      {stale ? (
+        <div className="mt-4 rounded-[8px] border border-neon-yellow/40 bg-neon-yellow/10 p-3 text-sm font-bold text-neon-yellow">
+          A newer APK sync version arrived after this working copy was edited. Reset
+          to raw APK data before making more corrections.
+        </div>
+      ) : null}
+      {!canEdit ? (
+        <div className="mt-4 flex items-center gap-2 rounded-[8px] border border-white/15 bg-black/45 p-3 text-sm font-bold text-stone-300">
+          <Lock className="h-4 w-4" aria-hidden="true" />
+          Match data editing is available only for pending review imports.
+        </div>
+      ) : null}
+
+      <div className="mt-5 grid gap-5">
+        {innings.map((inningsBlock) => {
+          const rows = groupApkReviewEventsByOver(inningsBlock.key, inningsBlock.events);
+          const overNumbers = Array.from(new Set(rows.map((row) => row.overNumber)));
+          const bowlingPlayerIds =
+            inningsBlock.key === "inningsAEvents"
+              ? payload.teamBPlayerIds
+              : payload.teamAPlayerIds;
+
+          return (
+            <div key={inningsBlock.key} className="rounded-[8px] border border-white/10 bg-black/35 p-3">
+              <h3 className="font-display text-xl uppercase text-white">{inningsBlock.title}</h3>
+              <div className="mt-3 grid gap-3">
+                {overNumbers.map((overNumber) => {
+                  const firstEvent = rows.find((row) => row.overNumber === overNumber)?.event;
+
+                  return (
+                    <form
+                      key={overNumber}
+                      action={`/api/admin/apk-imports/${importRecord.id}/working-copy`}
+                      method="post"
+                      className="flex flex-wrap items-end gap-2 rounded-[8px] border border-white/10 bg-pitch-950/50 p-3"
+                    >
+                      <input type="hidden" name="action" value="update_over_bowler" />
+                      <input type="hidden" name="inningsKey" value={inningsBlock.key} />
+                      <input type="hidden" name="overNumber" value={overNumber} />
+                      <input type="hidden" name="expectedReviewVersion" value={expectedReviewVersion} />
+                      <label className="grid gap-1 text-[0.65rem] font-black uppercase text-stone-400">
+                        Over {overNumber} Bowler
+                        <select
+                          name="bowlerId"
+                          defaultValue={firstEvent?.bowlerId ?? ""}
+                          disabled={!canEdit}
+                          className="rounded-[8px] border border-white/15 bg-black/60 px-2 py-2 text-sm text-white"
+                        >
+                          {playerOptions(bowlingPlayerIds, firstEvent?.bowlerId)}
+                        </select>
+                      </label>
+                      <Button type="submit" variant="secondary" disabled={!canEdit}>
+                        UPDATE OVER BOWLER
+                      </Button>
+                    </form>
+                  );
+                })}
+                {rows.map((row) => (
+                  <EventEditor
+                    key={row.event.id}
+                    importId={importRecord.id}
+                    payload={payload}
+                    inningsKey={inningsBlock.key}
+                    event={row.event}
+                    overNumber={row.overNumber}
+                    legalBallInOver={row.legalBallInOver}
+                    canEdit={canEdit}
+                    expectedReviewVersion={expectedReviewVersion}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <details className="mt-5 rounded-[8px] border border-white/10 bg-black/45 p-3">
+        <summary className="cursor-pointer font-black uppercase text-neon-yellow">
+          Raw APK Data
+        </summary>
+        <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap text-xs text-stone-300">
+          {JSON.stringify(importRecord.rawPayload, null, 2)}
+        </pre>
+      </details>
+    </section>
+  );
 }
 
 function ScorecardPreview({ innings }: { innings: ScorecardInnings }) {
@@ -105,9 +437,22 @@ export default async function ApkImportReviewPage({
 
   if (!importRecord) notFound();
 
-  const match = importRecord.derivedMatch;
+  const match = getApkReviewDerivedMatch(importRecord);
+  const payload = getApkReviewPayload(importRecord);
   const validationErrors = getValidationErrors(importRecord);
   const recommendedPomId = getRecommendation(importRecord);
+  const reviewIsStale = isApkReviewWorkingCopyStale(importRecord);
+  const canEditReviewData =
+    importRecord.reviewStatus === "pending_review" && !reviewIsStale;
+  const canFinalize =
+    importRecord.reviewStatus === "pending_review" &&
+    !reviewIsStale &&
+    !importRecord.isDemo &&
+    validationErrors.length === 0;
+  const isReadOnly =
+    importRecord.reviewStatus === "rejected" ||
+    importRecord.reviewStatus === "finalised" ||
+    importRecord.reviewStatus === "correction_pending";
   const resolvePlayerName = (playerId: string) => getPlayerById(playerId)?.name ?? playerId;
   const scorecardInnings = match
     ? getOrderedInnings(match).map((innings) =>
@@ -121,7 +466,7 @@ export default async function ApkImportReviewPage({
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-black uppercase text-neon-cyan">APK Pending Review</p>
+            <p className="text-xs font-black uppercase text-neon-cyan">APK Match Review</p>
             <h1 className="font-display text-5xl uppercase comic-title">
               {match?.matchName ?? importRecord.offlineMatchId}
             </h1>
@@ -130,9 +475,19 @@ export default async function ApkImportReviewPage({
             </p>
           </div>
           <span className="rounded-full border border-neon-yellow/40 bg-neon-yellow/15 px-3 py-1 text-xs font-black uppercase text-neon-yellow">
-            {importRecord.isDemo ? "DEMO TEST MATCH" : importRecord.reviewStatus.replace("_", " ")}
+            {importRecord.isDemo ? "DEMO TEST MATCH" : importRecord.reviewStatus.replace("_", " ").toUpperCase()}
           </span>
         </div>
+
+        {isReadOnly ? (
+          <div className="mt-5 rounded-[8px] border border-white/15 bg-black/45 p-4 text-sm font-bold uppercase text-stone-200">
+            {importRecord.reviewStatus === "rejected"
+              ? "REJECTED - audit record preserved. No review actions are available."
+              : importRecord.reviewStatus === "correction_pending"
+                ? "CORRECTION PENDING - a newer APK revision exists for an already-finalised import. This path is read-only for now."
+                : "FINALISED - this import has already become an official match."}
+          </div>
+        ) : null}
 
         {query.error ? (
           <div className="mt-5 rounded-[8px] border border-red-400/40 bg-red-950/40 p-4 text-sm font-bold text-red-100">
@@ -198,6 +553,24 @@ export default async function ApkImportReviewPage({
               </div>
             </section>
 
+            {importRecord.reviewStatus === "pending_review" ? (
+              <EditMatchData
+                importRecord={importRecord}
+                payload={payload}
+                canEdit={canEditReviewData}
+                stale={reviewIsStale}
+              />
+            ) : (
+              <details className="mt-6 rounded-[8px] border border-white/10 bg-black/45 p-3">
+                <summary className="cursor-pointer font-black uppercase text-neon-yellow">
+                  Raw APK Data
+                </summary>
+                <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap text-xs text-stone-300">
+                  {JSON.stringify(importRecord.rawPayload, null, 2)}
+                </pre>
+              </details>
+            )}
+
             <div className="mt-6 grid gap-4">
               {scorecardInnings.map((innings) => (
                 <ScorecardPreview key={innings.innings.battingTeamId} innings={innings} />
@@ -218,59 +591,59 @@ export default async function ApkImportReviewPage({
               </div>
             </section>
 
-            <form
-              action={`/api/admin/apk-imports/${importRecord.id}/finalize`}
-              method="post"
-              className="mt-6 rounded-[8px] border border-neon-cyan/30 bg-pitch-950/80 p-4"
-            >
-              <h2 className="font-display text-2xl uppercase text-white">Finalise From Pending</h2>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <label className="grid gap-2 text-sm font-black uppercase text-stone-300">
-                  Match Date
-                  <input
-                    name="matchDate"
-                    type="date"
-                    defaultValue={match.matchDate}
-                    className="rounded-[8px] border border-white/15 bg-black/50 px-3 py-2 text-white"
-                  />
-                </label>
-                <label className="grid gap-2 text-sm font-black uppercase text-stone-300">
-                  Player of the Match
-                  <select
-                    name="playerOfMatchId"
-                    defaultValue={recommendedPomId ?? ""}
-                    className="rounded-[8px] border border-white/15 bg-black/50 px-3 py-2 text-white"
-                  >
-                    <option value="">No award / tie</option>
-                    {players.map((record) => (
-                      <option key={record.playerId} value={record.playerId}>
-                        {resolvePlayerName(record.playerId)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <p className="mt-3 text-sm text-stone-300">
-                Recommendation: {recommendedPomId ? resolvePlayerName(recommendedPomId) : "No unique winner"}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Button
-                  type="submit"
-                  disabled={
-                    importRecord.isDemo ||
-                    validationErrors.length > 0 ||
-                    importRecord.reviewStatus === "finalised"
-                  }
-                >
-                  FINALIZE MATCH
-                </Button>
-                {importRecord.isDemo ? (
-                  <span className="rounded-[8px] border border-neon-yellow/30 bg-neon-yellow/10 px-3 py-2 text-sm font-black uppercase text-neon-yellow">
-                    Demo imports cannot create official matches
-                  </span>
-                ) : null}
-              </div>
-            </form>
+            {importRecord.reviewStatus === "pending_review" ? (
+              <form
+                action={`/api/admin/apk-imports/${importRecord.id}/finalize`}
+                method="post"
+                className="mt-6 rounded-[8px] border border-neon-cyan/30 bg-pitch-950/80 p-4"
+              >
+                <input
+                  type="hidden"
+                  name="expectedReviewVersion"
+                  value={importRecord.reviewVersion ?? 0}
+                />
+                <h2 className="font-display text-2xl uppercase text-white">Finalise From Pending</h2>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="grid gap-2 text-sm font-black uppercase text-stone-300">
+                    Match Date
+                    <input
+                      name="matchDate"
+                      type="date"
+                      defaultValue={match.matchDate}
+                      className="rounded-[8px] border border-white/15 bg-black/50 px-3 py-2 text-white"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm font-black uppercase text-stone-300">
+                    Player of the Match
+                    <select
+                      name="playerOfMatchId"
+                      defaultValue={recommendedPomId ?? ""}
+                      className="rounded-[8px] border border-white/15 bg-black/50 px-3 py-2 text-white"
+                    >
+                      <option value="">No award / tie</option>
+                      {players.map((record) => (
+                        <option key={record.playerId} value={record.playerId}>
+                          {resolvePlayerName(record.playerId)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <p className="mt-3 text-sm text-stone-300">
+                  Recommendation: {recommendedPomId ? resolvePlayerName(recommendedPomId) : "No unique winner"}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Button type="submit" disabled={!canFinalize}>
+                    FINALIZE MATCH
+                  </Button>
+                  {importRecord.isDemo ? (
+                    <span className="rounded-[8px] border border-neon-yellow/30 bg-neon-yellow/10 px-3 py-2 text-sm font-black uppercase text-neon-yellow">
+                      Demo imports cannot create official matches
+                    </span>
+                  ) : null}
+                </div>
+              </form>
+            ) : null}
           </>
         ) : (
           <p className="mt-6 rounded-[8px] border border-red-400/30 bg-red-950/35 p-4 text-red-100">
@@ -279,7 +652,7 @@ export default async function ApkImportReviewPage({
         )}
 
         <div className="mt-6 flex flex-wrap gap-3">
-          {importRecord.reviewStatus !== "finalised" ? (
+          {importRecord.reviewStatus === "pending_review" ? (
             <form action={`/api/admin/apk-imports/${importRecord.id}/reject`} method="post">
               <Button type="submit" variant="ghost">REJECT IMPORT</Button>
             </form>

@@ -2,7 +2,10 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { isAdminWithClient } from "@/lib/admin/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { SupabaseApkImportRepository } from "@/lib/supabase/apk-import-repository";
+import {
+  SupabaseApkImportError,
+  SupabaseApkImportRepository
+} from "@/lib/supabase/apk-import-repository";
 
 function redirectToImport(
   request: Request,
@@ -42,7 +45,12 @@ export async function POST(
     revalidatePath(`/admin/apk-imports/${importId}`);
 
     return redirectToImport(request, importId, "APK import rejected.", "ok");
-  } catch {
-    return redirectToImport(request, importId, "Could not reject APK import.", "error");
+  } catch (error) {
+    const message =
+      error instanceof SupabaseApkImportError
+        ? error.message
+        : "Could not reject APK import.";
+
+    return redirectToImport(request, importId, message, "error");
   }
 }

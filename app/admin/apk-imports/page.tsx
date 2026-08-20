@@ -9,6 +9,10 @@ import {
   getOrderedInnings,
   getTeamName
 } from "@/lib/match-scorecard";
+import {
+  getApkReviewDerivedMatch,
+  getApkReviewValidationResult
+} from "@/lib/app-sync/review-working-copy";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { SupabaseApkImportRepository } from "@/lib/supabase/apk-import-repository";
 import type { ApkMatchImport } from "@/lib/app-sync/types";
@@ -31,10 +35,12 @@ function statusLabel(importRecord: ApkMatchImport) {
 }
 
 function scoreLines(importRecord: ApkMatchImport) {
-  if (!importRecord.derivedMatch) return [];
+  const match = getApkReviewDerivedMatch(importRecord);
 
-  return getOrderedInnings(importRecord.derivedMatch).map((innings) => ({
-    teamName: getTeamName(importRecord.derivedMatch as NonNullable<ApkMatchImport["derivedMatch"]>, innings.battingTeamId),
+  if (!match) return [];
+
+  return getOrderedInnings(match).map((innings) => ({
+    teamName: getTeamName(match, innings.battingTeamId),
     score: formatInningsScore(innings.runs, innings.wicketsLost),
     overs: formatCompletedOvers(innings.completedOvers)
   }));
@@ -42,7 +48,8 @@ function scoreLines(importRecord: ApkMatchImport) {
 
 function ImportCard({ importRecord }: { importRecord: ApkMatchImport }) {
   const lines = scoreLines(importRecord);
-  const validationOk = importRecord.validationResult?.ok === true;
+  const match = getApkReviewDerivedMatch(importRecord);
+  const validationOk = getApkReviewValidationResult(importRecord)?.ok === true;
 
   return (
     <article className="rounded-[8px] border border-white/15 bg-black/55 p-4 shadow-[0_0_24px_rgba(0,0,0,0.35)]">
@@ -50,7 +57,7 @@ function ImportCard({ importRecord }: { importRecord: ApkMatchImport }) {
         <div>
           <p className="text-xs font-black uppercase text-neon-cyan">APK Match</p>
           <h2 className="font-display text-2xl uppercase text-white">
-            {importRecord.derivedMatch?.matchName ?? importRecord.offlineMatchId}
+            {match?.matchName ?? importRecord.offlineMatchId}
           </h2>
           <p className="mt-1 text-sm text-stone-300">
             {importRecord.matchDate ?? "No match date"} - imported {formatDateTime(importRecord.importedAt)}
@@ -73,7 +80,7 @@ function ImportCard({ importRecord }: { importRecord: ApkMatchImport }) {
         <div>
           <span className="text-stone-400">Scheduled overs</span>
           <b className="ml-2 text-white">
-            {importRecord.derivedMatch?.scheduledOversPerInnings ?? "-"}
+            {match?.scheduledOversPerInnings ?? "-"}
           </b>
         </div>
         <div>
@@ -105,7 +112,7 @@ function ImportCard({ importRecord }: { importRecord: ApkMatchImport }) {
           REVIEW
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </LinkButton>
-        {importRecord.reviewStatus !== "finalised" ? (
+        {importRecord.reviewStatus === "pending_review" ? (
           <form action={`/api/admin/apk-imports/${importRecord.id}/reject`} method="post">
             <Button type="submit" variant="ghost">REJECT</Button>
           </form>

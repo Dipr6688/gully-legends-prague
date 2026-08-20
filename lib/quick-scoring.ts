@@ -281,6 +281,7 @@ export function deriveQuickScoringInnings({
   const missingInformation: string[] = [];
   const eligibleFieldingPlayerIds = fieldingPlayerIds ?? bowlingPlayerIds ?? [];
   const dismissedPlayerIds = new Set<string>();
+  const reportedRepeatedBowlerOverNumbers = new Set<number>();
   let runs = 0;
   let extras = 0;
   let wicketsLost = 0;
@@ -379,8 +380,12 @@ export function deriveQuickScoringInnings({
       legalBalls % 6 === 0 &&
       previousOverBowlerId === event.bowlerId
     ) {
-      missingInformation.push(`Event ${event.sequence} repeats the previous over bowler.`);
-      continue;
+      if (!reportedRepeatedBowlerOverNumbers.has(overNumber)) {
+        missingInformation.push(
+          `Over ${overNumber} uses the same bowler as Over ${overNumber - 1}.`
+        );
+        reportedRepeatedBowlerOverNumbers.add(overNumber);
+      }
     }
 
     const overId = `${event.bowlingTeamId}-quick-over-${overNumber}`;
