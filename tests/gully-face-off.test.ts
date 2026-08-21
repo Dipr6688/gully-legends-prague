@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import {
   buildGullyFaceOff,
@@ -455,10 +455,54 @@ test("Gully Face-Off includes unlocked trophy count from the achievement engine"
   assert.equal(trophies.leader, "left");
 });
 
-test("Gully Face-Off compares reliable event-backed sixes", () => {
+test("Gully Face-Off compares tracked-only event-backed fours", () => {
+  const legacy = officialMatch({
+    id: "legacy-batting",
+    records: [
+      record({ playerId: "aninda", runs: 80 }),
+      record({ playerId: "biplab", runs: 70 })
+    ]
+  });
+  legacy.quickScoring = undefined;
+  const matchup = faceOff({
+    matches: [
+      legacy,
+      officialMatch({
+        id: "tracked-batting",
+        events: [
+          event(1, { strikerId: "aninda", batterRuns: 4 }),
+          event(2, { strikerId: "aninda", batterRuns: 4 }),
+          event(3, { strikerId: "biplab", batterRuns: 4 })
+        ],
+        records: [
+          record({ playerId: "aninda", runs: 8 }),
+          record({ playerId: "biplab", runs: 4 })
+        ]
+      })
+    ]
+  });
+  const fours = metricValue(matchup, "fours");
+
+  assert.equal(fours.left.value, 2);
+  assert.equal(fours.right.value, 1);
+  assert.equal(fours.availability, "tracked-only");
+  assert.equal(fours.leader, "left");
+  assert.equal(fours.left.context?.trackedInnings, 1);
+  assert.equal(fours.left.context?.innings, 2);
+});
+
+test("Gully Face-Off compares tracked-only event-backed sixes", () => {
   const matchup = faceOff({
     matches: [
       officialMatch({
+        id: "legacy-six-history",
+        records: [
+          record({ playerId: "aninda", runs: 60 }),
+          record({ playerId: "biplab", runs: 60 })
+        ]
+      }),
+      officialMatch({
+        id: "tracked-six-history",
         events: [
           event(1, { strikerId: "aninda", batterRuns: 6 }),
           event(2, { strikerId: "aninda", batterRuns: 6 }),
@@ -473,10 +517,11 @@ test("Gully Face-Off compares reliable event-backed sixes", () => {
   });
 
   assert.equal(metricValue(matchup, "sixes").left.value, 2);
+  assert.equal(metricValue(matchup, "sixes").availability, "tracked-only");
   assert.equal(metricValue(matchup, "sixes").leader, "left");
 });
 
-test("Gully Face-Off marks sixes unavailable when legacy batting history is incomplete", () => {
+test("Gully Face-Off keeps event-backed metrics unavailable when a player has zero tracked data", () => {
   const legacy = officialMatch({
     records: [
       record({ playerId: "aninda", runs: 36 }),
@@ -487,11 +532,43 @@ test("Gully Face-Off marks sixes unavailable when legacy batting history is inco
   const matchup = faceOff({ matches: [legacy] });
   const sixes = metricValue(matchup, "sixes");
 
-  assert.equal(sixes.availability, "partial");
+  assert.equal(sixes.availability, "unavailable");
   assert.equal(sixes.leader, "unavailable");
 });
 
-test("Gully Face-Off compares reliable strike rate", () => {
+test("Gully Face-Off does not treat legacy event-backed gaps as zero", () => {
+  const legacy = officialMatch({
+    id: "legacy-not-zero",
+    records: [
+      record({ playerId: "aninda", runs: 66 }),
+      record({ playerId: "biplab", runs: 6 })
+    ]
+  });
+  legacy.quickScoring = undefined;
+  const matchup = faceOff({
+    matches: [
+      legacy,
+      officialMatch({
+        id: "tracked-right-only",
+        events: [
+          event(1, { strikerId: "biplab", batterRuns: 6 }),
+          event(2, { strikerId: "biplab", batterRuns: 6 })
+        ],
+        records: [
+          record({ playerId: "aninda", didBat: false }),
+          record({ playerId: "biplab", runs: 12 })
+        ]
+      })
+    ]
+  });
+  const sixes = metricValue(matchup, "sixes");
+
+  assert.equal(sixes.left.value, null);
+  assert.equal(sixes.right.value, 2);
+  assert.equal(sixes.leader, "unavailable");
+});
+
+test("Gully Face-Off compares tracked-only strike rate", () => {
   const events = [
     ...Array.from({ length: 20 }, (_, index) =>
       event(index + 1, {
@@ -509,6 +586,14 @@ test("Gully Face-Off compares reliable strike rate", () => {
   const matchup = faceOff({
     matches: [
       officialMatch({
+        id: "legacy-strike-rate",
+        records: [
+          record({ playerId: "aninda", runs: 100 }),
+          record({ playerId: "biplab", runs: 100 })
+        ]
+      }),
+      officialMatch({
+        id: "tracked-strike-rate",
         events,
         records: [
           record({ playerId: "aninda", runs: 40 }),
@@ -518,7 +603,43 @@ test("Gully Face-Off compares reliable strike rate", () => {
     ]
   });
 
+  assert.equal(metricValue(matchup, "strike-rate").availability, "tracked-only");
   assert.equal(metricValue(matchup, "strike-rate").leader, "left");
+});
+
+test("Gully Face-Off allows tracked-only comparison with unequal coverage", () => {
+  const matchup = faceOff({
+    matches: [
+      officialMatch({
+        id: "tracked-aninda-extra",
+        events: [
+          event(1, { strikerId: "aninda", batterRuns: 4 }),
+          event(2, { strikerId: "aninda", batterRuns: 4 })
+        ],
+        records: [
+          record({ playerId: "aninda", runs: 8 }),
+          record({ playerId: "biplab", didBat: false })
+        ]
+      }),
+      officialMatch({
+        id: "tracked-both",
+        events: [
+          event(10, { strikerId: "aninda", batterRuns: 4 }),
+          event(11, { strikerId: "biplab", batterRuns: 4 }),
+          event(12, { strikerId: "biplab", batterRuns: 4 })
+        ],
+        records: [
+          record({ playerId: "aninda", runs: 4 }),
+          record({ playerId: "biplab", runs: 8 })
+        ]
+      })
+    ]
+  });
+  const fours = metricValue(matchup, "fours");
+
+  assert.equal(fours.left.context?.trackedInnings, 2);
+  assert.equal(fours.right.context?.trackedInnings, 1);
+  assert.equal(fours.leader, "left");
 });
 
 test("Gully Face-Off keeps strike rate unavailable below the existing threshold", () => {
@@ -540,7 +661,7 @@ test("Gully Face-Off keeps strike rate unavailable below the existing threshold"
   assert.equal(metricValue(matchup, "strike-rate").leader, "unavailable");
 });
 
-test("Gully Face-Off treats lower bowling economy as better", () => {
+test("Gully Face-Off treats lower tracked-only bowling economy as better", () => {
   const anindaEvents = Array.from({ length: 18 }, (_, index) =>
     event(index + 1, {
       battingTeamId: "teamB",
@@ -573,6 +694,7 @@ test("Gully Face-Off treats lower bowling economy as better", () => {
   const economy = metricValue(matchup, "economy");
 
   assert.equal(economy.direction, "lower");
+  assert.equal(economy.availability, "tracked-only");
   assert.equal(economy.leader, "left");
 });
 
@@ -785,4 +907,154 @@ test("Gully Face-Off official history uses approved chronology and filters", () 
   const official = getOfficialGullyFaceOffMatches(matches);
 
   assert.deepEqual(official.map((match) => match.id), ["early", "late"]);
+});
+
+test("/face-off page exists and loads public read-only data", () => {
+  const pageSource = readFileSync("app/face-off/page.tsx", "utf8");
+
+  assert.match(pageSource, /GullyFaceOffArena/);
+  assert.match(pageSource, /loadPublicSupabaseReadData/);
+  assert.match(pageSource, /activePlayers/);
+  assert.match(pageSource, /dynamic = "force-dynamic"/);
+});
+
+test("Gully Face-Off is added to shared navigation without renaming route state", () => {
+  const navigationSource = readFileSync("lib/data/navigation.ts", "utf8");
+
+  assert.match(navigationSource, /label: "FACE-OFF"/);
+  assert.match(navigationSource, /href: "\/face-off"/);
+  assert.match(navigationSource, /activePrefixes: \["\/face-off"\]/);
+});
+
+test("Gully Face-Off UI uses branding selectors and an empty arena state", () => {
+  const source = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+
+  assert.match(source, /GULLY FACE-OFF/);
+  assert.match(source, /TWO PLAYERS\. ONE STAT BATTLE\./);
+  assert.match(source, /Player A/);
+  assert.match(source, /Player B/);
+  assert.match(source, /<select/);
+  assert.match(source, /Choose warrior/);
+  assert.match(source, /Choose your contenders/);
+});
+
+test("Gully Face-Off UI prevents same-player display and supports URL state", () => {
+  const source = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+
+  assert.match(source, /useSearchParams/);
+  assert.match(source, /params\.set\(side, playerId\)/);
+  assert.match(source, /hasSamePlayer/);
+  assert.match(source, /Choose two different warriors/);
+  assert.match(source, /player cannot face themselves/i);
+});
+
+test("Gully Face-Off hero renders player artwork title name role and level", () => {
+  const source = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+
+  assert.match(source, /player\.cardImage/);
+  assert.match(source, /player\.cardTitle/);
+  assert.match(source, /player\.name/);
+  assert.match(source, /player\.role/);
+  assert.match(source, /Level \{player\.level\}/);
+  assert.match(source, /face-off-vs-emblem/);
+});
+
+test("Gully Face-Off UI renders the four authoritative battle sections", () => {
+  const domainSource = readFileSync("lib/gully-face-off.ts", "utf8");
+  const componentSource = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+
+  assert.match(domainSource, /Batting Battle/);
+  assert.match(domainSource, /Bowling Battle/);
+  assert.match(domainSource, /Fielding Battle/);
+  assert.match(domainSource, /Career & Glory/);
+  assert.match(componentSource, /readyFaceOff\.sections\.map/);
+  assert.match(componentSource, /FaceOffSectionCard/);
+});
+
+test("Gully Face-Off UI treats metric leaders ties and unavailable data distinctly", () => {
+  const source = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.match(source, /data-leader=\{metric\.leader\}/);
+  assert.match(source, /← \$\{leftName\} leads/);
+  assert.match(source, /\$\{rightName\} leads →/);
+  assert.match(source, /⚡ \$\{leftName\} edge/);
+  assert.match(source, /⚡ \$\{rightName\} edge/);
+  assert.match(source, /Even battle/);
+  assert.doesNotMatch(source, /No fair comparison/);
+  assert.match(source, /Full tracking required/);
+  assert.match(css, /data-leader="left"/);
+  assert.match(css, /data-leader="right"/);
+  assert.match(css, /data-leader="tie"/);
+  assert.match(css, /data-availability="tracked-only"/);
+  assert.match(css, /data-availability="unavailable"/);
+  assert.match(css, /face-off-metric-row\[data-leader="left"\] \.face-off-metric-center span/);
+  assert.match(css, /face-off-battle-section\[data-edge="tie"\] \.face-off-section-heading strong/);
+});
+
+test("Gully Face-Off UI explains advanced data reliability without fabricating zeros", () => {
+  const source = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+
+  assert.match(source, /Tracked only/);
+  assert.match(source, /\$\{tracked\} \/ \$\{innings\} innings/);
+  assert.match(source, /Tracked innings only/);
+  assert.match(source, /No usable tracked data/);
+  assert.match(source, /Minimum/);
+  assert.match(source, /tracked balls/);
+  assert.match(source, /legal balls/);
+  assert.match(source, /value\.availability === "reliable"/);
+  assert.match(source, /value\.availability === "tracked-only"/);
+  assert.doesNotMatch(source, /"PARTIAL"/);
+});
+
+test("Gully Face-Off VS emblem uses the dedicated artwork asset", () => {
+  const source = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.equal(existsSync("public/ui/face-off/gully-face-off-vs.png"), true);
+  assert.match(source, /\/ui\/face-off\/gully-face-off-vs\.png/);
+  assert.match(source, /face-off-vs-image/);
+  assert.doesNotMatch(source, /<span>VS<\/span>/);
+  assert.doesNotMatch(css, /vs-optical/);
+  assert.doesNotMatch(css, /face-off-vs-emblem::before/);
+  assert.doesNotMatch(css, /face-off-vs-emblem::after/);
+  assert.doesNotMatch(css, /face-off-vs-pulse/);
+});
+
+test("Gully Face-Off UI exposes POM XP Level and trophy metrics without an overall winner", () => {
+  const domainSource = readFileSync("lib/gully-face-off.ts", "utf8");
+  const componentSource = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+
+  assert.match(domainSource, /Official POM Awards/);
+  assert.match(domainSource, /label: "XP"/);
+  assert.match(domainSource, /label: "Level"/);
+  assert.match(domainSource, /label: "Trophies"/);
+  assert.doesNotMatch(componentSource, /Better Player/);
+  assert.doesNotMatch(componentSource, /Overall Winner/);
+  assert.doesNotMatch(componentSource, /Final Score/);
+});
+
+test("Gully Face-Off page remains isolated from private balance and write APIs", () => {
+  const componentSource = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+  const pageSource = readFileSync("app/face-off/page.tsx", "utf8");
+
+  assert.doesNotMatch(componentSource, /team-balance/i);
+  assert.doesNotMatch(componentSource, /private-team-balance/i);
+  assert.doesNotMatch(componentSource, /balanceWeights|pairRules|strength/i);
+  assert.doesNotMatch(componentSource, /\bfetch\b/);
+  assert.doesNotMatch(pageSource, /api\/admin|finalize|insert|update|delete/i);
+});
+
+test("Gully Face-Off CSS includes mobile responsive arena rules", () => {
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.match(css, /face-off-page/);
+  assert.match(css, /face-off-matchup-hero/);
+  assert.match(css, /face-off-metric-row/);
+  assert.match(css, /face-off-battle-grid \{\r?\n  display: grid;\r?\n  grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);\r?\n  align-items: start;/);
+  assert.match(css, /face-off-battle-section \{\r?\n  display: grid;\r?\n  align-content: start;\r?\n  align-self: start;/);
+  assert.match(css, /@media \(max-width: 720px\)/);
+  assert.match(css, /grid-template-columns: 1fr/);
+  assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(css, /prefers-reduced-motion/);
 });

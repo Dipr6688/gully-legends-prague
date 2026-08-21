@@ -685,8 +685,8 @@ test("Post-match celebration UI renders official summary sections and actions", 
   assert.match(component, /Player of the Match/);
   assert.match(component, /Gully Record Broken!/);
   assert.match(component, /First Gully Record!/);
-  assert.match(component, /New Personal Best!/);
-  assert.match(component, /First Personal Best!/);
+  assert.match(component, /Personal Best/);
+  assert.match(component, /First qualifying performance/);
   assert.doesNotMatch(component, /First Personal Mark!/);
   assert.match(component, /Level Up!/);
   assert.match(component, /XP Earned/);
@@ -711,7 +711,7 @@ test("Post-match celebration formats cricket metric singulars and plurals", () =
   assert.match(component, /case "stumpings":[\s\S]*?return value === 1 \? "Stumping" : "Stumpings"/);
   assert.match(component, /items\.push\(formatMetricValue\(totals\.runs, "runs"\)\)/);
   assert.match(component, /items\.push\(formatMetricValue\(totals\.wickets, "wickets"\)\)/);
-  assert.match(component, /Previous best: \{formatMetricValue\(best\.previousBest, best\.unit\)\}/);
+  assert.match(component, /`Previous best: \$\{formatMetricValue\(best\.previousBest, best\.unit\)\}`/);
   assert.match(component, /Previous: \{record\.previousRecord\.holderPlayerIds\.map\(getPlayerName\)\.join\(", "\)\} -\{" "\}\s*\{formatMetricValue\(record\.previousRecord\.value, record\.unit\)\}/);
 });
 
@@ -733,25 +733,28 @@ test("Post-match celebration uses custom public artwork assets", () => {
     "utf8"
   );
   const css = readFileSync("app/globals.css", "utf8");
-  const assets = [
-    "winner-trophy.svg",
-    "pom-star.svg",
-    "record-broken.svg",
-    "personal-best.svg",
-    "level-up.svg",
-    "xp-bolt.svg"
+  const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const premiumAssets = [
+    "winner-trophy-v2.png",
+    "pom-star-v2.png",
+    "record-broken-v2.png",
+    "achievement-unlocked-v2.png",
+    "personal-best-v2.png",
+    "level-up-v2.png",
+    "xp-bolt-v2.png"
   ];
 
-  for (const asset of assets) {
+  for (const asset of premiumAssets) {
     const path = `public/ui/post-match-celebration/${asset}`;
-    const source = readFileSync(path, "utf8");
+    const source = readFileSync(path);
 
     assert.match(component, new RegExp(`/ui/post-match-celebration/${asset}`));
-    assert.match(source, /<svg/);
-    assert.doesNotMatch(source, /<rect[^>]+width="100%"/);
+    assert.deepEqual(source.subarray(0, pngSignature.length), pngSignature);
+    assert.equal(source.length > 100_000, true);
   }
 
   assert.match(css, /post-match-confetti-fall/);
+  assert.match(css, /post-match-winner-icon-glow/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.match(css, /max-width:\s*760px/);
 });
@@ -1244,6 +1247,62 @@ test("share card falls back to strongest personal best when no record exists", (
   assert.equal(highlights[0]?.metricText, "35 Runs");
 });
 
+test("share card can select a major achievement without using low starter milestones", () => {
+  const previous = match({
+    id: "share-achievement-previous",
+    records: [
+      record({ playerId: "dipanjan", runs: 49 }),
+      record({ playerId: "soman", runs: 60 })
+    ]
+  });
+  const target = match({
+    id: "share-achievement-target",
+    matchNumber: 2,
+    records: [record({ playerId: "dipanjan", runs: 50 })]
+  });
+  const summary = buildPostMatchCelebrationSummary({
+    match: target,
+    historicalMatches: [previous]
+  });
+  const highlights = selectMatchShareHighlights(summary);
+
+  assert.equal(highlights[0]?.type, "achievement_unlocked");
+  assert.equal(highlights[0]?.title, "Achievement Unlocked");
+  assert.equal(highlights[0]?.metricText, "Half-Century");
+  assert.equal(highlights[0]?.playerName, "Dipanjan");
+  assert.equal(highlights.some((highlight) => highlight.metricText === "Getting Started"), false);
+});
+
+test("share card achievement highlight uses premium generic celebration icon", () => {
+  const previous = match({
+    id: "share-achievement-svg-previous",
+    records: [record({ playerId: "soman", runs: 60 })]
+  });
+  const target = match({
+    id: "share-achievement-svg",
+    matchNumber: 2,
+    records: [record({ playerId: "dipanjan", runs: 50 })]
+  });
+  const summary = buildPostMatchCelebrationSummary({
+    match: target,
+    historicalMatches: [previous]
+  });
+  const viewModel = buildMatchShareCardViewModel({ summary, match: target });
+  const svg = renderMatchShareCardSvg(viewModel, {
+    highlightIcons: {
+      achievement: "data:image/png;base64,achievement-icon"
+    }
+  });
+  const shareComponent = readFileSync("components/matches/MatchShareCard.tsx", "utf8");
+
+  assert.equal(viewModel.highlights[0]?.type, "achievement_unlocked");
+  assert.match(svg, /ACHIEVEMENT UNLOCKED/);
+  assert.match(svg, /data:image\/png;base64,achievement-icon/);
+  assert.match(shareComponent, /achievement-unlocked-v2\.png/);
+  assert.match(shareComponent, /winner-trophy-v2\.png/);
+  assert.doesNotMatch(shareComponent, /winner-trophy\.svg/);
+});
+
 test("share card supports live and historical summaries without fake historical levels", () => {
   const target = match({
     id: "share-history",
@@ -1350,6 +1409,9 @@ test("share card component exposes share and save actions without Supabase write
   assert.match(shareComponent, /navigatorLike\.share/);
   assert.match(shareComponent, /Save Image/);
   assert.match(shareComponent, /downloadBlob/);
+  assert.match(shareComponent, /SHARE_HIGHLIGHT_ICONS/);
+  assert.match(shareDomain, /achievement_unlocked/);
+  assert.match(shareDomain, /isShareWorthyAchievement/);
   assert.match(shareComponent, /try[\s\S]*catch/);
   assert.match(shareDomain, /PostMatchCelebrationSummary/);
   assert.match(shareDomain, /renderMatchShareCardSvg/);
@@ -1456,7 +1518,29 @@ test("post-match celebration UI renders achievement unlock section and badge ass
 
   assert.match(component, /Achievement Unlocked!/);
   assert.match(component, /Achievement Unlocked in This Match!/);
-  assert.match(component, /achievement-unlocked\.svg/);
-  assert.match(component, /getAchievementIconPath/);
+  assert.match(component, /achievement:\s*"\/ui\/post-match-celebration\/achievement-unlocked-v2\.png"/);
+  assert.match(component, /src=\{CELEBRATION_ICONS\.achievement\}/);
+  assert.doesNotMatch(component, /getAchievementIconPath/);
   assert.match(css, /\.post-match-unlock-card/);
+  assert.match(css, /\.post-match-unlock-card\s*\{[\s\S]*padding:\s*11px 12px 12px/);
+  assert.match(css, /\.post-match-unlock-card h3\s*\{[\s\S]*font-size:\s*clamp\(1\.18rem/);
+  assert.match(css, /\.post-match-unlock-card strong\s*\{[\s\S]*font-size:\s*clamp\(1\.06rem/);
+  assert.doesNotMatch(css, /post-match-unlock-icons/);
+});
+
+test("historical celebration replay groups dense achievement personal best and XP sections", () => {
+  const component = readFileSync("components/matches/PostMatchCelebration.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.match(component, /groupAchievementUnlocks\(\s*summary\.achievementUnlocks,\s*isHistorical\s*\)/);
+  assert.match(component, /groupPersonalBestsByPlayer\(standalonePersonalBests\)/);
+  assert.match(component, /Unlocked by: \{group\.playerIds\.map\(getPlayerName\)\.join\(" · "\)\}/);
+  assert.match(component, /!isHistorical \? \(\s*<em>\{formatAchievementUnlockMeta\(singleUnlock\)\}<\/em>/);
+  assert.match(component, /<ul className="post-match-personal-list">/);
+  assert.match(component, /group\.bests\.length === 1 \? "Personal Best" : "Personal Bests"/);
+  assert.match(component, /!isHistorical \? <span>Match XP<\/span> : null/);
+  assert.match(css, /\.post-match-celebration\.is-historical \.post-match-pom-card\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 0\.9fr\) minmax\(0, 1\.35fr\)/);
+  assert.match(css, /\.post-match-unlock-card\.is-grouped\s*\{[\s\S]*grid-template-columns:\s*50px minmax\(0, 1fr\)/);
+  assert.match(css, /\.post-match-personal-list/);
+  assert.match(css, /\.post-match-celebration\.is-historical \.post-match-xp-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
 });

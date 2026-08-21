@@ -8,6 +8,7 @@ export type NavigationItem = {
 export const mainNavigation = [
   { label: "Dashboard", href: "/", activePrefixes: ["/"], exact: true },
   { label: "Players", href: "/players", activePrefixes: ["/players"] },
+  { label: "FACE-OFF", href: "/face-off", activePrefixes: ["/face-off"] },
   { label: "Matches", href: "/matches", activePrefixes: ["/matches"] },
   {
     label: "HALL OF LEGENDS",

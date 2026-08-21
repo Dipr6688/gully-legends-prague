@@ -22,7 +22,7 @@ export const GULLY_FACE_OFF_NAME = "GULLY FACE-OFF" as const;
 
 export type FaceOffMetricLeader = "left" | "right" | "tie" | "unavailable";
 export type FaceOffMetricDirection = "higher" | "lower";
-export type FaceOffMetricAvailability = "reliable" | "partial" | "unavailable";
+export type FaceOffMetricAvailability = "reliable" | "tracked-only" | "unavailable";
 export type FaceOffSectionId =
   | "batting"
   | "bowling"
@@ -306,17 +306,32 @@ function unavailableValue(
   };
 }
 
-function isBattingTrackingReliable(advanced: AdvancedCareerStats | null): boolean {
-  if (!advanced) return false;
-
-  return advanced.inningsBatted === advanced.trackedBattingInnings;
-}
-
 function trackedBattingContext(advanced: AdvancedCareerStats | null) {
   return {
     trackedInnings: advanced?.trackedBattingInnings ?? 0,
     innings: advanced?.inningsBatted ?? 0,
     ballsFaced: advanced?.ballsFaced ?? 0
+  };
+}
+
+function trackedBowlingContext(advanced: AdvancedCareerStats | null) {
+  return {
+    legalBalls: advanced?.legalBallsBowled ?? 0,
+    trackedBowlingMatches: advanced?.trackedBowlingMatches ?? 0,
+    matchesBowled: advanced?.matchesBowled ?? 0,
+    minimumLegalBalls: ADVANCED_CRICKET_STAT_RULES.minimumLegalBallsForEconomy
+  };
+}
+
+function trackedNumber(
+  value: number,
+  context?: FaceOffMetricValue["context"]
+): FaceOffMetricValue {
+  return {
+    value,
+    displayValue: formatNumberValue(value),
+    availability: "tracked-only",
+    context
   };
 }
 
@@ -333,24 +348,23 @@ function getMetricValue(snapshot: PlayerSnapshot, metricId: FaceOffMetricId): Fa
         ? unavailableValue({ innings: aggregate.innings })
         : reliableNumber(aggregate.highestScore, { innings: aggregate.innings });
     case "fours":
-      return isBattingTrackingReliable(advanced)
-        ? reliableNumber(advanced?.fours ?? 0, trackedBattingContext(advanced))
-        : unavailableValue(trackedBattingContext(advanced), "partial");
+      return advanced && advanced.trackedBattingInnings > 0
+        ? trackedNumber(advanced.fours, trackedBattingContext(advanced))
+        : unavailableValue(trackedBattingContext(advanced));
     case "sixes":
-      return isBattingTrackingReliable(advanced)
-        ? reliableNumber(advanced?.sixes ?? 0, trackedBattingContext(advanced))
-        : unavailableValue(trackedBattingContext(advanced), "partial");
+      return advanced && advanced.trackedBattingInnings > 0
+        ? trackedNumber(advanced.sixes, trackedBattingContext(advanced))
+        : unavailableValue(trackedBattingContext(advanced));
     case "strike-rate":
       if (
         advanced &&
-        isBattingTrackingReliable(advanced) &&
         advanced.strikeRate !== null &&
         advanced.ballsFaced >= ADVANCED_CRICKET_STAT_RULES.minimumBallsFacedForStrikeRate
       ) {
         return {
           value: advanced.strikeRate,
           displayValue: formatStrikeRate(advanced.strikeRate),
-          availability: "reliable",
+          availability: "tracked-only",
           context: trackedBattingContext(advanced)
         };
       }
@@ -360,7 +374,7 @@ function getMetricValue(snapshot: PlayerSnapshot, metricId: FaceOffMetricId): Fa
           ...trackedBattingContext(advanced),
           minimumBallsFaced: ADVANCED_CRICKET_STAT_RULES.minimumBallsFacedForStrikeRate
         },
-        advanced && !isBattingTrackingReliable(advanced) ? "partial" : "unavailable"
+        "unavailable"
       );
     case "wickets":
       return reliableNumber(aggregate.wickets);
@@ -373,20 +387,12 @@ function getMetricValue(snapshot: PlayerSnapshot, metricId: FaceOffMetricId): Fa
         return {
           value: advanced.economy,
           displayValue: formatEconomy(advanced.economy),
-          availability: "reliable",
-          context: {
-            legalBalls: advanced.legalBallsBowled,
-            trackedBowlingMatches: advanced.trackedBowlingMatches,
-            minimumLegalBalls: ADVANCED_CRICKET_STAT_RULES.minimumLegalBallsForEconomy
-          }
+          availability: "tracked-only",
+          context: trackedBowlingContext(advanced)
         };
       }
 
-      return unavailableValue({
-        legalBalls: advanced?.legalBallsBowled ?? 0,
-        trackedBowlingMatches: advanced?.trackedBowlingMatches ?? 0,
-        minimumLegalBalls: ADVANCED_CRICKET_STAT_RULES.minimumLegalBallsForEconomy
-      });
+      return unavailableValue(trackedBowlingContext(advanced));
     case "hat-tricks":
       return reliableNumber(aggregate.hatTricks);
     case "catches":
@@ -416,11 +422,20 @@ function combineAvailability(
     return "reliable";
   }
 
-  if (left.availability === "partial" || right.availability === "partial") {
-    return "partial";
+  if (left.availability === "unavailable" || right.availability === "unavailable") {
+    return "unavailable";
   }
 
-  return "unavailable";
+  return "tracked-only";
+}
+
+function isComparableMetricValue(
+  value: FaceOffMetricValue
+): value is FaceOffMetricValue & { value: number } {
+  return (
+    value.value !== null &&
+    (value.availability === "reliable" || value.availability === "tracked-only")
+  );
 }
 
 function getLeader({
@@ -433,10 +448,8 @@ function getLeader({
   direction: FaceOffMetricDirection;
 }): FaceOffMetricLeader {
   if (
-    left.availability !== "reliable" ||
-    right.availability !== "reliable" ||
-    left.value === null ||
-    right.value === null
+    !isComparableMetricValue(left) ||
+    !isComparableMetricValue(right)
   ) {
     return "unavailable";
   }
@@ -463,10 +476,8 @@ function buildMetric(
     direction: definition.direction
   });
   const hasDifference =
-    leftValue.value !== null &&
-    rightValue.value !== null &&
-    leftValue.availability === "reliable" &&
-    rightValue.availability === "reliable";
+    isComparableMetricValue(leftValue) &&
+    isComparableMetricValue(rightValue);
   const difference = hasDifference && leftValue.value !== null && rightValue.value !== null
     ? Math.abs(leftValue.value - rightValue.value)
     : null;

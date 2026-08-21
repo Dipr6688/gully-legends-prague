@@ -12,8 +12,7 @@ import {
   getMatchScoreRowsInInningsOrder
 } from "@/lib/match-display";
 import {
-  formatAchievementUnlockMeta,
-  getAchievementIconPath
+  formatAchievementUnlockMeta
 } from "@/lib/trophy-cabinet";
 import type {
   PostMatchCelebrationMetric,
@@ -25,13 +24,13 @@ import type { FinalisedPlayerMatchRecord, MatchRecord } from "@/lib/types/match"
 import type { Player } from "@/lib/types/player";
 
 const CELEBRATION_ICONS = {
-  winner: "/ui/post-match-celebration/winner-trophy.svg",
-  pom: "/ui/post-match-celebration/pom-star.svg",
-  record: "/ui/post-match-celebration/record-broken.svg",
-  achievement: "/ui/post-match-celebration/achievement-unlocked.svg",
-  personalBest: "/ui/post-match-celebration/personal-best.svg",
-  levelUp: "/ui/post-match-celebration/level-up.svg",
-  xp: "/ui/post-match-celebration/xp-bolt.svg"
+  winner: "/ui/post-match-celebration/winner-trophy-v2.png",
+  pom: "/ui/post-match-celebration/pom-star-v2.png",
+  record: "/ui/post-match-celebration/record-broken-v2.png",
+  achievement: "/ui/post-match-celebration/achievement-unlocked-v2.png",
+  personalBest: "/ui/post-match-celebration/personal-best-v2.png",
+  levelUp: "/ui/post-match-celebration/level-up-v2.png",
+  xp: "/ui/post-match-celebration/xp-bolt-v2.png"
 } as const;
 
 const CONFETTI_PIECES = [
@@ -147,6 +146,74 @@ function achievementKey(playerId: string, metric: PostMatchCelebrationMetric): s
   return `${playerId}:${metric}`;
 }
 
+type AchievementUnlockItem = PostMatchCelebrationSummary["achievementUnlocks"][number];
+type AchievementUnlockGroup = {
+  key: string;
+  definition: AchievementUnlockItem["definition"];
+  unlocks: AchievementUnlockItem[];
+  playerIds: string[];
+};
+type PersonalBestItem = PostMatchCelebrationSummary["personalBests"][number];
+type PersonalBestGroup = {
+  playerId: string;
+  bests: PersonalBestItem[];
+};
+
+function groupAchievementUnlocks(
+  unlocks: AchievementUnlockItem[],
+  shouldGroup: boolean
+): AchievementUnlockGroup[] {
+  if (!shouldGroup) {
+    return unlocks.map((unlock) => ({
+      key: `${unlock.playerId}-${unlock.definition.id}`,
+      definition: unlock.definition,
+      unlocks: [unlock],
+      playerIds: [unlock.playerId]
+    }));
+  }
+
+  const groups = new Map<string, AchievementUnlockGroup>();
+
+  for (const unlock of unlocks) {
+    const existing = groups.get(unlock.definition.id);
+
+    if (existing) {
+      existing.unlocks.push(unlock);
+      if (!existing.playerIds.includes(unlock.playerId)) {
+        existing.playerIds.push(unlock.playerId);
+      }
+    } else {
+      groups.set(unlock.definition.id, {
+        key: unlock.definition.id,
+        definition: unlock.definition,
+        unlocks: [unlock],
+        playerIds: [unlock.playerId]
+      });
+    }
+  }
+
+  return [...groups.values()];
+}
+
+function groupPersonalBestsByPlayer(bests: PersonalBestItem[]): PersonalBestGroup[] {
+  const groups = new Map<string, PersonalBestGroup>();
+
+  for (const best of bests) {
+    const existing = groups.get(best.playerId);
+
+    if (existing) {
+      existing.bests.push(best);
+    } else {
+      groups.set(best.playerId, {
+        playerId: best.playerId,
+        bests: [best]
+      });
+    }
+  }
+
+  return [...groups.values()];
+}
+
 function isProgressionChange(
   change:
     | PostMatchCelebrationSummary["progressionChanges"][number]
@@ -167,6 +234,7 @@ export function PostMatchCelebration({
   const pom = summary.playerOfMatch;
   const pomPlayer = pom ? playerById(pom.playerId) : undefined;
   const pomContributions = pom ? getPomContributionItems(getPlayerRecords(match, pom.playerId)) : [];
+  const isHistorical = mode === "historical";
   const recordKeys = new Set(
     summary.recordsBroken.map((record) => achievementKey(record.playerId, record.metric))
   );
@@ -176,6 +244,11 @@ export function PostMatchCelebration({
   const standalonePersonalBests = displayPersonalBests.filter(
     (best) => !recordKeys.has(achievementKey(best.playerId, best.metric))
   );
+  const groupedAchievementUnlocks = groupAchievementUnlocks(
+    summary.achievementUnlocks,
+    isHistorical
+  );
+  const groupedPersonalBests = groupPersonalBestsByPlayer(standalonePersonalBests);
   const levelUpsByPlayer = new Map(
     summary.levelUps.map((levelUp) => [levelUp.playerId, levelUp])
   );
@@ -185,7 +258,6 @@ export function PostMatchCelebration({
     standalonePersonalBests.length > 0 ||
     summary.levelUps.length > 0;
   const hasProgression = summary.progressionChanges.length > 0;
-  const isHistorical = mode === "historical";
   const xpRows = hasProgression ? summary.progressionChanges : summary.matchXPAwards;
   const hasXPSection = hasProgression || (isHistorical && summary.matchXPAwards.length > 0);
   const xpKicker = isHistorical ? "Match XP" : "XP Earned";
@@ -200,7 +272,7 @@ export function PostMatchCelebration({
   return (
     <div className="post-match-celebration-backdrop" role="presentation">
       <section
-        className="post-match-celebration"
+        className={`post-match-celebration${isHistorical ? " is-historical" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="post-match-celebration-title"
@@ -328,40 +400,53 @@ export function PostMatchCelebration({
                 );
               })}
 
-              {summary.achievementUnlocks.map((unlock) => (
-                <article
-                  key={`${unlock.playerId}-${unlock.definition.id}`}
-                  className="post-match-achievement-card post-match-unlock-card"
-                >
-                  <div className="post-match-unlock-icons">
+              {groupedAchievementUnlocks.map((group) => {
+                const isGrouped = group.playerIds.length > 1;
+                const singleUnlock = group.unlocks[0];
+
+                return (
+                  <article
+                    key={group.key}
+                    className={`post-match-achievement-card post-match-unlock-card${
+                      isGrouped ? " is-grouped" : ""
+                    }`}
+                  >
                     <Image
                       src={CELEBRATION_ICONS.achievement}
                       alt=""
                       width={58}
                       height={58}
                     />
-                    <Image
-                      src={getAchievementIconPath(unlock.definition.iconKey)}
-                      alt=""
-                      width={58}
-                      height={58}
-                    />
-                  </div>
-                  <p>
-                    {isHistorical
-                      ? "Achievement Unlocked in This Match!"
-                      : "Achievement Unlocked!"}
-                  </p>
-                  <h3>{getPlayerName(unlock.playerId)}</h3>
-                  <strong>{unlock.definition.title}</strong>
-                  <span>{unlock.definition.description}</span>
-                  <em>{formatAchievementUnlockMeta(unlock)}</em>
-                </article>
-              ))}
+                    <p>
+                      {isHistorical
+                        ? "Achievement Unlocked in This Match!"
+                        : "Achievement Unlocked!"}
+                    </p>
+                    {isGrouped ? (
+                      <>
+                        <h3>{group.definition.title}</h3>
+                        <span>{group.definition.description}</span>
+                        <em>
+                          Unlocked by: {group.playerIds.map(getPlayerName).join(" · ")}
+                        </em>
+                      </>
+                    ) : singleUnlock ? (
+                      <>
+                        <h3>{getPlayerName(singleUnlock.playerId)}</h3>
+                        <strong>{group.definition.title}</strong>
+                        <span>{group.definition.description}</span>
+                        {!isHistorical ? (
+                          <em>{formatAchievementUnlockMeta(singleUnlock)}</em>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </article>
+                );
+              })}
 
-              {standalonePersonalBests.map((best) => (
+              {groupedPersonalBests.map((group) => (
                 <article
-                  key={`${best.playerId}-${best.metric}-${best.kind}`}
+                  key={group.playerId}
                   className="post-match-achievement-card post-match-personal-card"
                 >
                   <Image
@@ -370,21 +455,24 @@ export function PostMatchCelebration({
                     width={58}
                     height={58}
                   />
-                  <p>
-                    {best.kind === "first_personal_best"
-                      ? "First Personal Best!"
-                      : "New Personal Best!"}
-                  </p>
-                  <h3>{getPlayerName(best.playerId)}</h3>
-                  <strong>{formatMetricValue(best.currentValue, best.unit)}</strong>
-                  <span>{best.metricLabel}</span>
-                  {best.previousBest !== null ? (
-                    <em>
-                      Previous best: {formatMetricValue(best.previousBest, best.unit)}
-                    </em>
-                  ) : (
-                    <em>First official qualifying performance.</em>
-                  )}
+                  <p>Personal Best</p>
+                  <h3>{getPlayerName(group.playerId)}</h3>
+                  <strong>
+                    {group.bests.length}{" "}
+                    {group.bests.length === 1 ? "Personal Best" : "Personal Bests"}
+                  </strong>
+                  <ul className="post-match-personal-list">
+                    {group.bests.map((best) => (
+                      <li key={`${best.metric}-${best.kind}`}>
+                        <b>{formatMetricValue(best.currentValue, best.unit)}</b>
+                        <span>
+                          {best.previousBest !== null
+                            ? `Previous best: ${formatMetricValue(best.previousBest, best.unit)}`
+                            : "First qualifying performance"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </article>
               ))}
 
@@ -456,7 +544,7 @@ export function PostMatchCelebration({
                             <span>Level {change.afterLevel}</span>
                           )
                         ) : (
-                          <span>Match XP</span>
+                          !isHistorical ? <span>Match XP</span> : null
                         )}
                       </div>
                       <strong className={change.awardedXP < 0 ? "is-negative" : ""}>

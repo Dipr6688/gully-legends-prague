@@ -16,7 +16,13 @@ import {
 import type { PostMatchCelebrationSummary } from "@/lib/post-match-celebration";
 import type { MatchRecord } from "@/lib/types/match";
 
-const TROPHY_ASSET = "/ui/post-match-celebration/winner-trophy.svg";
+const TROPHY_ASSET = "/ui/post-match-celebration/winner-trophy-v2.png";
+const SHARE_HIGHLIGHT_ICONS = {
+  record: "/ui/post-match-celebration/record-broken-v2.png",
+  achievement: "/ui/post-match-celebration/achievement-unlocked-v2.png",
+  personalBest: "/ui/post-match-celebration/personal-best-v2.png",
+  levelUp: "/ui/post-match-celebration/level-up-v2.png"
+} as const;
 
 type MatchShareCardDialogProps = {
   summary: PostMatchCelebrationSummary;
@@ -87,15 +93,25 @@ async function svgToPngBlob(svg: string): Promise<Blob> {
 }
 
 async function createShareCardPng(viewModel: MatchShareCardViewModel): Promise<Blob> {
-  const [logo, trophy, pomImage] = await Promise.all([
+  const [logo, trophy, pomImage, record, achievement, personalBest, levelUp] = await Promise.all([
     imageToDataUrl(viewModel.logoPath),
     imageToDataUrl(TROPHY_ASSET),
-    imageToDataUrl(viewModel.pom?.cardImage)
+    imageToDataUrl(viewModel.pom?.cardImage),
+    imageToDataUrl(SHARE_HIGHLIGHT_ICONS.record),
+    imageToDataUrl(SHARE_HIGHLIGHT_ICONS.achievement),
+    imageToDataUrl(SHARE_HIGHLIGHT_ICONS.personalBest),
+    imageToDataUrl(SHARE_HIGHLIGHT_ICONS.levelUp)
   ]);
   const svg = renderMatchShareCardSvg(viewModel, {
     logo,
     trophy,
-    pomImage
+    pomImage,
+    highlightIcons: {
+      record,
+      achievement,
+      personalBest,
+      levelUp
+    }
   });
 
   return svgToPngBlob(svg);
@@ -200,11 +216,25 @@ function MatchShareCardPreview({ viewModel }: { viewModel: MatchShareCardViewMod
         <div className="match-share-highlight-row">
           {[primaryHighlight, secondaryHighlight].filter(Boolean).map((highlight) => (
             <section key={`${highlight?.type}-${highlight?.playerName}`} className="match-share-highlight">
+              {highlight ? (
+                <Image
+                  src={SHARE_HIGHLIGHT_ICONS[highlight.icon]}
+                  alt=""
+                  width={44}
+                  height={44}
+                />
+              ) : null}
               <p>{highlight?.title}</p>
               <strong>
-                {highlight?.playerName} - {highlight?.metricText}
+                {highlight?.type === "achievement_unlocked"
+                  ? highlight.metricText
+                  : `${highlight?.playerName} - ${highlight?.metricText}`}
               </strong>
-              <span>{highlight?.subtext}</span>
+              <span>
+                {highlight?.type === "achievement_unlocked"
+                  ? `${highlight.playerName} - ${highlight.subtext}`
+                  : highlight?.subtext}
+              </span>
             </section>
           ))}
         </div>

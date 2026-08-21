@@ -7,6 +7,7 @@ import {
   type MatchScoreRow
 } from "./match-display";
 import { sanitizeRuns } from "./match-records";
+import type { AchievementUnlock } from "./player-achievements";
 import type { FinalisedPlayerMatchRecord, MatchRecord } from "./types/match";
 import type {
   PostMatchCelebrationMetric,
@@ -23,6 +24,7 @@ const SHARE_CARD_SUPPORT_FONT = "'Barlow Condensed', 'Arial Narrow', Arial, sans
 export type MatchShareHighlightType =
   | "record_broken"
   | "first_record"
+  | "achievement_unlocked"
   | "personal_best"
   | "first_personal_best"
   | "level_up";
@@ -41,6 +43,7 @@ export type MatchShareCardHighlight = {
   playerName: string;
   metricText: string;
   subtext: string;
+  icon: "record" | "achievement" | "personalBest" | "levelUp";
 };
 
 export type MatchShareCardViewModel = {
@@ -72,6 +75,7 @@ type ShareCardSvgAssets = {
   logo?: string;
   trophy?: string;
   pomImage?: string;
+  highlightIcons?: Partial<Record<MatchShareCardHighlight["icon"], string>>;
 };
 
 const METRIC_PRIORITY: Record<PostMatchCelebrationMetric, number> = {
@@ -84,6 +88,39 @@ const METRIC_PRIORITY: Record<PostMatchCelebrationMetric, number> = {
   runOuts: 70,
   matchXP: 90
 };
+
+function isShareWorthyAchievement(unlock: AchievementUnlock): boolean {
+  const { definition } = unlock;
+
+  if (definition.type === "special_achievement") return true;
+  if (definition.tier === "platinum" || definition.tier === "legend") return true;
+  if (definition.metric === "runs" && definition.threshold >= 500) return true;
+  if (definition.metric === "pomAwards" && definition.threshold >= 3) return true;
+  if (definition.metric === "wickets" && definition.threshold >= 50) return true;
+  if (definition.metric === "catches" && definition.threshold >= 25) return true;
+  if (definition.metric === "sixes" && definition.threshold >= 25) return true;
+
+  return false;
+}
+
+function getAchievementSharePriority(unlock: AchievementUnlock): number {
+  const { definition } = unlock;
+  const tierBonus = {
+    bronze: 0,
+    silver: 1,
+    gold: 2,
+    platinum: 3,
+    legend: 4
+  }[definition.tier ?? "bronze"];
+
+  if (definition.id === "special-century") return 30;
+  if (definition.id === "special-five-wicket-match") return 30.1;
+  if (definition.id === "special-hat-trick") return 30.2;
+  if (definition.id === "special-half-century") return 30.3;
+  if (definition.id === "special-three-wicket-match") return 30.4;
+
+  return 31 - tierBonus / 10 - Math.min(definition.threshold, 2000) / 10000;
+}
 
 function playerById(playerId: string) {
   return activePlayers.find((player) => player.id === playerId) ?? getPlayerById(playerId);
@@ -207,7 +244,21 @@ export function selectMatchShareHighlights(
         metricText: formatShareMetricValue(record.currentValue, record.unit),
         subtext: record.previousRecord
           ? `Previous: ${formatShareMetricValue(record.previousRecord.value, record.unit)}`
-          : "First official mark in the Gully book."
+          : "First official mark in the Gully book.",
+        icon: "record"
+      } satisfies MatchShareCardHighlight
+    }));
+  const achievementHighlights = summary.achievementUnlocks
+    .filter(isShareWorthyAchievement)
+    .map((unlock) => ({
+      priority: getAchievementSharePriority(unlock),
+      item: {
+        type: "achievement_unlocked",
+        title: "Achievement Unlocked",
+        playerName: getSharePlayerName(unlock.playerId),
+        metricText: unlock.definition.title,
+        subtext: unlock.definition.description,
+        icon: "achievement"
       } satisfies MatchShareCardHighlight
     }));
   const personalBestHighlights = summary.personalBests
@@ -215,7 +266,7 @@ export function selectMatchShareHighlights(
     .filter((best) => !recordKeys.has(`${best.playerId}:${best.metric}`))
     .map((best) => ({
       priority:
-        30 +
+        40 +
         METRIC_PRIORITY[best.metric] / 100 -
         Math.min(best.improvement ?? best.currentValue, 99) / 1000,
       item: {
@@ -232,11 +283,12 @@ export function selectMatchShareHighlights(
         subtext:
           best.previousBest !== null
             ? `Previous best: ${formatShareMetricValue(best.previousBest, best.unit)}`
-            : "First official qualifying performance."
+            : "First official qualifying performance.",
+        icon: "personalBest"
       } satisfies MatchShareCardHighlight
     }));
   const levelHighlights = summary.levelUps.map((levelUp) => ({
-    priority: 40,
+    priority: 50,
     item: {
       type: "level_up",
       title: "Level Up",
@@ -245,11 +297,17 @@ export function selectMatchShareHighlights(
       subtext:
         levelUp.levelsGained > 1
           ? `${levelUp.levelsGained} levels jumped`
-          : "New level reached"
+          : "New level reached",
+      icon: "levelUp"
     } satisfies MatchShareCardHighlight
   }));
 
-  return [...recordHighlights, ...personalBestHighlights, ...levelHighlights]
+  return [
+    ...recordHighlights,
+    ...achievementHighlights,
+    ...personalBestHighlights,
+    ...levelHighlights
+  ]
     .sort((left, right) => left.priority - right.priority)
     .slice(0, 2)
     .map((entry) => entry.item);
@@ -400,6 +458,78 @@ export function renderMatchShareCardSvg(
   const pom = viewModel.pom;
   const highlight = viewModel.highlights[0] ?? null;
   const highlight2 = viewModel.highlights[1] ?? null;
+  const highlightBoxY = pom ? 1142 : 1080;
+  const highlightBoxHeight = pom ? 108 : 120;
+  const renderHighlightSvg = (
+    item: MatchShareCardHighlight,
+    index: number,
+    hasPair: boolean
+  ) => {
+    const x = hasPair ? (index === 0 ? 105 : 555) : 105;
+    const width = hasPair ? 420 : 870;
+    const icon = assets.highlightIcons?.[item.icon];
+    const isCool = item.icon === "achievement" || item.icon === "personalBest";
+    const fill = isCool ? "#061c22" : "#220f05";
+    const stroke = isCool ? "#46dfff" : "#ff8f1f";
+    const titleColor = item.icon === "achievement" ? "#9cff24" : isCool ? "url(#sectionFill)" : "#f7c734";
+    const textX = icon ? x + 94 : x + 31;
+    const titleWidth = hasPair ? 22 : 36;
+    const mainWidth = hasPair ? 17 : 34;
+    const subWidth = hasPair ? 24 : 48;
+
+    return `<rect x="${x}" y="${highlightBoxY}" width="${width}" height="${highlightBoxHeight}" rx="28" fill="${fill}" stroke="${stroke}" stroke-width="3" opacity="0.96"/>
+      ${
+        icon
+          ? `<image href="${icon}" x="${x + 20}" y="${highlightBoxY + 24}" width="54" height="54" preserveAspectRatio="xMidYMid meet"/>`
+          : ""
+      }
+      ${svgText({
+        lines: wrapWords(item.title.toUpperCase(), titleWidth, 1),
+        x: textX,
+        y: highlightBoxY + 36,
+        size: hasPair ? 19 : 22,
+        color: titleColor,
+        anchor: "start",
+        letterSpacing: 1,
+        fontFamily: SHARE_CARD_SUPPORT_FONT,
+        fontStyle: "normal",
+        stroke: fill,
+        strokeWidth: 3,
+        paintOrder: "stroke fill",
+        filter: "url(#sectionGlow)"
+      })}
+      ${svgText({
+        lines: wrapWords(
+          item.type === "achievement_unlocked"
+            ? item.metricText.toUpperCase()
+            : `${item.playerName} - ${item.metricText}`.toUpperCase(),
+          mainWidth,
+          1
+        ),
+        x: textX,
+        y: highlightBoxY + (pom ? 78 : 82),
+        size: hasPair ? 25 : 31,
+        color: "#f8f1d6",
+        anchor: "start"
+      })}
+      ${svgText({
+        lines: wrapWords(
+          item.type === "achievement_unlocked"
+            ? `${item.playerName} - ${item.subtext}`.toUpperCase()
+            : item.subtext.toUpperCase(),
+          subWidth,
+          1
+        ),
+        x: textX,
+        y: highlightBoxY + (pom ? 101 : 111),
+        size: hasPair ? 16 : 18,
+        color: item.icon === "achievement" ? "#9cff24" : "#f7c734",
+        anchor: "start",
+        weight: 800,
+        fontFamily: SHARE_CARD_SUPPORT_FONT,
+        fontStyle: "normal"
+      })}`;
+  };
   const metaItems = [
     viewModel.gameLabel,
     viewModel.dateLabel,
@@ -628,80 +758,12 @@ export function renderMatchShareCardSvg(
   }
   ${
     highlight
-      ? `<rect x="105" y="${pom ? 1142 : 1080}" width="${highlight2 ? 420 : 870}" height="${pom ? 108 : 120}" rx="28" fill="#220f05" stroke="#ff8f1f" stroke-width="3" opacity="0.96"/>
-      ${svgText({
-        lines: [highlight.title.toUpperCase()],
-        x: 136,
-        y: pom ? 1178 : 1117,
-        size: 22,
-        color: "#f7c734",
-        anchor: "start",
-        letterSpacing: 1,
-        fontFamily: SHARE_CARD_SUPPORT_FONT,
-        fontStyle: "normal",
-        stroke: "#220f05",
-        strokeWidth: 3,
-        paintOrder: "stroke fill",
-        filter: "url(#sectionGlow)"
-      })}
-      ${svgText({
-        lines: wrapWords(`${highlight.playerName} - ${highlight.metricText}`.toUpperCase(), highlight2 ? 20 : 42, 1),
-        x: 136,
-        y: pom ? 1221 : 1164,
-        size: highlight2 ? 27 : 34,
-        color: "#f8f1d6",
-        anchor: "start"
-      })}
-      ${svgText({
-        lines: wrapWords(highlight.subtext.toUpperCase(), highlight2 ? 28 : 52, 1),
-        x: 136,
-        y: pom ? 1248 : 1194,
-        size: 18,
-        color: "#f7c734",
-        anchor: "start",
-        weight: 800,
-        fontFamily: SHARE_CARD_SUPPORT_FONT,
-        fontStyle: "normal"
-      })}`
+      ? renderHighlightSvg(highlight, 0, Boolean(highlight2))
       : ""
   }
   ${
     highlight2
-      ? `<rect x="555" y="${pom ? 1142 : 1080}" width="420" height="${pom ? 108 : 120}" rx="28" fill="#061c22" stroke="#46dfff" stroke-width="3" opacity="0.96"/>
-      ${svgText({
-        lines: [highlight2.title.toUpperCase()],
-        x: 586,
-        y: pom ? 1178 : 1117,
-        size: 22,
-        color: "url(#sectionFill)",
-        anchor: "start",
-        letterSpacing: 1,
-        fontFamily: SHARE_CARD_SUPPORT_FONT,
-        fontStyle: "normal",
-        stroke: "#061c22",
-        strokeWidth: 3,
-        paintOrder: "stroke fill",
-        filter: "url(#sectionGlow)"
-      })}
-      ${svgText({
-        lines: wrapWords(`${highlight2.playerName} - ${highlight2.metricText}`.toUpperCase(), 20, 1),
-        x: 586,
-        y: pom ? 1221 : 1164,
-        size: 27,
-        color: "#f8f1d6",
-        anchor: "start"
-      })}
-      ${svgText({
-        lines: wrapWords(highlight2.subtext.toUpperCase(), 28, 1),
-        x: 586,
-        y: pom ? 1248 : 1194,
-        size: 18,
-        color: "#f7c734",
-        anchor: "start",
-        weight: 800,
-        fontFamily: SHARE_CARD_SUPPORT_FONT,
-        fontStyle: "normal"
-      })}`
+      ? renderHighlightSvg(highlight2, 1, true)
       : ""
   }
   ${svgText({
