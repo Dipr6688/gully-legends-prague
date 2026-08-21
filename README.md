@@ -36,6 +36,9 @@ Implemented:
   no-balls, wickets, run-outs, and mobile-friendly scoring controls
 - Post-Match Celebration after official finalisation, plus historical celebration
   replay from official scorecards
+- Share Match Card export/share flow with the current premium celebration icon
+  family
+- Gully Face-Off player head-to-head arena
 - Private server-side automatic Team Balance / Shuffle for Available Today
   players
 - Match-day Fielding Helpers for catches and run-outs without changing team
@@ -71,6 +74,7 @@ Not done in this repository:
 - `/matches/[matchId]` - Draft editor, live match-entry workflow, or finalised
   scorecard depending on match status.
 - `/leaderboard` - Hall of Legends rankings.
+- `/face-off` - Gully Face-Off head-to-head player comparison arena.
 - `/monthly-beasts` - Monthly discipline awards based on batting XP, bowling XP,
   and fielding XP.
 - `/stats` - Formula Room explaining the real XP, Level, Player Power, and
@@ -319,8 +323,10 @@ Core files:
 
 - `lib/post-match-celebration.ts`
 - `components/matches/PostMatchCelebration.tsx`
+- `components/matches/MatchShareCard.tsx`
+- `lib/match-share-card.ts`
 - `components/matches/MatchScorecard.tsx`
-- `public/ui/post-match-celebration/*.svg`
+- `public/ui/post-match-celebration/*-v2.png`
 
 Architecture:
 
@@ -340,7 +346,7 @@ Live celebration includes:
 - Personal Bests
 - level-up cards when authoritative before/after progression exists
 - XP earned
-- responsive celebration UI with custom SVG assets
+- responsive celebration UI with premium custom PNG assets
 
 Historical Match Celebration Replay:
 
@@ -371,6 +377,44 @@ Personal Best UI:
 - `matchXP` is intentionally not shown as a Personal Best card
 - XP has its own Match XP section
 - cricket metric singular/plural formatting is handled in the celebration UI
+
+Share Match Card:
+
+- exports a `1080x1350` PNG
+- supports native Web Share where available
+- keeps Save Image / download fallback
+- uses at most two premium highlights
+- prioritises Gully Records, First Gully Records, major achievements, Personal
+  Bests, then Level Ups
+- uses the generic premium Achievement Unlocked emblem for achievement
+  highlights
+- does not include full Trophy Cabinet, XP lists, or every celebration item
+
+## Gully Face-Off
+
+The Gully Face-Off arena at `/face-off` compares two different players without
+declaring an artificial overall winner.
+
+Core files:
+
+- `app/face-off/page.tsx`
+- `components/face-off/GullyFaceOffArena.tsx`
+- `lib/gully-face-off.ts`
+- `public/ui/face-off/gully-face-off-vs.png`
+
+Rules:
+
+- same-player comparison is blocked
+- URL state is supported
+- metrics are grouped into Batting Battle, Bowling Battle, Fielding Battle, and
+  Career & Glory
+- full-career metrics use reliable official history
+- event-backed metrics such as fours, sixes, strike rate, and economy compare
+  the valid ball-by-ball tracked subset only
+- legacy missing ball-by-ball data is never fabricated as zero
+- lower bowling economy remains better
+- there is no overall weighted winner
+- no private Team Balance inputs are used
 
 ## Gallery
 
@@ -466,17 +510,19 @@ The current test suite covers progression, Player Power reset behavior, team
 balancing, match records, scorecard validation, APK review safety, Hall of
 Legends, Monthly Beasts, Formula Room, Dashboard behavior, Gallery persistence,
 Post-Match Celebration, historical celebration replay, and Admin security
-checks.
+checks, plus Gully Face-Off and Share Match Card behavior.
 
-Current production release verification:
+Current release-candidate verification:
 
-- `493/493` tests passing
+- `604/604` tests passing
 - lint passed
 - typecheck passed
 - build passed
-- Vercel Preview passed
-- Production deployment passed
-- smoke-tested successfully on `https://www.gullylegends.eu`
+- latest committed functional checkpoint: `275c2fa Add Gully Face-Off arena and
+  celebration polish`
+
+Latest known production deployment before this docs refresh was smoke-tested
+successfully on `https://www.gullylegends.eu`.
 
 ## Agent Handoff
 

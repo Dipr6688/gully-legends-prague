@@ -2,9 +2,9 @@
 
 **Purpose:** Upload this file at the start of a new ChatGPT/Codex conversation so the assistant can understand the project without needing the full old chat history.
 
-**Last updated:** 20 August 2026
+**Last updated:** 21 August 2026
 
-**Current overall status:** The project is in a stable state on Production `main`. The production website is live at the custom domain. APK Pending Review / Admin correction, Quick Scoring, simplified match setup, Supabase persistence, Gallery, Hall of Legends, Monthly Beasts, Fielding Helpers, private server-side Team Balance / Shuffle, Post-Match Celebration, Historical Match Celebration Replay, and the illustrated user manual are implemented. Current release validation: lint passed, typecheck passed, tests passed `493/493`, production build passed. Vercel Preview passed, Production deployment passed, and smoke testing on `https://www.gullylegends.eu` passed.
+**Current overall status:** The project is in a stable state on `main`. The production website is live at the custom domain. APK Pending Review / Admin correction, Quick Scoring, simplified match setup, Supabase persistence, Gallery, Hall of Legends, Gully Face-Off, Monthly Beasts, Fielding Helpers, private server-side Team Balance / Shuffle, Post-Match Celebration, Historical Match Celebration Replay, Share Match Card export, and the illustrated user manual are implemented. Current release-candidate validation: lint passed, typecheck passed, tests passed `604/604`, production build passed. Latest known Production smoke testing on `https://www.gullylegends.eu` passed.
 
 **Privacy note for agents:** Automatic Team Balance / Shuffle uses private server-side inputs. Do not expose balancing weights, groups, totals, pair rules, or separation reasons in UI copy, public API responses, README text, screenshots, accessibility labels, or public-facing docs.
 
@@ -73,7 +73,9 @@ At the time of this handoff:
 
 Production `main` HEAD:
 
-`6e41645 Add historical match celebration replay`
+Functional checkpoint:
+
+`275c2fa Add Gully Face-Off arena and celebration polish`
 
 The current local project state is stable and validated. Use a new feature branch for future changes unless the user explicitly asks to work directly on `main`.
 
@@ -207,6 +209,7 @@ Do not omit/simplify this sequence.
 - Scorecards
 - Match Celebration Replay from eligible official scorecards
 - Hall of Legends (`/leaderboard`)
+- Gully Face-Off (`/face-off`)
 - Monthly Beasts
 - Formula Room (`/stats`)
 - Gallery
@@ -655,14 +658,17 @@ Important commits:
 - `be0cc79 Add post-match celebration foundation`
 - `2e5902c Add post-match celebration experience`
 - `6e41645 Add historical match celebration replay`
+- `275c2fa Add Gully Face-Off arena and celebration polish`
 
 Core implementation:
 
 - `lib/post-match-celebration.ts`
 - `components/matches/PostMatchCelebration.tsx`
+- `components/matches/MatchShareCard.tsx`
+- `lib/match-share-card.ts`
 - `components/matches/MatchScorecard.tsx`
 - `app/api/admin/matches/finalize/route.ts`
-- `public/ui/post-match-celebration/*.svg`
+- `public/ui/post-match-celebration/*-v2.png`
 
 ### Celebration architecture
 
@@ -691,7 +697,8 @@ The live celebration includes:
 - Level-up cards when authoritative before/after progression snapshots exist
 - XP earned
 - responsive mobile-friendly overlay
-- custom celebration SVG assets
+- premium custom PNG assets
+- Share Match Card action
 
 ### Historical Match Celebration Replay
 
@@ -739,6 +746,33 @@ Rules:
 - Celebration metric text uses correct singular/plural labels such as
   `1 Run`, `2 Runs`, `1 Wicket`, `2 Wickets`, `1 Catch`, `2 Catches`.
 
+### Compact historical replay UI
+
+- Identical achievement unlocks are grouped into one compact card per
+  achievement.
+- Personal Bests are grouped by player.
+- Historical XP rows are compact and do not fabricate missing progression.
+- Achievement cards size to their own content and are not stretched to match the
+  tallest card in a grid row.
+
+### Share Match Card
+
+The Share Match Card is implemented as part of the celebration experience.
+
+Rules:
+
+- exports a `1080x1350` PNG
+- uses native Web Share where available
+- keeps Save Image / download fallback
+- uses at most two premium match highlights
+- highlight priority: Gully Record Broken, First Gully Record, major
+  Achievement Unlocked, Personal Best, then Level Up
+- Achievement Unlocked highlights use the generic premium celebration emblem
+  only
+- no Trophy Cabinet-specific second icon is shown on share-card achievement
+  highlights
+- the share-card renderer does not write Supabase or cricket data
+
 ### Verification
 
 - Vercel Preview passed.
@@ -746,6 +780,52 @@ Rules:
 - Historical celebrations tested successfully on `https://www.gullylegends.eu`.
 - Localhost historical replay was visually inspected.
 - Desktop/mobile visual QA passed.
+- Release-candidate share-card PNG export generated at `1080x1350` and visually
+  inspected.
+
+---
+
+# 20B. Gully Face-Off - RELEASE CANDIDATE
+
+Gully Face-Off is implemented on `main` at functional checkpoint:
+
+`275c2fa Add Gully Face-Off arena and celebration polish`
+
+Core implementation:
+
+- `app/face-off/page.tsx`
+- `components/face-off/GullyFaceOffArena.tsx`
+- `lib/gully-face-off.ts`
+- `public/ui/face-off/gully-face-off-vs.png`
+
+Behavior:
+
+- `/face-off` route is available.
+- Shared navigation includes `FACE-OFF`.
+- Player selectors support URL state.
+- Same-player comparison is prevented.
+- Dedicated premium VS artwork is used instead of CSS/text VS.
+- Batting, Bowling, Fielding, and Career & Glory sections top-align metrics.
+- Section edge badges and per-metric leader callouts are prominent.
+- There is no artificial overall weighted winner.
+
+Data policy:
+
+- Reliable full-career metrics use official history.
+- Event-backed advanced metrics such as fours, sixes, batting strike rate, and
+  bowling economy compare only the valid ball-by-ball tracked subset.
+- Tracked-only metrics expose compact coverage context.
+- Missing legacy ball-by-ball data is never fabricated as zero.
+- Bowling economy keeps lower-is-better ranking.
+- Demo, cancelled, unfinished, pending APK, and rejected-like records are
+  excluded.
+
+Safety:
+
+- read-only presentation
+- no Supabase writes
+- no private Team Balance dependency
+- no private Team Balance details exposed
 
 ---
 
@@ -1064,15 +1144,14 @@ Latest stable validation:
 
 - lint: passed
 - typecheck: passed
-- tests: **493 passing**
+- tests: **604 passing**
 - build: passed
-- Vercel Preview: passed
-- Production deployment: passed
-- Production smoke test: passed on `https://www.gullylegends.eu`
+- current release-candidate source validation: passed
+- latest known Production smoke test: passed on `https://www.gullylegends.eu`
 
-Production HEAD:
+Functional checkpoint:
 
-`6e41645 Add historical match celebration replay`
+`275c2fa Add Gully Face-Off arena and celebration polish`
 
 ### Current metadata update scope
 This handoff metadata, `README.md`, and `AGENT_PROJECT_METADATA.json` describe the stable project state. Do not infer that unrelated untracked files are automatically approved for release unless the user says so.
@@ -1172,12 +1251,12 @@ Always test Quick Scoring on a real phone through Vercel Preview before Producti
 
 # 38. Current launch / release state
 
-As of **20 August 2026**:
+As of **21 August 2026**:
 
 ### Production
 - Production site live and working
 - Production branch: `main`
-- Production HEAD: `6e41645 Add historical match celebration replay`
+- current functional checkpoint: `275c2fa Add Gully Face-Off arena and celebration polish`
 - custom domain working
 - GitHub ↔ Vercel working
 - Supabase working
@@ -1188,6 +1267,7 @@ As of **20 August 2026**:
 - Production deployment passed
 - smoke-tested successfully on `https://www.gullylegends.eu`
 - historical celebrations tested successfully on Production
+- Gully Face-Off and Share Match Card release-candidate validation passed
 
 ### Data
 - demo data reset before real tracking
@@ -1199,21 +1279,23 @@ As of **20 August 2026**:
 The current project state is stable on `main` and has passed:
 - lint
 - typecheck
-- 493 tests
+- 604 tests
 - build
-- desktop/mobile visual QA for the celebration replay
+- desktop/mobile visual QA for celebration replay and Gully Face-Off
+- share-card PNG export QA at `1080x1350`
 
 Future changes should still use the normal branch / preview / validation flow unless the user explicitly chooses a direct `main` update.
 
 ### Prepared/deferred until later
 - activation of post-finalisation POM correction RPC/migration
-- shareable Match Result Card / export
 - deeper focus-trap / keyboard-cycle accessibility polish
 - historical level replay only if authoritative historical snapshots become available
 
 ### No longer wholly deferred
 - Match Records Broken / Personal Best celebration support is implemented in
   the Post-Match Celebration system.
+- Share Match Card export/share is implemented in the celebration flow.
+- Gully Face-Off is implemented as a read-only player comparison arena.
 
 ---
 
@@ -1243,7 +1325,9 @@ Future changes should still use the normal branch / preview / validation flow un
 22. APK Pending Review / Admin correction is included in Production `main`; do not describe it as feature-branch-only.
 23. Post-Match Celebration and Historical Match Celebration Replay are included in Production `main`.
 24. Historical celebration replay is read-only and must not fabricate missing XP, levels, or event-backed stats.
-25. Deferred player name/avatar changes require a source-of-truth audit in Supabase mode before implementation.
+25. Share Match Card export/share is implemented; preserve the 1080x1350 output and maximum-two-highlight hierarchy.
+26. Gully Face-Off is implemented; preserve tracked-only advanced-stat policy and no-overall-winner design.
+27. Deferred player name/avatar changes require a source-of-truth audit in Supabase mode before implementation.
 
 ---
 

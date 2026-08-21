@@ -1,16 +1,16 @@
 {
-  "metadataVersion": 5,
-  "lastUpdated": "2026-08-20",
+  "metadataVersion": 6,
+  "lastUpdated": "2026-08-21",
   "project": {
     "name": "Gully Legends Prague",
-    "purpose": "Gaming/comic styled cricket website, Supabase-backed cricket match management, player progression, Hall of Legends rankings, Monthly Beasts awards, Formula Room documentation, and shared Gallery for the Gully Legends Prague cricket group.",
+    "purpose": "Gaming/comic styled cricket website, Supabase-backed cricket match management, player progression, Hall of Legends rankings, Gully Face-Off comparisons, Monthly Beasts awards, Formula Room documentation, Post-Match Celebration, Share Match Card export, and shared Gallery for the Gully Legends Prague cricket group.",
     "framework": "Next.js App Router",
     "language": "TypeScript",
     "styling": "Tailwind CSS plus custom CSS in app/globals.css",
     "primaryDataSource": "Supabase when NEXT_PUBLIC_DATA_SOURCE is unset or set to supabase",
     "localFallbackMode": "NEXT_PUBLIC_DATA_SOURCE=local preserves local browser fallback behavior for development",
     "databaseStatus": "Supabase Auth, Postgres, RLS, RPC finalisation, Monthly Beast writes, Demo Reset, Gallery Storage persistence, and APK Pending Review persistence are implemented.",
-    "phaseStatus": "Current project is stable on Production main at 6e41645: 21-player roster, approved responsive dashboard, Supabase-backed public reads, Admin-only writes, APK Pending Review / Admin correction, Quick Scoring, atomic match finalisation, Post-Match Celebration, Historical Match Celebration Replay, reset-safe player progression, Monthly Beasts Crown/Reopen, Demo Reset, demo test match helper, Supabase Gallery persistence, private server-side Team Balance / Shuffle, and illustrated match scoring documentation are implemented."
+    "phaseStatus": "Current project is stable on main at functional checkpoint 275c2fa: 21-player roster, approved responsive dashboard, Supabase-backed public reads, Admin-only writes, APK Pending Review / Admin correction, Quick Scoring, atomic match finalisation, Post-Match Celebration, Historical Match Celebration Replay, Share Match Card export, Gully Face-Off, reset-safe player progression, Monthly Beasts Crown/Reopen, Demo Reset, demo test match helper, Supabase Gallery persistence, private server-side Team Balance / Shuffle, and illustrated match scoring documentation are implemented."
   },
   "commands": {
     "windowsNote": "Use npm.cmd in PowerShell because npm.ps1 may be blocked by execution policy.",
@@ -23,7 +23,12 @@
   },
   "releaseState": {
     "productionBranch": "main",
-    "productionHead": "6e41645 Add historical match celebration replay",
+    "productionHead": "275c2fa Add Gully Face-Off arena and celebration polish",
+    "functionalCheckpoint": "275c2fa Add Gully Face-Off arena and celebration polish",
+    "gullyFaceOffCommits": [
+      "4b7c7fb Add Gully Face-Off comparison engine",
+      "275c2fa Add Gully Face-Off arena and celebration polish"
+    ],
     "postMatchCelebrationCommits": [
       "be0cc79 Add post-match celebration foundation",
       "2e5902c Add post-match celebration experience",
@@ -38,7 +43,7 @@
       "Historical celebrations tested successfully on gullylegends.eu.",
       "Localhost historical replay visually inspected.",
       "Desktop/mobile visual QA passed.",
-      "493/493 tests passing.",
+      "604/604 tests passing.",
       "lint passed.",
       "typecheck passed.",
       "build passed."
@@ -86,6 +91,11 @@
     "quickScoringLogic": "lib/quick-scoring.ts",
     "postMatchCelebration": "components/matches/PostMatchCelebration.tsx",
     "postMatchCelebrationDomain": "lib/post-match-celebration.ts",
+    "matchShareCard": "components/matches/MatchShareCard.tsx",
+    "matchShareCardDomain": "lib/match-share-card.ts",
+    "gullyFaceOffPage": "app/face-off/page.tsx",
+    "gullyFaceOffArena": "components/face-off/GullyFaceOffArena.tsx",
+    "gullyFaceOffDomain": "lib/gully-face-off.ts",
     "teamBalancingCore": "lib/team-balancing-core.ts",
     "teamBalancingServer": "server/team-balancing.ts",
     "teamBalanceApi": "app/api/team-balance/route.ts",
@@ -123,7 +133,9 @@
       "tests/admin-auth.test.ts",
       "tests/advanced-cricket-stats.test.ts",
       "tests/app-sync.test.ts",
-      "tests/post-match-celebration.test.ts"
+      "tests/post-match-celebration.test.ts",
+      "tests/player-achievements.test.ts",
+      "tests/gully-face-off.test.ts"
     ]
   },
   "designRules": {
@@ -213,6 +225,19 @@
         "Player Profile - Player File",
         "Stats / Formula Room - Player Power tab"
       ]
+    },
+    "faceOff": {
+      "vsEmblem": "public/ui/face-off/gully-face-off-vs.png",
+      "rule": "Use the dedicated VS artwork asset; do not rebuild the VS emblem with separate CSS text."
+    },
+    "postMatchCelebrationV2Icons": {
+      "winner": "/ui/post-match-celebration/winner-trophy-v2.png",
+      "pom": "/ui/post-match-celebration/pom-star-v2.png",
+      "record": "/ui/post-match-celebration/record-broken-v2.png",
+      "achievement": "/ui/post-match-celebration/achievement-unlocked-v2.png",
+      "personalBest": "/ui/post-match-celebration/personal-best-v2.png",
+      "levelUp": "/ui/post-match-celebration/level-up-v2.png",
+      "xp": "/ui/post-match-celebration/xp-bolt-v2.png"
     }
   },
   "players": {
@@ -331,7 +356,10 @@
       "Dismissal details only for wickets that occurred",
       "Automatic innings stop rules",
       "Atomic finalisation and idempotent retry",
+      "Post-finalisation celebration for newly finalised official matches",
+      "Share Match Card export/share from celebration",
       "Read-only finalised scorecard",
+      "Read-only historical celebration replay from official scorecards",
       "Scheduled fixture delete before play starts",
       "Quick Scoring with single-batter and two-batter modes",
       "Mobile-friendly scoring controls, innings breaks, and Undo Last Ball",
@@ -417,8 +445,10 @@
   "postMatchCelebration": {
     "productionStatus": {
       "branch": "main",
-      "head": "6e41645 Add historical match celebration replay",
+      "head": "275c2fa Add Gully Face-Off arena and celebration polish",
       "previousCommits": [
+        "275c2fa Add Gully Face-Off arena and celebration polish",
+        "6e41645 Add historical match celebration replay",
         "2e5902c Add post-match celebration experience",
         "be0cc79 Add post-match celebration foundation"
       ],
@@ -429,6 +459,8 @@
     "coreFiles": [
       "lib/post-match-celebration.ts",
       "components/matches/PostMatchCelebration.tsx",
+      "components/matches/MatchShareCard.tsx",
+      "lib/match-share-card.ts",
       "components/matches/MatchScorecard.tsx",
       "app/api/admin/matches/finalize/route.ts",
       "public/ui/post-match-celebration"
@@ -450,7 +482,8 @@
       "Level-up cards when authoritative before/after progression snapshots exist",
       "XP earned",
       "Responsive celebration UI",
-      "Custom celebration SVG assets"
+      "Premium custom PNG assets",
+      "Share Match Card export/share action"
     ],
     "historicalReplay": {
       "entryPoint": "Official historical match scorecard button: VIEW MATCH CELEBRATION",
@@ -484,12 +517,61 @@
         "Event-backed historical comparisons run only where valid."
       ]
     },
+    "compactHistoricalReplay": [
+      "Identical achievement unlocks are grouped into one card per achievement.",
+      "Personal Bests are grouped by player.",
+      "Historical XP rows are compact and omit fake progression when snapshots are unavailable.",
+      "Achievement cards size to their own content and are not stretched to the tallest card in a grid row."
+    ],
+    "shareMatchCard": [
+      "Exports a 1080x1350 PNG.",
+      "Uses native Web Share where available and Save Image as fallback.",
+      "Uses at most two premium highlights.",
+      "Highlight priority is records, first records, major achievements, Personal Bests, then Level Ups.",
+      "Achievement highlights use one generic premium Achievement Unlocked emblem and do not show Trophy Cabinet-specific icons.",
+      "No Supabase or cricket-data writes are performed by share-card rendering."
+    ],
     "visualQa": [
       "Vercel Preview passed.",
       "Production deployment passed.",
       "Historical celebrations tested successfully on gullylegends.eu.",
       "Localhost historical replay visually inspected.",
-      "Desktop/mobile visual QA passed."
+      "Desktop/mobile visual QA passed.",
+      "Release-candidate share-card PNG export generated at 1080x1350 and visually inspected."
+    ]
+  },
+  "gullyFaceOff": {
+    "status": "Implemented on main at functional checkpoint 275c2fa.",
+    "route": "/face-off",
+    "navigationLabel": "FACE-OFF",
+    "coreFiles": [
+      "app/face-off/page.tsx",
+      "components/face-off/GullyFaceOffArena.tsx",
+      "lib/gully-face-off.ts",
+      "public/ui/face-off/gully-face-off-vs.png"
+    ],
+    "behavior": [
+      "Compares exactly two different players.",
+      "Same-player comparison is prevented.",
+      "Player selection is reflected in URL state.",
+      "Dedicated premium VS artwork is used instead of CSS/text VS construction.",
+      "Batting, Bowling, Fielding, and Career & Glory sections top-align their metrics.",
+      "Section edge badges and per-metric leader callouts are visually prominent.",
+      "There is no overall weighted winner."
+    ],
+    "dataPolicy": [
+      "Reliable full-career metrics compare official career history.",
+      "Event-backed metrics such as fours, sixes, batting strike rate, and bowling economy compare valid tracked subsets only.",
+      "Tracked-only metrics display coverage context.",
+      "Missing legacy ball-by-ball data is never fabricated as zero.",
+      "Lower bowling economy is better.",
+      "Demo, cancelled, unfinished, pending APK, and rejected-like records are excluded."
+    ],
+    "safety": [
+      "Read-only presentation over supplied match/player data.",
+      "No Supabase writes.",
+      "No private Team Balance dependency.",
+      "No private Team Balance inputs are exposed."
     ]
   },
   "leaderboardAndFormulaRoom": {
@@ -557,7 +639,7 @@
   "tests": {
     "script": "npm.cmd run test",
     "runner": "node:test after compiling with tsconfig.test.json",
-    "currentPassingCount": 493,
+    "currentPassingCount": 604,
     "coverageThemes": [
       "Supabase Auth and Admin security",
       "Supabase public read mapping",
@@ -577,20 +659,23 @@
       "Supabase Gallery persistence and local fallback",
       "APK Pending Review and Admin correction safety",
       "Post-Match Celebration live finalisation summaries",
-      "Historical Match Celebration Replay and legacy-data safety"
+      "Historical Match Celebration Replay and legacy-data safety",
+      "Share Match Card export/share behavior",
+      "Player achievements and Trophy Cabinet",
+      "Gully Face-Off domain and UI source checks"
     ],
     "generatedArtifact": ".test-build is generated by npm run test and should not be committed."
   },
   "lastVerified": {
-    "date": "2026-08-20",
+    "date": "2026-08-21",
     "commandsRun": [
       "npm.cmd run lint",
       "npm.cmd run typecheck",
       "npm.cmd run test",
       "npm.cmd run build"
     ],
-    "result": "All passed for Production main after Post-Match Celebration and Historical Match Celebration Replay release.",
-    "testCount": "493/493 tests passed"
+    "result": "All passed on main after Gully Face-Off release-candidate and Post-Match Celebration / Share Match Card polish.",
+    "testCount": "604/604 tests passed"
   },
   "agentGuidance": {
     "beforeVisualChanges": [
