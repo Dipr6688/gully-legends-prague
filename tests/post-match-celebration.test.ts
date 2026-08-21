@@ -1356,3 +1356,107 @@ test("share card component exposes share and save actions without Supabase write
   assert.doesNotMatch(shareComponent, /supabase|\/api\/|insert|update|delete|finalize/i);
   assert.doesNotMatch(shareDomain, /supabase|\/api\/|insert|update|delete|finalize/i);
 });
+
+test("official celebration summary includes achievements unlocked by the target match", () => {
+  const target = match({
+    id: "achievement-target",
+    matchDate: "2026-08-12",
+    matchNumber: 4,
+    records: [record({ playerId: "aninda", runs: 100 })]
+  });
+  const summary = buildPostMatchCelebrationSummary({
+    match: target,
+    historicalMatches: [target]
+  });
+
+  assert.equal(
+    summary.achievementUnlocks.some(
+      (unlock) => unlock.definition.id === "career-runs-100"
+    ),
+    true
+  );
+  assert.equal(
+    summary.highlights.some((highlight) => highlight.type === "achievement_unlocked"),
+    true
+  );
+});
+
+test("historical celebration replay reports achievements from the historical baseline only", () => {
+  const target = match({
+    id: "achievement-target",
+    matchDate: "2026-08-12",
+    matchNumber: 2,
+    records: [record({ playerId: "aninda", runs: 10 })]
+  });
+  const earlier = match({
+    id: "achievement-earlier",
+    matchDate: "2026-08-12",
+    matchNumber: 1,
+    records: [record({ playerId: "aninda", runs: 90 })]
+  });
+  const later = match({
+    id: "achievement-later",
+    matchDate: "2026-08-12",
+    matchNumber: 3,
+    records: [record({ playerId: "aninda", runs: 500 })]
+  });
+  const summary = buildHistoricalPostMatchCelebrationSummary({
+    match: target,
+    allMatches: [later, target, earlier]
+  });
+
+  assert.deepEqual(
+    summary.achievementUnlocks.map((unlock) => unlock.definition.id),
+    ["career-runs-100"]
+  );
+});
+
+test("non-official celebration summaries never include achievement unlocks", () => {
+  const demo = match({
+    id: "demo-achievement",
+    isDemo: true,
+    records: [record({ playerId: "aninda", runs: 100 })]
+  });
+  const summary = buildPostMatchCelebrationSummary({
+    match: demo,
+    historicalMatches: [demo]
+  });
+
+  assert.deepEqual(summary.achievementUnlocks, []);
+  assert.equal(
+    summary.highlights.some((highlight) => highlight.type === "achievement_unlocked"),
+    false
+  );
+});
+
+test("celebration achievement unlocks de-duplicate Shared Player entries", () => {
+  const target = match({
+    id: "shared-achievement",
+    records: [
+      record({ playerId: "aninda", teamId: "teamA", runs: 60 }),
+      record({ playerId: "aninda", teamId: "teamB", runs: 45 })
+    ]
+  });
+  const summary = buildPostMatchCelebrationSummary({
+    match: target,
+    historicalMatches: [target]
+  });
+
+  assert.equal(
+    summary.achievementUnlocks.filter(
+      (unlock) => unlock.definition.id === "career-runs-100"
+    ).length,
+    1
+  );
+});
+
+test("post-match celebration UI renders achievement unlock section and badge assets", () => {
+  const component = readFileSync("components/matches/PostMatchCelebration.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.match(component, /Achievement Unlocked!/);
+  assert.match(component, /Achievement Unlocked in This Match!/);
+  assert.match(component, /achievement-unlocked\.svg/);
+  assert.match(component, /getAchievementIconPath/);
+  assert.match(css, /\.post-match-unlock-card/);
+});

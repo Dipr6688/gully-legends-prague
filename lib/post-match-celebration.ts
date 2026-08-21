@@ -1,11 +1,18 @@
-import { deriveAdvancedMatchStats } from "./advanced-cricket-stats";
 import {
-  isSuccessfullyFinalisedMatch,
-  parseLocalMatchDate
-} from "./match-eligibility";
+  getPostMatchCelebrationBaselineMatches,
+  isOfficialCelebrationMatch
+} from "./official-match-history";
+import { deriveAdvancedMatchStats } from "./advanced-cricket-stats";
+import { getAchievementsUnlockedByMatch, type AchievementUnlock } from "./player-achievements";
 import { sanitizeRuns } from "./match-records";
 import { getLevelFromXP, getLevelProgress, type PlayerLevelProgress } from "./progression";
 import type { FinalisedPlayerMatchRecord, MatchRecord, MatchResult } from "./types/match";
+
+export {
+  getPostMatchCelebrationBaselineMatches,
+  isBeforeCelebrationMatch,
+  isOfficialCelebrationMatch
+} from "./official-match-history";
 
 export type PostMatchCelebrationMetric =
   | "runs"
@@ -185,6 +192,7 @@ export type PostMatchCelebrationHighlightType =
   | "player_of_match"
   | "record_broken"
   | "first_record"
+  | "achievement_unlocked"
   | "personal_best"
   | "first_personal_best"
   | "level_up";
@@ -204,6 +212,7 @@ export type PostMatchCelebrationSummary = {
   matchXPAwards: PostMatchXPAward[];
   progressionChanges: PostMatchProgressionChange[];
   levelUps: PostMatchLevelUp[];
+  achievementUnlocks: AchievementUnlock[];
   personalBests: PostMatchPersonalBest[];
   recordsBroken: PostMatchRecord[];
   highlights: PostMatchCelebrationHighlight[];
@@ -242,79 +251,6 @@ function qualifiesMetricValue(
   value: number
 ): boolean {
   return value >= POST_MATCH_CELEBRATION_METRICS[metric].minimumQualifyingValue;
-}
-
-export function isOfficialCelebrationMatch(match: MatchRecord): boolean {
-  return (
-    isSuccessfullyFinalisedMatch(match) &&
-    !match.isDemo &&
-    !match.isDemoTestMatch &&
-    !match.deletedAt &&
-    !match.id.startsWith("apk-pending-")
-  );
-}
-
-function parseTimestamp(value: string | undefined): number | null {
-  if (!value) return null;
-
-  const parsed = Date.parse(value);
-
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-export function isBeforeCelebrationMatch(
-  candidate: MatchRecord,
-  target: MatchRecord
-): boolean {
-  if (candidate.id === target.id) return false;
-
-  const candidateDate = parseLocalMatchDate(candidate.matchDate);
-  const targetDate = parseLocalMatchDate(target.matchDate);
-
-  if (candidateDate && targetDate) {
-    const candidateTime = candidateDate.getTime();
-    const targetTime = targetDate.getTime();
-
-    if (candidateTime < targetTime) return true;
-    if (candidateTime > targetTime) return false;
-  }
-
-  if (
-    candidate.matchDate === target.matchDate &&
-    typeof candidate.matchNumber === "number" &&
-    typeof target.matchNumber === "number"
-  ) {
-    return candidate.matchNumber < target.matchNumber;
-  }
-
-  const candidateAppliedAt = parseTimestamp(candidate.progressionAppliedAt);
-  const targetAppliedAt = parseTimestamp(target.progressionAppliedAt);
-
-  if (candidateAppliedAt !== null && targetAppliedAt !== null) {
-    return candidateAppliedAt < targetAppliedAt;
-  }
-
-  const candidateUpdatedAt = parseTimestamp(candidate.supabaseUpdatedAt);
-  const targetUpdatedAt = parseTimestamp(target.supabaseUpdatedAt);
-
-  if (candidateUpdatedAt !== null && targetUpdatedAt !== null) {
-    return candidateUpdatedAt < targetUpdatedAt;
-  }
-
-  return false;
-}
-
-export function getPostMatchCelebrationBaselineMatches({
-  match,
-  historicalMatches
-}: {
-  match: MatchRecord;
-  historicalMatches: MatchRecord[];
-}): MatchRecord[] {
-  return historicalMatches.filter(
-    (candidate) =>
-      isOfficialCelebrationMatch(candidate) && isBeforeCelebrationMatch(candidate, match)
-  );
 }
 
 function getFinalisedPlayerRecords(match: MatchRecord): FinalisedPlayerMatchRecord[] {
@@ -668,12 +604,14 @@ function buildHighlights({
   isEligibleOfficialMatch,
   playerOfMatch,
   recordsBroken,
+  achievementUnlocks,
   personalBests,
   levelUps
 }: {
   isEligibleOfficialMatch: boolean;
   playerOfMatch: PostMatchPlayerOfMatch | null;
   recordsBroken: PostMatchRecord[];
+  achievementUnlocks: AchievementUnlock[];
   personalBests: PostMatchPersonalBest[];
   levelUps: PostMatchLevelUp[];
 }): PostMatchCelebrationHighlight[] {
@@ -695,6 +633,14 @@ function buildHighlights({
       priority: record.status === "firstRecord" ? 35 : 30,
       playerId: record.playerId,
       metric: record.metric
+    });
+  }
+
+  for (const unlock of achievementUnlocks) {
+    highlights.push({
+      type: "achievement_unlocked",
+      priority: 42,
+      playerId: unlock.playerId
     });
   }
 
@@ -742,6 +688,12 @@ export function buildPostMatchCelebrationSummary({
   const levelUps = buildLevelUps(progressionChanges);
   const playerOfMatch = isEligibleOfficialMatch ? getOfficialPlayerOfMatch(match) : null;
   const matchXPAwards = isEligibleOfficialMatch ? buildStoredMatchXPAwards(match) : [];
+  const achievementUnlocks = isEligibleOfficialMatch
+    ? getAchievementsUnlockedByMatch({
+        match,
+        officialMatches: historicalMatches
+      })
+    : [];
 
   return {
     matchId: match.id,
@@ -751,12 +703,14 @@ export function buildPostMatchCelebrationSummary({
     matchXPAwards,
     progressionChanges,
     levelUps,
+    achievementUnlocks,
     personalBests,
     recordsBroken,
     highlights: buildHighlights({
       isEligibleOfficialMatch,
       playerOfMatch,
       recordsBroken,
+      achievementUnlocks,
       personalBests,
       levelUps
     })

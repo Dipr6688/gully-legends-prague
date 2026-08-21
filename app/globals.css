@@ -369,6 +369,31 @@ body {
   color: #f7c734;
 }
 
+.post-match-unlock-card {
+  border-color: rgba(156, 255, 36, 0.34);
+  background:
+    radial-gradient(circle at 82% 0%, rgba(156, 255, 36, 0.17), transparent 14rem),
+    linear-gradient(145deg, rgba(70, 223, 255, 0.09), transparent 44%),
+    rgba(0, 0, 0, 0.4);
+}
+
+.post-match-unlock-card p {
+  color: #9cff24;
+}
+
+.post-match-unlock-icons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.post-match-unlock-icons img:last-child {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 4px;
+}
+
 .post-match-personal-card {
   border-color: rgba(70, 223, 255, 0.32);
 }
@@ -8358,6 +8383,7 @@ textarea {
 .career-scoreboard,
 .player-power-section,
 .player-file-section,
+.trophy-cabinet-section,
 .fun-trait-callout {
   position: relative;
   overflow: hidden;
@@ -8445,7 +8471,8 @@ textarea {
 
 .career-scoreboard,
 .player-power-section,
-.player-file-section {
+.player-file-section,
+.trophy-cabinet-section {
   padding: clamp(18px, 2.4vw, 24px);
 }
 
@@ -8672,7 +8699,390 @@ textarea {
 
 .player-profile-content {
   display: grid;
-  gap: 20px;
+  gap: 16px;
+}
+
+.trophy-cabinet-section {
+  display: grid;
+  gap: 14px;
+}
+
+.trophy-cabinet-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.trophy-cabinet-header p,
+.trophy-badge-card p,
+.trophy-progress-heading p {
+  margin: 0;
+  color: #46dfff;
+  font-size: 0.76rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.trophy-cabinet-header h2 {
+  margin: 4px 0 0;
+  color: #fff5d8;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: clamp(30px, 4vw, 46px);
+  font-style: italic;
+  letter-spacing: 0;
+  line-height: 0.92;
+  text-transform: uppercase;
+  text-shadow: 3px 3px 0 #07100e;
+}
+
+.trophy-cabinet-header strong {
+  flex: 0 0 auto;
+  border: 1px solid rgba(247, 199, 52, 0.36);
+  border-radius: 999px;
+  background: rgba(247, 199, 52, 0.12);
+  padding: 8px 11px;
+  color: #f7c734;
+  font-size: 0.82rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.trophy-featured-grid,
+.trophy-badge-grid,
+.trophy-progress-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.trophy-featured-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.trophy-badge-grid,
+.trophy-progress-grid {
+  grid-template-columns: repeat(auto-fit, minmax(164px, 1fr));
+}
+
+.trophy-badge-grid-unlocked {
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+}
+
+.trophy-category-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.trophy-category-group {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.trophy-category-group h3,
+.trophy-next-section h3,
+.trophy-category-stack > h3 {
+  margin: 0;
+  color: var(--player-accent);
+  font-size: 0.88rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.trophy-category-stack > h3,
+.trophy-next-section > h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff5d8;
+  font-size: 1rem;
+  text-shadow: 2px 2px 0 #07100e;
+}
+
+.trophy-category-stack > h3::after,
+.trophy-next-section > h3::after {
+  flex: 1 1 auto;
+  height: 1px;
+  min-width: 40px;
+  content: "";
+  background: linear-gradient(
+    90deg,
+    rgba(247, 199, 52, 0.62),
+    rgba(70, 223, 255, 0.2),
+    transparent
+  );
+  box-shadow: 0 0 10px rgba(247, 199, 52, 0.16);
+}
+
+.trophy-badge-card,
+.trophy-progress-card,
+.trophy-empty-state {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 15px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.07), transparent 40%),
+    rgba(3, 8, 12, 0.74);
+  padding: 11px;
+}
+
+.trophy-badge-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.trophy-badge-card-compact {
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  min-height: 96px;
+  padding: 10px;
+}
+
+.trophy-badge-card-featured {
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  min-height: 118px;
+  padding: 12px;
+}
+
+.trophy-badge-card-featured .trophy-badge-icon {
+  width: 72px;
+  height: 72px;
+}
+
+.trophy-badge-card-featured .trophy-badge-icon img {
+  width: 72px;
+  height: 72px;
+}
+
+.trophy-badge-card-featured h4 {
+  font-size: clamp(1.22rem, 2.1vw, 1.56rem);
+}
+
+.trophy-badge-card-featured span {
+  display: block;
+  margin-top: 3px;
+}
+
+.trophy-badge-card-featured em {
+  margin-top: 5px;
+}
+
+.trophy-badge-card[data-tier="legend"],
+.trophy-badge-card[data-tier="platinum"] {
+  border-color: rgba(247, 199, 52, 0.35);
+  background:
+    radial-gradient(circle at 86% 4%, rgba(247, 199, 52, 0.18), transparent 11rem),
+    rgba(3, 8, 12, 0.78);
+}
+
+.trophy-badge-card[data-tier="gold"] {
+  border-color: rgba(247, 199, 52, 0.24);
+}
+
+.trophy-badge-icon,
+.trophy-progress-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(247, 199, 52, 0.2);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.16), transparent 22%),
+    radial-gradient(circle, rgba(247, 199, 52, 0.1), transparent 64%),
+    color-mix(in srgb, var(--player-accent) 11%, #05090d);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.35),
+    inset 0 0 12px rgba(255, 255, 255, 0.06),
+    0 0 18px color-mix(in srgb, var(--player-accent) 22%, transparent);
+}
+
+.trophy-badge-icon::before,
+.trophy-progress-icon::before {
+  position: absolute;
+  inset: 3px;
+  content: "";
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: inherit;
+}
+
+.trophy-badge-icon::after,
+.trophy-progress-icon::after {
+  position: absolute;
+  top: 10%;
+  left: 18%;
+  width: 44%;
+  height: 18%;
+  content: "";
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  filter: blur(5px);
+  transform: rotate(-18deg);
+}
+
+.trophy-badge-icon {
+  width: 72px;
+  height: 72px;
+}
+
+.trophy-badge-icon img {
+  position: relative;
+  z-index: 1;
+  width: 70px;
+  height: 70px;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55))
+    drop-shadow(0 0 9px rgba(247, 199, 52, 0.26));
+}
+
+.trophy-badge-card-compact .trophy-badge-icon {
+  width: 54px;
+  height: 54px;
+}
+
+.trophy-badge-card-compact .trophy-badge-icon img {
+  width: 54px;
+  height: 54px;
+}
+
+.trophy-badge-card h4,
+.trophy-progress-card h4 {
+  margin: 3px 0 0;
+  color: #fff5d8;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: clamp(1.2rem, 2.4vw, 1.78rem);
+  font-style: italic;
+  letter-spacing: 0;
+  line-height: 0.95;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 #07100e;
+}
+
+.trophy-badge-card-compact h4 {
+  font-size: clamp(1rem, 1.8vw, 1.26rem);
+}
+
+.trophy-badge-card span,
+.trophy-progress-card span,
+.trophy-empty-state span,
+.trophy-legacy-note {
+  color: rgba(255, 255, 255, 0.76);
+  font-family: var(--font-barlow-condensed), "Segoe UI", Arial, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.42;
+  text-transform: none;
+}
+
+.trophy-badge-card em {
+  display: block;
+  margin-top: 4px;
+  color: #f7c734;
+  font-size: 0.78rem;
+  font-weight: 950;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.trophy-badge-card-compact span {
+  display: -webkit-box;
+  margin-top: 3px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.trophy-badge-card-compact em {
+  font-size: 0.72rem;
+}
+
+.trophy-empty-state {
+  border-color: rgba(70, 223, 255, 0.24);
+}
+
+.trophy-empty-state p {
+  margin: 0 0 4px;
+  color: #fff5d8;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: 1.6rem;
+  font-style: italic;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 #07100e;
+}
+
+.trophy-next-section {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  border-top: 1px solid rgba(247, 199, 52, 0.16);
+  padding-top: 16px;
+}
+
+.trophy-progress-card {
+  display: grid;
+  gap: 8px;
+}
+
+.trophy-progress-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.trophy-progress-icon {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+}
+
+.trophy-progress-icon img {
+  position: relative;
+  z-index: 1;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.trophy-progress-meter {
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.trophy-progress-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--player-accent), #f7c734);
+}
+
+.trophy-progress-card strong {
+  color: #f7c734;
+  font-size: 0.92rem;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.trophy-legacy-note {
+  margin: 0;
+  border-left: 3px solid rgba(70, 223, 255, 0.46);
+  padding-left: 12px;
+  text-transform: uppercase;
 }
 
 .player-file-grid {
@@ -8828,6 +9238,7 @@ textarea {
   .career-scoreboard,
   .player-power-section,
   .player-file-section,
+  .trophy-cabinet-section,
   .fun-trait-callout {
     border-radius: 14px;
   }
@@ -8843,6 +9254,32 @@ textarea {
 
   .career-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .trophy-cabinet-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .trophy-cabinet-header strong {
+    width: fit-content;
+  }
+
+  .trophy-featured-grid,
+  .trophy-badge-grid,
+  .trophy-progress-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .trophy-category-group {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .trophy-badge-card-featured,
+  .trophy-badge-card-compact,
+  .trophy-progress-card {
+    min-height: 0;
   }
 
   .hero-stat-tile {

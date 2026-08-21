@@ -11,6 +11,10 @@ import {
   getMatchScheduledOversLabel,
   getMatchScoreRowsInInningsOrder
 } from "@/lib/match-display";
+import {
+  formatAchievementUnlockMeta,
+  getAchievementIconPath
+} from "@/lib/trophy-cabinet";
 import type {
   PostMatchCelebrationMetric,
   PostMatchProgressionChange,
@@ -24,6 +28,7 @@ const CELEBRATION_ICONS = {
   winner: "/ui/post-match-celebration/winner-trophy.svg",
   pom: "/ui/post-match-celebration/pom-star.svg",
   record: "/ui/post-match-celebration/record-broken.svg",
+  achievement: "/ui/post-match-celebration/achievement-unlocked.svg",
   personalBest: "/ui/post-match-celebration/personal-best.svg",
   levelUp: "/ui/post-match-celebration/level-up.svg",
   xp: "/ui/post-match-celebration/xp-bolt.svg"
@@ -176,6 +181,7 @@ export function PostMatchCelebration({
   );
   const hasAchievements =
     summary.recordsBroken.length > 0 ||
+    summary.achievementUnlocks.length > 0 ||
     standalonePersonalBests.length > 0 ||
     summary.levelUps.length > 0;
   const hasProgression = summary.progressionChanges.length > 0;
@@ -321,6 +327,37 @@ export function PostMatchCelebration({
                   </article>
                 );
               })}
+
+              {summary.achievementUnlocks.map((unlock) => (
+                <article
+                  key={`${unlock.playerId}-${unlock.definition.id}`}
+                  className="post-match-achievement-card post-match-unlock-card"
+                >
+                  <div className="post-match-unlock-icons">
+                    <Image
+                      src={CELEBRATION_ICONS.achievement}
+                      alt=""
+                      width={58}
+                      height={58}
+                    />
+                    <Image
+                      src={getAchievementIconPath(unlock.definition.iconKey)}
+                      alt=""
+                      width={58}
+                      height={58}
+                    />
+                  </div>
+                  <p>
+                    {isHistorical
+                      ? "Achievement Unlocked in This Match!"
+                      : "Achievement Unlocked!"}
+                  </p>
+                  <h3>{getPlayerName(unlock.playerId)}</h3>
+                  <strong>{unlock.definition.title}</strong>
+                  <span>{unlock.definition.description}</span>
+                  <em>{formatAchievementUnlockMeta(unlock)}</em>
+                </article>
+              ))}
 
               {standalonePersonalBests.map((best) => (
                 <article

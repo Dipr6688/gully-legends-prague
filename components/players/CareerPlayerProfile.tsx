@@ -4,6 +4,7 @@ import { PlayerProfile } from "@/components/players/PlayerProfile";
 import { useMatchRepository } from "@/components/matches/useMatchRepository";
 import { useCareerPlayers } from "@/components/players/useCareerPlayers";
 import { getAdvancedCareerStatsForPlayer } from "@/lib/advanced-cricket-stats";
+import { getPlayerAchievements } from "@/lib/player-achievements";
 import type { MatchRecord } from "@/lib/types/match";
 import type { Player } from "@/lib/types/player";
 
@@ -28,6 +29,16 @@ export function CareerPlayerProfile({
     matches,
     playerId: careerPlayer.id
   });
+  const achievements = getPlayerAchievements({
+    player: careerPlayer,
+    officialMatches: matches
+  });
 
-  return <PlayerProfile player={careerPlayer} advancedStats={advancedStats} />;
+  return (
+    <PlayerProfile
+      player={careerPlayer}
+      advancedStats={advancedStats}
+      achievements={achievements}
+    />
+  );
 }

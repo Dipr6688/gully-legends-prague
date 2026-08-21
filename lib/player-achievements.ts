@@ -3,7 +3,7 @@ import {
   getPostMatchCelebrationBaselineMatches,
   isBeforeCelebrationMatch,
   isOfficialCelebrationMatch
-} from "./post-match-celebration";
+} from "./official-match-history";
 import { sanitizeRuns } from "./match-records";
 import type { PlayerCareerStats } from "./career-store";
 import type { FinalisedPlayerMatchRecord, MatchRecord, TeamId } from "./types/match";

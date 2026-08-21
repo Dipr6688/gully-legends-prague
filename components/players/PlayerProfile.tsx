@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { CSSProperties, ReactNode } from "react";
 import { Flame, ShieldCheck, Swords, Trophy, Zap } from "lucide-react";
+import { TrophyCabinet } from "@/components/players/TrophyCabinet";
 import type { Player } from "@/lib/types/player";
 import { formatPercentage, getLevelProgress } from "@/lib/progression";
 import {
@@ -14,6 +15,7 @@ import {
   formatStrikeRate,
   type AdvancedCareerStats
 } from "@/lib/advanced-cricket-stats";
+import type { PlayerAchievements } from "@/lib/player-achievements";
 
 const PLAYER_PROFILE_ICON_SCALE = {
   batting: 1.08,
@@ -163,10 +165,12 @@ function getInitials(name: string) {
 
 export function PlayerProfile({
   advancedStats,
+  achievements,
   player
 }: {
   player: Player;
   advancedStats?: AdvancedCareerStats;
+  achievements?: PlayerAchievements;
 }) {
   const levelProgress = getLevelProgress(player.xp);
   const exactStats =
@@ -395,6 +399,27 @@ export function PlayerProfile({
             </div>
           </section>
 
+          <section className="player-file-section" aria-labelledby="player-file-title">
+            <SectionHeading id="player-file-title">Player File</SectionHeading>
+            <div className="player-file-grid">
+              {fileItems.map((item) => (
+                <ProfileTrait
+                  key={item.key}
+                  icon={item.icon}
+                  label={item.label}
+                  type={item.key}
+                  text={item.text}
+                />
+              ))}
+            </div>
+          </section>
+
+          <section className="fun-trait-callout">
+            <div className="fun-trait-label">On-Field Special Move</div>
+            <h3>{specialMoveName}</h3>
+            <p>{specialMoveDescription}</p>
+          </section>
+
           <section className="player-power-section" aria-labelledby="player-power-title">
             <SectionHeading id="player-power-title">Player Power</SectionHeading>
             <div className="hero-ratings">
@@ -413,26 +438,7 @@ export function PlayerProfile({
       </section>
 
       <div className="player-profile-content">
-        <section className="player-file-section" aria-labelledby="player-file-title">
-          <SectionHeading id="player-file-title">Player File</SectionHeading>
-          <div className="player-file-grid">
-            {fileItems.map((item) => (
-              <ProfileTrait
-                key={item.key}
-                icon={item.icon}
-                label={item.label}
-                type={item.key}
-                text={item.text}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className="fun-trait-callout">
-          <div className="fun-trait-label">On-Field Special Move</div>
-          <h3>{specialMoveName}</h3>
-          <p>{specialMoveDescription}</p>
-        </section>
+        {achievements ? <TrophyCabinet achievements={achievements} /> : null}
       </div>
     </main>
   );
