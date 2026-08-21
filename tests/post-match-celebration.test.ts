@@ -8,6 +8,17 @@ import {
   getPostMatchCelebrationBaselineMatches,
   isOfficialCelebrationMatch
 } from "../lib/post-match-celebration";
+import {
+  MATCH_SHARE_CARD_HEIGHT,
+  MATCH_SHARE_CARD_WIDTH,
+  buildMatchShareCardFilename,
+  buildMatchShareCardViewModel,
+  canUseNativeFileShare,
+  formatShareMetricValue,
+  getShareFailureMessage,
+  renderMatchShareCardSvg,
+  selectMatchShareHighlights
+} from "../lib/match-share-card";
 import { cumulativeXPForLevel, XP_RULES } from "../lib/progression";
 import { createQuickScoringEvent } from "../lib/quick-scoring";
 import type {
@@ -1078,4 +1089,270 @@ test("historical celebration UI reuses scorecard integration without write APIs"
   assert.match(component, /Match XP/);
   assert.doesNotMatch(component, /Stored official match XP/);
   assert.match(component, /Back to Scorecard/);
+});
+
+test("share card view model uses official result game number scores and POM", () => {
+  const target = match({
+    id: "share-official",
+    matchNumber: 8,
+    records: [
+      record({ playerId: "dipanjan", runs: 54, wickets: 1, catches: 1, playerOfMatch: true, awardedXP: 72 }),
+      record({ playerId: "rohit", teamId: "teamB", runs: 30, awardedXP: 40 })
+    ]
+  });
+  const summary = buildPostMatchCelebrationSummary({
+    match: target,
+    historicalMatches: []
+  });
+  const viewModel = buildMatchShareCardViewModel({ summary, match: target });
+
+  assert.equal(viewModel.width, MATCH_SHARE_CARD_WIDTH);
+  assert.equal(viewModel.height, MATCH_SHARE_CARD_HEIGHT);
+  assert.equal(viewModel.filename, "gully-legends-game-8.png");
+  assert.equal(viewModel.gameLabel, "Game #8");
+  assert.equal(viewModel.resultHeadline, "TEAM A WINS BY 24 RUNS");
+  assert.equal(viewModel.outcomeTitle, "Team A WINS!");
+  assert.deepEqual(
+    viewModel.scoreRows.map((row) => `${row.teamName} ${row.score} (${row.overs})`),
+    ["Team A 54/0 (0.0)", "Team B 30/0 (0.0)"]
+  );
+  assert.equal(viewModel.pom?.name, "Dipanjan");
+  assert.deepEqual(viewModel.pom?.contributions, ["54 Runs", "1 Wicket", "1 Catch"]);
+});
+
+test("share card POM summary omits meaningless zero statistics", () => {
+  const target = match({
+    id: "share-pom-zeroes",
+    records: [
+      record({ playerId: "aninda", runs: 1, playerOfMatch: true, awardedXP: 35 }),
+      record({ playerId: "biplab", teamId: "teamB", runs: 0, awardedXP: 20 })
+    ]
+  });
+  const summary = buildPostMatchCelebrationSummary({
+    match: target,
+    historicalMatches: []
+  });
+  const viewModel = buildMatchShareCardViewModel({ summary, match: target });
+
+  assert.deepEqual(viewModel.pom?.contributions, ["1 Run"]);
+  assert.doesNotMatch(renderMatchShareCardSvg(viewModel), /0 Wickets|0 Catches|0 Run-outs/);
+});
+
+test("share card gracefully handles no POM and quiet matches", () => {
+  const target = match({
+    id: "share-quiet",
+    records: [
+      record({ playerId: "aninda", runs: 0, didBat: false, awardedXP: 20 }),
+      record({ playerId: "biplab", teamId: "teamB", runs: 0, didBat: false, awardedXP: 20 })
+    ]
+  });
+  const summary = buildPostMatchCelebrationSummary({
+    match: target,
+    historicalMatches: [target]
+  });
+  const viewModel = buildMatchShareCardViewModel({ summary, match: target });
+  const svg = renderMatchShareCardSvg(viewModel);
+
+  assert.equal(viewModel.pom, null);
+  assert.deepEqual(viewModel.highlights, []);
+  assert.match(svg, /NO PLAYER OF THE MATCH AWARDED/);
+  assert.doesNotMatch(svg, /undefined|NEW PERSONAL BEST|GULLY RECORD BROKEN/);
+});
+
+test("share card tie uses authoritative tie wording", () => {
+  const target = match({
+    id: "share-tie",
+    records: [
+      record({ playerId: "aninda", runs: 20 }),
+      record({ playerId: "biplab", teamId: "teamB", runs: 20 })
+    ]
+  });
+  target.result = { type: "tie" };
+  const summary = buildPostMatchCelebrationSummary({
+    match: target,
+    historicalMatches: []
+  });
+  const viewModel = buildMatchShareCardViewModel({ summary, match: target });
+
+  assert.equal(viewModel.outcomeTitle, "MATCH TIED!");
+  assert.equal(viewModel.resultHeadline, "MATCH TIED");
+  assert.doesNotMatch(renderMatchShareCardSvg(viewModel), /WINS!/);
+});
+
+test("share card highlight priority prefers records then personal bests then level ups", () => {
+  const previous = match({
+    id: "share-previous",
+    records: [record({ playerId: "rohit", runs: 40, wickets: 2, awardedXP: 40 })]
+  });
+  const target = match({
+    id: "share-target",
+    matchNumber: 2,
+    records: [
+      record({ playerId: "dipanjan", runs: 54, awardedXP: 60 }),
+      record({ playerId: "soman", wickets: 3, awardedXP: 50 }),
+      record({ playerId: "biplab", catches: 2, awardedXP: 40 })
+    ]
+  });
+  const summary = buildPostMatchCelebrationSummary({
+    match: target,
+    historicalMatches: [previous],
+    progressionSnapshots: [
+      {
+        playerId: "biplab",
+        beforeTotalXP: cumulativeXPForLevel(1),
+        afterTotalXP: cumulativeXPForLevel(2) + 1,
+        awardedXP: 40,
+        beforeLevel: 1,
+        afterLevel: 2
+      }
+    ]
+  });
+  const highlights = selectMatchShareHighlights(summary);
+
+  assert.equal(highlights.length, 2);
+  assert.equal(highlights[0]?.type, "record_broken");
+  assert.equal(highlights[0]?.metricText, "54 Runs");
+  assert.equal(highlights[1]?.type, "record_broken");
+  assert.equal(highlights[1]?.metricText, "3 Wickets");
+});
+
+test("share card falls back to strongest personal best when no record exists", () => {
+  const previous = match({
+    id: "share-pb-previous",
+    records: [
+      record({ playerId: "biplab", runs: 90, wickets: 4 }),
+      record({ playerId: "aninda", runs: 80 }),
+      record({ playerId: "soman", runs: 20 })
+    ]
+  });
+  const target = match({
+    id: "share-pb-target",
+    matchNumber: 2,
+    records: [
+      record({ playerId: "aninda", runs: 81 }),
+      record({ playerId: "soman", runs: 35 })
+    ]
+  });
+  const summary = buildPostMatchCelebrationSummary({
+    match: target,
+    historicalMatches: [previous]
+  });
+  const highlights = selectMatchShareHighlights(summary);
+
+  assert.equal(highlights[0]?.type, "personal_best");
+  assert.equal(highlights[0]?.playerName, "Soman");
+  assert.equal(highlights[0]?.metricText, "35 Runs");
+});
+
+test("share card supports live and historical summaries without fake historical levels", () => {
+  const target = match({
+    id: "share-history",
+    records: [record({ playerId: "rohit", runs: 39, playerOfMatch: true, awardedXP: 56 })]
+  });
+  const historicalSummary = buildHistoricalPostMatchCelebrationSummary({
+    match: target,
+    allMatches: [target]
+  });
+  const historicalViewModel = buildMatchShareCardViewModel({
+    summary: historicalSummary,
+    match: target,
+    mode: "historical"
+  });
+  const liveSummary = buildPostMatchCelebrationSummary({
+    match: target,
+    historicalMatches: [],
+    progressionSnapshots: [
+      {
+        playerId: "rohit",
+        beforeTotalXP: cumulativeXPForLevel(1),
+        afterTotalXP: cumulativeXPForLevel(2) + 5,
+        awardedXP: 56,
+        beforeLevel: 1,
+        afterLevel: 2
+      }
+    ]
+  });
+  const liveViewModel = buildMatchShareCardViewModel({
+    summary: liveSummary,
+    match: target
+  });
+
+  assert.equal(historicalViewModel.mode, "historical");
+  assert.deepEqual(historicalSummary.progressionChanges, []);
+  assert.deepEqual(historicalSummary.levelUps, []);
+  assert.equal(liveViewModel.mode, "live");
+  assert.equal(liveSummary.levelUps[0]?.playerId, "rohit");
+});
+
+test("share card metric formatting covers cricket singulars and plurals", () => {
+  assert.equal(formatShareMetricValue(1, "runs"), "1 Run");
+  assert.equal(formatShareMetricValue(2, "runs"), "2 Runs");
+  assert.equal(formatShareMetricValue(1, "wickets"), "1 Wicket");
+  assert.equal(formatShareMetricValue(2, "wickets"), "2 Wickets");
+  assert.equal(formatShareMetricValue(1, "fours"), "1 Four");
+  assert.equal(formatShareMetricValue(2, "fours"), "2 Fours");
+  assert.equal(formatShareMetricValue(1, "sixes"), "1 Six");
+  assert.equal(formatShareMetricValue(2, "sixes"), "2 Sixes");
+  assert.equal(formatShareMetricValue(1, "catches"), "1 Catch");
+  assert.equal(formatShareMetricValue(2, "catches"), "2 Catches");
+  assert.equal(formatShareMetricValue(1, "run-outs"), "1 Run-out");
+  assert.equal(formatShareMetricValue(2, "run-outs"), "2 Run-outs");
+  assert.equal(formatShareMetricValue(1, "stumpings"), "1 Stumping");
+  assert.equal(formatShareMetricValue(2, "stumpings"), "2 Stumpings");
+});
+
+test("share card filename is deterministic", () => {
+  assert.equal(buildMatchShareCardFilename(match({ id: "local-match-123", matchNumber: 7 })), "gully-legends-game-7.png");
+  assert.equal(
+    buildMatchShareCardFilename(match({ id: "local-match-1786269962761-30a76564d3291", matchNumber: null })),
+    "gully-legends-local-match-1786269962761-30a76564d3291.png"
+  );
+});
+
+test("share card Web Share detection and cancellation are safe", () => {
+  assert.equal(canUseNativeFileShare(undefined, []), false);
+  assert.equal(
+    canUseNativeFileShare(
+      {
+        share: async () => undefined,
+        canShare: () => true
+      },
+      []
+    ),
+    true
+  );
+  assert.equal(
+    canUseNativeFileShare(
+      {
+        share: async () => undefined,
+        canShare: () => {
+          throw new Error("unsupported");
+        }
+      },
+      []
+    ),
+    false
+  );
+  assert.equal(getShareFailureMessage(new DOMException("cancelled", "AbortError")), null);
+  assert.equal(
+    getShareFailureMessage(new Error("failed")),
+    "Sharing was not available. You can save the image instead."
+  );
+});
+
+test("share card component exposes share and save actions without Supabase writes", () => {
+  const celebration = readFileSync("components/matches/PostMatchCelebration.tsx", "utf8");
+  const shareComponent = readFileSync("components/matches/MatchShareCard.tsx", "utf8");
+  const shareDomain = readFileSync("lib/match-share-card.ts", "utf8");
+
+  assert.match(celebration, /Share Match Card/);
+  assert.match(celebration, /MatchShareCardDialog/);
+  assert.match(shareComponent, /navigatorLike\.share/);
+  assert.match(shareComponent, /Save Image/);
+  assert.match(shareComponent, /downloadBlob/);
+  assert.match(shareComponent, /try[\s\S]*catch/);
+  assert.match(shareDomain, /PostMatchCelebrationSummary/);
+  assert.match(shareDomain, /renderMatchShareCardSvg/);
+  assert.doesNotMatch(shareComponent, /supabase|\/api\/|insert|update|delete|finalize/i);
+  assert.doesNotMatch(shareDomain, /supabase|\/api\/|insert|update|delete|finalize/i);
 });

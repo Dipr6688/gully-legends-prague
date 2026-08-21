@@ -1,8 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { X } from "lucide-react";
+import { useState } from "react";
+import { Share2, X } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/Button";
+import { MatchShareCardDialog } from "@/components/matches/MatchShareCard";
 import { activePlayers, getPlayerById } from "@/lib/data/players";
 import {
   getMatchResultHeadline,
@@ -154,6 +156,7 @@ export function PostMatchCelebration({
   onDismiss,
   mode = "live"
 }: PostMatchCelebrationProps) {
+  const [isShareCardOpen, setIsShareCardOpen] = useState(false);
   const scoreRows = getMatchScoreRowsInInningsOrder(match);
   const resultHeadline = getMatchResultHeadline(match);
   const pom = summary.playerOfMatch;
@@ -435,6 +438,10 @@ export function PostMatchCelebration({
           ) : null}
 
           <footer className="post-match-celebration-actions">
+            <Button type="button" onClick={() => setIsShareCardOpen(true)}>
+              <Share2 className="h-4 w-4" aria-hidden="true" />
+              Share Match Card
+            </Button>
             {isHistorical ? (
               <Button type="button" onClick={onDismiss}>
                 Back to Scorecard
@@ -456,6 +463,14 @@ export function PostMatchCelebration({
             </Button>
           </footer>
         </div>
+        {isShareCardOpen ? (
+          <MatchShareCardDialog
+            summary={summary}
+            match={match}
+            mode={mode}
+            onClose={() => setIsShareCardOpen(false)}
+          />
+        ) : null}
       </section>
     </div>
   );
