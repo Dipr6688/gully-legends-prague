@@ -789,6 +789,25 @@ test("roster endpoint errors when Supabase mode cannot load the official roster"
   assert.match(route, /loadPublicSupabaseReadData/);
 });
 
+test("app-sync team balance endpoint requires authenticated Admin bearer access", () => {
+  const route = readFileSync("app/api/app-sync/team-balance/route.ts", "utf8");
+
+  assert.match(route, /getBearerAdminSession/);
+  assert.match(route, /ADMIN BEARER TOKEN REQUIRED/);
+  assert.match(route, /status: 401/);
+});
+
+test("app-sync team balance endpoint returns only team ids and Shared Player", () => {
+  const route = readFileSync("app/api/app-sync/team-balance/route.ts", "utf8");
+
+  assert.match(route, /balanceExclusiveTeams/);
+  assert.match(route, /playerIds/);
+  assert.match(route, /teamAPlayerIds: result\.teamAPlayerIds/);
+  assert.match(route, /teamBPlayerIds: result\.teamBPlayerIds/);
+  assert.match(route, /sharedPlayerId: result\.sharedPlayerId/);
+  assert.doesNotMatch(route, /privateBalanceRatings|batting:|bowling:|fielding:|score|prohibitedPairs/);
+});
+
 test("finalise-from-pending blocks demo imports and same-day earlier pending imports", () => {
   const route = readFileSync(
     "app/api/admin/apk-imports/[importId]/finalize/route.ts",

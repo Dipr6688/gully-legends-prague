@@ -3074,7 +3074,10 @@ test("Match creation controls read the active player roster", () => {
   assert.match(matchForm, /activePlayers\.filter\(\(player\) => availablePlayerIds\.includes\(player\.id\)\)/);
   assert.match(matchForm, /\{activePlayers\.map\(\(player\) =>/);
   assert.match(teamBalance, /new Set\(activePlayers\.map\(\(player\) => player\.id\)\)/);
-  assert.match(teamBalance, /privateBalanceWeights\[playerId\] \?\? 2/);
+  assert.match(teamBalance, /privateBalanceRatings\[playerId\]/);
+  assert.match(teamBalance, /batting:/);
+  assert.match(teamBalance, /bowling:/);
+  assert.match(teamBalance, /fielding:/);
 });
 
 test("Dashboard Top Performer spotlight CSS is scoped and responsive", () => {

@@ -1,35 +1,39 @@
 import "server-only";
 
 import { activePlayers } from "@/lib/data/players";
-import { applySharedPlayerToRosters, getDistributablePlayerIds } from "@/lib/match-records";
+import { applySharedPlayerToRosters } from "@/lib/match-records";
+import { validateTeamBalanceRequest } from "@/lib/team-balance-request";
 import {
   tryBalanceWeightedCandidates,
   type BalancedTeams,
   type BalanceCandidate
 } from "@/lib/team-balancing-core";
 
-const privateBalanceWeights: Record<string, BalanceCandidate["balanceWeight"]> = {
-  dipanjan: 3,
-  aninda: 3,
-  rohit: 3,
-  dipayan: 3,
-  soman: 3,
-  dheeraj: 3,
-  arunabha: 3,
-  naim: 3,
-  utpal: 2,
-  jogindar: 2,
-  badhan: 2,
-  madhab: 2,
-  chaitanya: 2,
-  amrit: 2,
-  pritvi: 2,
-  saurav: 1,
-  atripan: 1,
-  biplab: 1,
-  gaurav: 1,
-  debraj: 0,
-  suprateem: 0
+type TeamBalanceSuccess = BalancedTeams & { sharedPlayerId: string | null };
+type TeamBalanceResult = TeamBalanceSuccess | { error: string };
+
+const privateBalanceRatings: Record<string, Omit<BalanceCandidate, "playerId">> = {
+  dipanjan: { batting: 4, bowling: 3, fielding: 5 },
+  dipayan: { batting: 4, bowling: 5, fielding: 4 },
+  amrit: { batting: 3, bowling: 5, fielding: 4 },
+  aninda: { batting: 3, bowling: 4, fielding: 2 },
+  arunabha: { batting: 3, bowling: 5, fielding: 4 },
+  atripan: { batting: 3, bowling: 3, fielding: 3 },
+  badhan: { batting: 4, bowling: 3, fielding: 4 },
+  biplab: { batting: 3, bowling: 3, fielding: 3 },
+  chaitanya: { batting: 4, bowling: 3, fielding: 4 },
+  debraj: { batting: 2, bowling: 2, fielding: 2 },
+  dheeraj: { batting: 5, bowling: 4, fielding: 4 },
+  gaurav: { batting: 2, bowling: 3, fielding: 2 },
+  jogindar: { batting: 3, bowling: 3, fielding: 4 },
+  madhab: { batting: 3, bowling: 4, fielding: 3 },
+  naim: { batting: 5, bowling: 4, fielding: 4 },
+  pritvi: { batting: 3, bowling: 3, fielding: 3 },
+  rohit: { batting: 4, bowling: 5, fielding: 4 },
+  saurav: { batting: 3, bowling: 3, fielding: 4 },
+  soman: { batting: 4, bowling: 3, fielding: 4 },
+  suprateem: { batting: 3, bowling: 3, fielding: 3 },
+  utpal: { batting: 3, bowling: 3, fielding: 3 }
 };
 
 const privateAutomaticSeparationPairs = [
@@ -43,21 +47,35 @@ const noValidAutomaticSolutionMessage =
 
 export function balanceTeams(
   availablePlayerIds: string[],
-  sharedPlayerId: string | null = null
-): (BalancedTeams & { sharedPlayerId: string | null }) | { error: string } {
-  const uniqueAvailablePlayerIds = Array.from(new Set(availablePlayerIds));
-  const distributablePlayerIds = getDistributablePlayerIds(
-    uniqueAvailablePlayerIds,
-    sharedPlayerId
-  );
-  const candidates = distributablePlayerIds
-    .filter((playerId) => canonicalPlayerIds.has(playerId))
-    .map((playerId) => ({
-      playerId,
-      balanceWeight: privateBalanceWeights[playerId] ?? 2
-    }));
+  sharedPlayerId: string | null = null,
+  random: () => number = Math.random
+): TeamBalanceResult {
+  const exclusiveResult = balanceExclusiveTeams(availablePlayerIds, sharedPlayerId, random);
 
-  const balancedTeams = tryBalanceWeightedCandidates(candidates, Math.random, {
+  if ("error" in exclusiveResult) {
+    return exclusiveResult;
+  }
+
+  return applySharedPlayerToRosters(exclusiveResult);
+}
+
+export function balanceExclusiveTeams(
+  selectedPlayerIds: string[],
+  sharedPlayerId: string | null = null,
+  random: () => number = Math.random
+): TeamBalanceResult {
+  const validation = validateBalanceRequest(selectedPlayerIds, sharedPlayerId);
+
+  if ("error" in validation) {
+    return validation;
+  }
+
+  const candidates = validation.distributablePlayerIds.map((playerId) => ({
+    playerId,
+    ...privateBalanceRatings[playerId]
+  }));
+
+  const balancedTeams = tryBalanceWeightedCandidates(candidates, random, {
     prohibitedPairs: privateAutomaticSeparationPairs
   });
 
@@ -65,9 +83,17 @@ export function balanceTeams(
     return { error: noValidAutomaticSolutionMessage };
   }
 
-  return applySharedPlayerToRosters({
+  return {
     ...balancedTeams,
-    sharedPlayerId:
-      sharedPlayerId && canonicalPlayerIds.has(sharedPlayerId) ? sharedPlayerId : null
-  });
+    sharedPlayerId: validation.sharedPlayerId
+  };
+}
+
+function validateBalanceRequest(
+  selectedPlayerIds: string[],
+  sharedPlayerId: string | null
+):
+  | { distributablePlayerIds: string[]; sharedPlayerId: string | null }
+  | { error: string } {
+  return validateTeamBalanceRequest(selectedPlayerIds, sharedPlayerId, canonicalPlayerIds);
 }

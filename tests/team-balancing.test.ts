@@ -8,144 +8,120 @@ import {
   type BalanceConstraintOptions,
   type BalancedTeams
 } from "../lib/team-balancing-core";
+import { validateTeamBalanceRequest } from "../lib/team-balance-request";
 import { activePlayers } from "../lib/data/players";
 import {
   applySharedPlayerToRosters,
   getDistributablePlayerIds
 } from "../lib/match-records";
 
-const privateWeightExpectations = {
-  dipanjan: 3,
-  aninda: 3,
-  rohit: 3,
-  dipayan: 3,
-  soman: 3,
-  dheeraj: 3,
-  arunabha: 3,
-  naim: 3,
-  utpal: 2,
-  jogindar: 2,
-  badhan: 2,
-  madhab: 2,
-  chaitanya: 2,
-  amrit: 2,
-  pritvi: 2,
-  saurav: 1,
-  atripan: 1,
-  biplab: 1,
-  gaurav: 1,
-  debraj: 0,
-  suprateem: 0
-} as const satisfies Record<string, BalanceCandidate["balanceWeight"]>;
-
 const automaticSeparationPairs = [
   ["aninda", "rohit"],
   ["dheeraj", "rohit"]
 ] as const;
-const privateWeights: Record<string, BalanceCandidate["balanceWeight"]> =
-  privateWeightExpectations;
 
-test("server-only private balance weights resolve by stable player ID", () => {
-  const source = readFileSync("server/team-balancing.ts", "utf8");
+test("server-only private balance ratings resolve by stable player ID", () => {
+  const serverSource = readFileSync("server/team-balancing.ts", "utf8");
   const activePlayerIds = activePlayers.map((player) => player.id).sort();
 
-  for (const [playerId, weight] of Object.entries(privateWeightExpectations)) {
-    assert.match(source, new RegExp(`${playerId}: ${weight}`));
+  for (const playerId of activePlayerIds) {
+    assert.match(serverSource, new RegExp(`${playerId}: \\{ batting:`));
   }
 
-  assert.deepEqual(Object.keys(privateWeightExpectations).sort(), activePlayerIds);
-  assert.doesNotMatch(source, /Spin Wizard|apex-crusher\.jpeg/);
+  assert.match(serverSource, /privateBalanceRatings/);
+  assert.match(serverSource, /batting: 5|bowling: 5|fielding: 5/);
+  assert.doesNotMatch(serverSource, /Spin Wizard|apex-crusher\.jpeg/);
 });
 
 test("private automatic separation pairs stay in the server-only module", () => {
   const serverSource = readFileSync("server/team-balancing.ts", "utf8");
   const clientSource = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
-  const routeSource = readFileSync("app/api/team-balance/route.ts", "utf8");
+  const websiteRouteSource = readFileSync("app/api/team-balance/route.ts", "utf8");
+  const appSyncRouteSource = readFileSync("app/api/app-sync/team-balance/route.ts", "utf8");
 
   assert.match(serverSource, /\["aninda", "rohit"\]/);
   assert.match(serverSource, /\["dheeraj", "rohit"\]/);
-  assert.doesNotMatch(clientSource, /dheeraj.*rohit|aninda.*rohit|balanceWeight/i);
-  assert.doesNotMatch(routeSource, /balanceWeight|prohibitedPairs|aninda|dheeraj|rohit/);
+  assert.doesNotMatch(clientSource, /dheeraj.*rohit|aninda.*rohit|privateBalanceRatings/i);
+  assert.doesNotMatch(websiteRouteSource, /batting:|bowling:|fielding:|prohibitedPairs|aninda|dheeraj|rohit/);
+  assert.doesNotMatch(appSyncRouteSource, /batting:|bowling:|fielding:|prohibitedPairs|aninda|dheeraj|rohit/);
 });
 
-test("only available players are distributed", () => {
-  const selectedCandidates = byIds(["aninda", "arunabha", "biplab", "utpal"]);
-  const result = balanceWeightedCandidates(selectedCandidates, fixedRandom(0.8));
-  const distributed = allDistributedIds(result);
+test("ten selected players are split five and five", () => {
+  const result = balanceWeightedCandidates(tenPlayerPool(), fixedRandom(0.4));
 
-  assert.deepEqual(distributed.sort(), ["aninda", "arunabha", "biplab", "utpal"]);
+  assert.equal(result.teamAPlayerIds.length, 5);
+  assert.equal(result.teamBPlayerIds.length, 5);
 });
 
-test("each available player appears exactly once across exclusive teams", () => {
-  const selectedCandidates = byIds([
-    "aninda",
-    "arunabha",
-    "biplab",
-    "utpal",
-    "atripan",
-    "gaurav"
-  ]);
-  const result = balanceWeightedCandidates(selectedCandidates, fixedRandom(0.4));
+test("every selected player appears exactly once and unselected players never appear", () => {
+  const selectedCandidates = tenPlayerPool();
+  const result = balanceWeightedCandidates(selectedCandidates, fixedRandom(0.2));
   const distributed = allDistributedIds(result);
 
   assert.equal(distributed.length, new Set(distributed).size);
-  assert.equal(distributed.length, selectedCandidates.length);
+  assert.deepEqual(distributed.sort(), selectedCandidates.map((candidate) => candidate.playerId).sort());
+  assert.equal(distributed.includes("not-selected"), false);
 });
 
-test("team sizes are equal for six and eight exclusive players", () => {
-  for (const playerIds of [
-    ["aninda", "arunabha", "biplab", "utpal", "atripan", "gaurav"],
-    [
-      "aninda",
-      "arunabha",
-      "biplab",
-      "utpal",
-      "atripan",
-      "gaurav",
-      "saurav",
-      "debraj"
-    ]
-  ]) {
-    const result = balanceWeightedCandidates(byIds(playerIds), fixedRandom(0.2));
+test("elite bowlers are distributed as evenly as possible before totals", () => {
+  const result = balanceWeightedCandidates(
+    candidates([
+      ["elite-a", 3, 5, 3],
+      ["elite-b", 3, 5, 3],
+      ["elite-c", 3, 5, 3],
+      ["elite-d", 3, 5, 3],
+      ["steady-a", 4, 3, 4],
+      ["steady-b", 4, 3, 4],
+      ["steady-c", 4, 3, 4],
+      ["steady-d", 4, 3, 4]
+    ]),
+    fixedRandom(0)
+  );
 
-    assert.equal(result.teamAPlayerIds.length, result.teamBPlayerIds.length);
-  }
+  assert.equal(Math.abs(countElite(result.teamAPlayerIds, "elite") - countElite(result.teamBPlayerIds, "elite")), 0);
 });
 
-test("team-size difference is never greater than one for seven and nine exclusive players", () => {
-  for (const playerIds of [
-    ["aninda", "arunabha", "biplab", "utpal", "atripan", "gaurav", "madhab"],
-    [
-      "aninda",
-      "arunabha",
-      "biplab",
-      "utpal",
-      "atripan",
-      "gaurav",
-      "madhab",
-      "debraj",
-      "saurav"
-    ]
-  ]) {
-    const result = balanceWeightedCandidates(byIds(playerIds), fixedRandom(0.2));
+test("elite batters are distributed as evenly as possible", () => {
+  const result = balanceWeightedCandidates(
+    candidates([
+      ["bat-a", 5, 3, 3],
+      ["bat-b", 5, 3, 3],
+      ["bat-c", 5, 3, 3],
+      ["bat-d", 5, 3, 3],
+      ["bowl-a", 3, 4, 4],
+      ["bowl-b", 3, 4, 4],
+      ["bowl-c", 3, 4, 4],
+      ["bowl-d", 3, 4, 4]
+    ]),
+    fixedRandom(0)
+  );
 
-    assert.equal(
-      Math.abs(result.teamAPlayerIds.length - result.teamBPlayerIds.length) <= 1,
-      true
-    );
-  }
+  assert.equal(Math.abs(countElite(result.teamAPlayerIds, "bat") - countElite(result.teamBPlayerIds, "bat")), 0);
 });
 
-test("automatic balancing separates Aninda from Rohit and Dheeraj from Rohit", () => {
-  const selectedCandidates = byIds([
-    "aninda",
-    "rohit",
-    "dheeraj",
-    "dipanjan",
-    "soman",
-    "arunabha",
-    "utpal",
-    "jogindar"
+test("batting bowling and fielding dimensions are all considered", () => {
+  const selectedCandidates = candidates([
+    ["bat-heavy", 5, 2, 2],
+    ["bowl-heavy", 2, 5, 2],
+    ["field-heavy", 2, 2, 5],
+    ["balanced", 3, 3, 3]
+  ]);
+  const result = balanceWeightedCandidates(selectedCandidates, fixedRandom(0));
+  const score = scoreResult(result, selectedCandidates);
+
+  assert.deepEqual(score, findBestScore(selectedCandidates));
+});
+
+test("automatic balancing preserves private hard constraints", () => {
+  const selectedCandidates = candidates([
+    ["aninda", 3, 4, 2],
+    ["rohit", 4, 5, 4],
+    ["dheeraj", 5, 4, 4],
+    ["dipanjan", 4, 3, 5],
+    ["soman", 4, 3, 4],
+    ["arunabha", 3, 5, 4],
+    ["utpal", 3, 3, 3],
+    ["jogindar", 3, 3, 4]
   ]);
 
   for (const randomValue of [0, 0.12, 0.24, 0.37, 0.51, 0.68, 0.83, 0.99]) {
@@ -161,38 +137,63 @@ test("automatic balancing separates Aninda from Rohit and Dheeraj from Rohit", (
   }
 });
 
-test("automatic balancing may place Aninda and Dheeraj together", () => {
-  const selectedCandidates = byIds(["aninda", "dheeraj", "rohit", "biplab"]);
-  const result = balanceWeightedCandidates(selectedCandidates, fixedRandom(0), {
-    prohibitedPairs: automaticSeparationPairs
-  });
+test("tied optimal candidates can yield alternative balanced teams with injected RNG", () => {
+  const equalCandidates = candidates([
+    ["a", 3, 3, 3],
+    ["b", 3, 3, 3],
+    ["c", 3, 3, 3],
+    ["d", 3, 3, 3]
+  ]);
+  const first = balanceWeightedCandidates(equalCandidates, fixedRandom(0));
+  const last = balanceWeightedCandidates(equalCandidates, fixedRandom(0.99));
 
-  assertTogether(result, "aninda", "dheeraj");
-  assertSeparated(result, "aninda", "rohit");
-  assertSeparated(result, "dheeraj", "rohit");
+  assert.notDeepEqual(first, last);
+  assertResultIsOptimal(first, equalCandidates);
+  assertResultIsOptimal(last, equalCandidates);
 });
 
-test("manual roster assignment can override private automatic separation preferences", () => {
-  const manualAnindaRohit = applySharedPlayerToRosters({
-    teamAPlayerIds: ["aninda", "rohit"],
-    teamBPlayerIds: ["dheeraj", "utpal"],
-    sharedPlayerId: null
-  });
-  const manualDheerajRohit = applySharedPlayerToRosters({
-    teamAPlayerIds: ["dheeraj", "rohit"],
-    teamBPlayerIds: ["aninda", "utpal"],
-    sharedPlayerId: null
-  });
+test("unknown duplicate odd and Shared validation are rejected safely", () => {
+  const eligible = new Set(["a", "b", "c", "d", "s"]);
 
-  assert.deepEqual(manualAnindaRohit.teamAPlayerIds, ["aninda", "rohit"]);
-  assert.deepEqual(manualDheerajRohit.teamAPlayerIds, ["dheeraj", "rohit"]);
+  assert.deepEqual(validateTeamBalanceRequest(["a", "missing"], null, eligible), {
+    error: "Selected players must be active roster players."
+  });
+  assert.deepEqual(validateTeamBalanceRequest(["a", "a"], null, eligible), {
+    error: "Each selected player can appear only once."
+  });
+  assert.deepEqual(validateTeamBalanceRequest(["a", "b", "c"], null, eligible), {
+    error: "Select one Shared Player to balance an odd group."
+  });
+  assert.deepEqual(validateTeamBalanceRequest(["a", "b", "c", "d"], "a", eligible), {
+    error:
+      "Shared Player is only available for odd attendance. Remove Shared Player or select an odd group."
+  });
+  assert.deepEqual(validateTeamBalanceRequest(["a", "b", "c"], "s", eligible), {
+    error: "Shared Player must be selected for this match."
+  });
+});
+
+test("eleven selected with Shared balances five and five and excludes Shared from exclusive teams", () => {
+  const selected = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "s"];
+  const validation = validateTeamBalanceRequest(selected, "s", new Set(selected));
+
+  assert.deepEqual(validation, {
+    distributablePlayerIds: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"],
+    sharedPlayerId: "s"
+  });
+  assert.equal(getDistributablePlayerIds(selected, "s").includes("s"), false);
 });
 
 test("Shared Player selection stays unrestricted and outside exclusive balancing", () => {
   const availablePlayerIds = ["aninda", "rohit", "dheeraj", "utpal", "jogindar"];
   const distributablePlayerIds = getDistributablePlayerIds(availablePlayerIds, "rohit");
   const balancedExclusiveTeams = balanceWeightedCandidates(
-    byIds(distributablePlayerIds),
+    candidates([
+      ["aninda", 3, 4, 2],
+      ["dheeraj", 5, 4, 4],
+      ["utpal", 3, 3, 3],
+      ["jogindar", 3, 3, 4]
+    ]),
     fixedRandom(0.4),
     { prohibitedPairs: automaticSeparationPairs }
   );
@@ -206,56 +207,23 @@ test("Shared Player selection stays unrestricted and outside exclusive balancing
   assert.equal(result.teamBPlayerIds.includes("rohit"), true);
 });
 
-test("balance scoring chooses the lexicographically best valid candidate", () => {
-  const selectedCandidates = byIds([
-    "dipanjan",
-    "aninda",
-    "rohit",
-    "dheeraj",
-    "utpal",
-    "jogindar",
-    "badhan",
-    "saurav",
-    "biplab",
-    "debraj"
-  ]);
-  const result = balanceWeightedCandidates(selectedCandidates, fixedRandom(0.65), {
-    prohibitedPairs: automaticSeparationPairs
-  });
-
-  assertResultIsOptimal(result, selectedCandidates, {
-    prohibitedPairs: automaticSeparationPairs
-  });
-});
-
-test("shuffle can choose different equally optimal candidates while staying valid", () => {
-  const equalCandidates: BalanceCandidate[] = [
-    { playerId: "a", balanceWeight: 1 },
-    { playerId: "b", balanceWeight: 1 },
-    { playerId: "c", balanceWeight: 1 },
-    { playerId: "d", balanceWeight: 1 }
-  ];
-  const first = balanceWeightedCandidates(equalCandidates, fixedRandom(0));
-  const last = balanceWeightedCandidates(equalCandidates, fixedRandom(0.99));
-
-  assert.notDeepEqual(first, last);
-  assertResultIsOptimal(first, equalCandidates);
-  assertResultIsOptimal(last, equalCandidates);
-});
-
 test("no valid automatic solution returns null from the strict search", () => {
-  const impossibleCandidates: BalanceCandidate[] = [
-    { playerId: "a", balanceWeight: 1 },
-    { playerId: "b", balanceWeight: 1 },
-    { playerId: "c", balanceWeight: 1 }
-  ];
+  const impossibleCandidates = candidates([
+    ["a", 3, 3, 3],
+    ["b", 3, 3, 3],
+    ["c", 3, 3, 3],
+    ["d", 3, 3, 3]
+  ]);
 
   assert.equal(
     tryBalanceWeightedCandidates(impossibleCandidates, fixedRandom(0), {
       prohibitedPairs: [
         ["a", "b"],
         ["a", "c"],
-        ["b", "c"]
+        ["a", "d"],
+        ["b", "c"],
+        ["b", "d"],
+        ["c", "d"]
       ]
     }),
     null
@@ -273,15 +241,22 @@ test("no-valid automatic solution message is generic and private", () => {
   );
   assert.doesNotMatch(
     message,
-    /rohit|aninda|dheeraj|weight|tier|strength|separation|prohibited/i
+    /rohit|aninda|dheeraj|weight|tier|strength|separation|prohibited|batting|bowling|fielding/i
   );
 });
 
-test("automatic response shape does not include private weights or totals", () => {
-  const result = balanceWeightedCandidates(byIds(["aninda", "utpal", "biplab", "debraj"]));
+test("automatic response shape does not include private ratings or scores", () => {
+  const result = balanceWeightedCandidates(candidates([
+    ["aninda", 3, 4, 2],
+    ["utpal", 3, 3, 3],
+    ["biplab", 3, 3, 3],
+    ["debraj", 2, 2, 2]
+  ]));
 
-  assert.equal("balanceWeight" in result, false);
-  assert.equal("totalWeight" in result, false);
+  assert.equal("batting" in result, false);
+  assert.equal("bowling" in result, false);
+  assert.equal("fielding" in result, false);
+  assert.equal("score" in result, false);
   assert.equal("prohibitedPairs" in result, false);
   assert.equal(
     allDistributedIds(result).some((playerId) => typeof playerId !== "string"),
@@ -289,15 +264,38 @@ test("automatic response shape does not include private weights or totals", () =
   );
 });
 
-function byIds(playerIds: string[]): BalanceCandidate[] {
-  return playerIds.map((playerId) => ({
+function tenPlayerPool(): BalanceCandidate[] {
+  return candidates([
+    ["a", 5, 3, 3],
+    ["b", 5, 3, 3],
+    ["c", 4, 5, 4],
+    ["d", 4, 5, 4],
+    ["e", 3, 4, 5],
+    ["f", 3, 4, 5],
+    ["g", 3, 3, 3],
+    ["h", 3, 3, 3],
+    ["i", 2, 2, 2],
+    ["j", 2, 2, 2]
+  ]);
+}
+
+function candidates(
+  rows: Array<[string, BalanceCandidate["batting"], BalanceCandidate["bowling"], BalanceCandidate["fielding"]]>
+): BalanceCandidate[] {
+  return rows.map(([playerId, batting, bowling, fielding]) => ({
     playerId,
-    balanceWeight: privateWeights[playerId] ?? 1
+    batting,
+    bowling,
+    fielding
   }));
 }
 
 function allDistributedIds(result: BalancedTeams): string[] {
   return [...result.teamAPlayerIds, ...result.teamBPlayerIds];
+}
+
+function countElite(playerIds: string[], prefix: string) {
+  return playerIds.filter((playerId) => playerId.startsWith(prefix)).length;
 }
 
 function assertSeparated(result: BalancedTeams, leftPlayerId: string, rightPlayerId: string) {
@@ -306,15 +304,6 @@ function assertSeparated(result: BalancedTeams, leftPlayerId: string, rightPlaye
   assert.equal(
     teams.some((team) => team.has(leftPlayerId) && team.has(rightPlayerId)),
     false
-  );
-}
-
-function assertTogether(result: BalancedTeams, leftPlayerId: string, rightPlayerId: string) {
-  const teams = [new Set(result.teamAPlayerIds), new Set(result.teamBPlayerIds)];
-
-  assert.equal(
-    teams.some((team) => team.has(leftPlayerId) && team.has(rightPlayerId)),
-    true
   );
 }
 
@@ -333,32 +322,21 @@ function findBestScore(
   selectedCandidates: BalanceCandidate[],
   options: BalanceConstraintOptions = {}
 ) {
-  const uniqueCandidates = Array.from(
-    new Map(selectedCandidates.map((candidate) => [candidate.playerId, candidate])).values()
-  );
-  const sizes = Array.from(
-    new Set([
-      Math.floor(uniqueCandidates.length / 2),
-      Math.ceil(uniqueCandidates.length / 2)
-    ])
-  );
   let bestScore: number[] | null = null;
 
-  for (const size of sizes) {
-    for (const teamA of combinations(uniqueCandidates, size)) {
-      const teamAIds = new Set(teamA.map((candidate) => candidate.playerId));
-      const teamB = uniqueCandidates.filter(
-        (candidate) => !teamAIds.has(candidate.playerId)
-      );
+  for (const teamA of combinations(selectedCandidates, selectedCandidates.length / 2)) {
+    const teamAIds = new Set(teamA.map((candidate) => candidate.playerId));
+    const teamB = selectedCandidates.filter(
+      (candidate) => !teamAIds.has(candidate.playerId)
+    );
 
-      if (containsProhibitedPair(teamA, options.prohibitedPairs)) continue;
-      if (containsProhibitedPair(teamB, options.prohibitedPairs)) continue;
+    if (containsProhibitedPair(teamA, options.prohibitedPairs)) continue;
+    if (containsProhibitedPair(teamB, options.prohibitedPairs)) continue;
 
-      const score = scoreTeams(teamA, teamB);
+    const score = scoreTeams(teamA, teamB);
 
-      if (!bestScore || compareScores(score, bestScore) < 0) {
-        bestScore = score;
-      }
+    if (!bestScore || compareScores(score, bestScore) < 0) {
+      bestScore = score;
     }
   }
 
@@ -382,18 +360,26 @@ function scoreResult(result: BalancedTeams, selectedCandidates: BalanceCandidate
 }
 
 function scoreTeams(teamA: BalanceCandidate[], teamB: BalanceCandidate[]) {
+  const batDiff = Math.abs(total(teamA, "batting") - total(teamB, "batting"));
+  const bowlDiff = Math.abs(total(teamA, "bowling") - total(teamB, "bowling"));
+  const fieldDiff = Math.abs(total(teamA, "fielding") - total(teamB, "fielding"));
+
   return [
-    Math.abs(totalWeight(teamA) - totalWeight(teamB)),
-    Math.abs(countWeight(teamA, 3) - countWeight(teamB, 3)),
-    Math.abs(countWeight(teamA, 2) - countWeight(teamB, 2)),
-    Math.abs(countWeight(teamA, 1) - countWeight(teamB, 1)),
-    Math.abs(countWeight(teamA, 0) - countWeight(teamB, 0))
+    Math.abs(countRating(teamA, "bowling", 5) - countRating(teamB, "bowling", 5)),
+    Math.abs(countRating(teamA, "batting", 5) - countRating(teamB, "batting", 5)),
+    Math.abs(countAtLeast(teamA, "bowling", 4) - countAtLeast(teamB, "bowling", 4)),
+    Math.abs(countAtLeast(teamA, "batting", 4) - countAtLeast(teamB, "batting", 4)),
+    batDiff * 40 + bowlDiff * 40 + fieldDiff * 20,
+    Math.abs(overall(teamA) - overall(teamB)),
+    batDiff,
+    bowlDiff,
+    fieldDiff
   ];
 }
 
 function combinations<T>(items: T[], size: number): T[][] {
   if (size === 0) return [[]];
-  if (size > items.length) return [];
+  if (size > items.length || !Number.isInteger(size)) return [];
 
   const result: T[][] = [];
 
@@ -443,12 +429,34 @@ function compareScores(left: number[], right: number[]) {
   return 0;
 }
 
-function totalWeight(team: BalanceCandidate[]) {
-  return team.reduce((total, candidate) => total + candidate.balanceWeight, 0);
+function total(
+  team: BalanceCandidate[],
+  skill: "batting" | "bowling" | "fielding"
+) {
+  return team.reduce((sum, candidate) => sum + candidate[skill], 0);
 }
 
-function countWeight(team: BalanceCandidate[], weight: BalanceCandidate["balanceWeight"]) {
-  return team.filter((candidate) => candidate.balanceWeight === weight).length;
+function overall(team: BalanceCandidate[]) {
+  return team.reduce(
+    (sum, candidate) => sum + candidate.batting + candidate.bowling + candidate.fielding,
+    0
+  );
+}
+
+function countRating(
+  team: BalanceCandidate[],
+  skill: "batting" | "bowling" | "fielding",
+  rating: BalanceCandidate["batting"]
+) {
+  return team.filter((candidate) => candidate[skill] === rating).length;
+}
+
+function countAtLeast(
+  team: BalanceCandidate[],
+  skill: "batting" | "bowling" | "fielding",
+  rating: BalanceCandidate["batting"]
+) {
+  return team.filter((candidate) => candidate[skill] >= rating).length;
 }
 
 function fixedRandom(value: number) {

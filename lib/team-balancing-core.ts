@@ -1,6 +1,10 @@
+export type BalanceSkillRating = 1 | 2 | 3 | 4 | 5;
+
 export type BalanceCandidate = {
   playerId: string;
-  balanceWeight: 0 | 1 | 2 | 3;
+  batting: BalanceSkillRating;
+  bowling: BalanceSkillRating;
+  fielding: BalanceSkillRating;
 };
 
 export type BalancedTeams = {
@@ -33,39 +37,37 @@ export function tryBalanceWeightedCandidates(
   const uniqueCandidates = Array.from(
     new Map(candidates.map((candidate) => [candidate.playerId, candidate])).values()
   );
-  const teamASizes = Array.from(
-    new Set([
-      Math.floor(uniqueCandidates.length / 2),
-      Math.ceil(uniqueCandidates.length / 2)
-    ])
-  );
+
+  if (uniqueCandidates.length < 2 || uniqueCandidates.length % 2 !== 0) {
+    return null;
+  }
+
+  const teamASize = uniqueCandidates.length / 2;
   const bestCandidates: Array<BalancedTeams & { score: number[] }> = [];
   let bestScore: number[] | null = null;
 
-  for (const teamASize of teamASizes) {
-    for (const teamA of combinations(uniqueCandidates, teamASize)) {
-      const teamAIds = new Set(teamA.map((candidate) => candidate.playerId));
-      const teamB = uniqueCandidates.filter(
-        (candidate) => !teamAIds.has(candidate.playerId)
-      );
+  for (const teamA of combinations(uniqueCandidates, teamASize)) {
+    const teamAIds = new Set(teamA.map((candidate) => candidate.playerId));
+    const teamB = uniqueCandidates.filter(
+      (candidate) => !teamAIds.has(candidate.playerId)
+    );
 
-      if (violatesProhibitedPairs(teamA, options.prohibitedPairs)) continue;
-      if (violatesProhibitedPairs(teamB, options.prohibitedPairs)) continue;
+    if (violatesProhibitedPairs(teamA, options.prohibitedPairs)) continue;
+    if (violatesProhibitedPairs(teamB, options.prohibitedPairs)) continue;
 
-      const score = scoreCandidate(teamA, teamB);
+    const score = scoreCandidate(teamA, teamB);
 
-      if (!bestScore || compareScore(score, bestScore) < 0) {
-        bestScore = score;
-        bestCandidates.length = 0;
-      }
+    if (!bestScore || compareScore(score, bestScore) < 0) {
+      bestScore = score;
+      bestCandidates.length = 0;
+    }
 
-      if (bestScore && compareScore(score, bestScore) === 0) {
-        bestCandidates.push({
-          teamAPlayerIds: teamA.map((candidate) => candidate.playerId),
-          teamBPlayerIds: teamB.map((candidate) => candidate.playerId),
-          score
-        });
-      }
+    if (bestScore && compareScore(score, bestScore) === 0) {
+      bestCandidates.push({
+        teamAPlayerIds: teamA.map((candidate) => candidate.playerId),
+        teamBPlayerIds: teamB.map((candidate) => candidate.playerId),
+        score
+      });
     }
   }
 
@@ -134,12 +136,21 @@ function violatesProhibitedPairs(
 }
 
 function scoreCandidate(teamA: BalanceCandidate[], teamB: BalanceCandidate[]) {
+  const batDiff = Math.abs(totalSkill(teamA, "batting") - totalSkill(teamB, "batting"));
+  const bowlDiff = Math.abs(totalSkill(teamA, "bowling") - totalSkill(teamB, "bowling"));
+  const fieldDiff = Math.abs(totalSkill(teamA, "fielding") - totalSkill(teamB, "fielding"));
+  const weightedDimensionDiff = batDiff * 40 + bowlDiff * 40 + fieldDiff * 20;
+
   return [
-    Math.abs(totalWeight(teamA) - totalWeight(teamB)),
-    Math.abs(countWeight(teamA, 3) - countWeight(teamB, 3)),
-    Math.abs(countWeight(teamA, 2) - countWeight(teamB, 2)),
-    Math.abs(countWeight(teamA, 1) - countWeight(teamB, 1)),
-    Math.abs(countWeight(teamA, 0) - countWeight(teamB, 0))
+    Math.abs(countSkill(teamA, "bowling", 5) - countSkill(teamB, "bowling", 5)),
+    Math.abs(countSkill(teamA, "batting", 5) - countSkill(teamB, "batting", 5)),
+    Math.abs(countAtLeast(teamA, "bowling", 4) - countAtLeast(teamB, "bowling", 4)),
+    Math.abs(countAtLeast(teamA, "batting", 4) - countAtLeast(teamB, "batting", 4)),
+    weightedDimensionDiff,
+    Math.abs(totalOverall(teamA) - totalOverall(teamB)),
+    batDiff,
+    bowlDiff,
+    fieldDiff
   ];
 }
 
@@ -153,13 +164,33 @@ function compareScore(left: number[], right: number[]) {
   return 0;
 }
 
-function totalWeight(candidates: BalanceCandidate[]) {
-  return candidates.reduce((total, candidate) => total + candidate.balanceWeight, 0);
+function totalSkill(
+  candidates: BalanceCandidate[],
+  skill: "batting" | "bowling" | "fielding"
+) {
+  return candidates.reduce((total, candidate) => total + candidate[skill], 0);
 }
 
-function countWeight(
+function totalOverall(candidates: BalanceCandidate[]) {
+  return candidates.reduce(
+    (total, candidate) =>
+      total + candidate.batting + candidate.bowling + candidate.fielding,
+    0
+  );
+}
+
+function countSkill(
   candidates: BalanceCandidate[],
-  weight: BalanceCandidate["balanceWeight"]
+  skill: "batting" | "bowling" | "fielding",
+  rating: BalanceSkillRating
 ) {
-  return candidates.filter((candidate) => candidate.balanceWeight === weight).length;
+  return candidates.filter((candidate) => candidate[skill] === rating).length;
+}
+
+function countAtLeast(
+  candidates: BalanceCandidate[],
+  skill: "batting" | "bowling" | "fielding",
+  rating: BalanceSkillRating
+) {
+  return candidates.filter((candidate) => candidate[skill] >= rating).length;
 }

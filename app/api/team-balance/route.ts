@@ -14,9 +14,18 @@ export async function POST(request: Request) {
     );
   }
 
-  const availablePlayerIds = body.availablePlayerIds.filter(
-    (playerId): playerId is string => typeof playerId === "string"
-  );
+  if (
+    !body.availablePlayerIds.every(
+      (playerId): playerId is string => typeof playerId === "string"
+    )
+  ) {
+    return NextResponse.json(
+      { error: "Selected players must be active roster players." },
+      { status: 400 }
+    );
+  }
+
+  const availablePlayerIds = body.availablePlayerIds;
 
   const sharedPlayerId =
     typeof body.sharedPlayerId === "string" && body.sharedPlayerId.length > 0
