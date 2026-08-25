@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Edit3, Lock } from "lucide-react";
+import { ApkOfficialFinaliseConfirmation } from "@/components/admin/ApkOfficialFinaliseConfirmation";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { requireAdmin } from "@/lib/admin/auth";
@@ -660,57 +661,21 @@ export default async function ApkImportReviewPage({
             </section>
 
             {importRecord.reviewStatus === "pending_review" ? (
-              <form
+              <ApkOfficialFinaliseConfirmation
                 action={`/api/admin/apk-imports/${importRecord.id}/finalize`}
-                method="post"
-                className="mt-6 rounded-[8px] border border-neon-cyan/30 bg-pitch-950/80 p-4"
-              >
-                <input
-                  type="hidden"
-                  name="expectedReviewVersion"
-                  value={importRecord.reviewVersion ?? 0}
-                />
-                <h2 className="font-display text-2xl uppercase text-white">Finalise From Pending</h2>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <label className="grid gap-2 text-sm font-black uppercase text-stone-300">
-                    Match Date
-                    <input
-                      name="matchDate"
-                      type="date"
-                      defaultValue={match.matchDate}
-                      className="rounded-[8px] border border-white/15 bg-black/50 px-3 py-2 text-white"
-                    />
-                  </label>
-                  <label className="grid gap-2 text-sm font-black uppercase text-stone-300">
-                    Player of the Match
-                    <select
-                      name="playerOfMatchId"
-                      defaultValue={recommendedPomId ?? ""}
-                      className="rounded-[8px] border border-white/15 bg-black/50 px-3 py-2 text-white"
-                    >
-                      <option value="">No award / tie</option>
-                      {players.map((record) => (
-                        <option key={record.playerId} value={record.playerId}>
-                          {resolvePlayerName(record.playerId)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <p className="mt-3 text-sm text-stone-300">
-                  Website recommendation: {recommendedPomId ? resolvePlayerName(recommendedPomId) : "No unique winner"}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <Button type="submit" disabled={!canFinalize}>
-                    FINALIZE MATCH
-                  </Button>
-                  {importRecord.isDemo ? (
-                    <span className="rounded-[8px] border border-neon-yellow/30 bg-neon-yellow/10 px-3 py-2 text-sm font-black uppercase text-neon-yellow">
-                      Demo imports cannot create official matches
-                    </span>
-                  ) : null}
-                </div>
-              </form>
+                expectedReviewVersion={importRecord.reviewVersion ?? 0}
+                matchDate={match.matchDate}
+                recommendedPomId={recommendedPomId}
+                recommendedPomLabel={
+                  recommendedPomId ? resolvePlayerName(recommendedPomId) : "No unique winner"
+                }
+                pomOptions={players.map((record) => ({
+                  playerId: record.playerId,
+                  playerName: resolvePlayerName(record.playerId)
+                }))}
+                canFinalize={canFinalize}
+                isDemo={importRecord.isDemo}
+              />
             ) : null}
           </>
         ) : (

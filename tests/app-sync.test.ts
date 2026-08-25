@@ -272,6 +272,10 @@ test("APK POM recommendation never becomes official POM automatically", () => {
     "app/api/admin/apk-imports/[importId]/finalize/route.ts",
     "utf8"
   );
+  const finaliseConfirmation = readFileSync(
+    "components/admin/ApkOfficialFinaliseConfirmation.tsx",
+    "utf8"
+  );
   const page = readFileSync("app/admin/apk-imports/[importId]/page.tsx", "utf8");
 
   assert.match(assembler, /playerOfMatchId = null/);
@@ -280,8 +284,10 @@ test("APK POM recommendation never becomes official POM automatically", () => {
   assert.match(finaliseRoute, /formData\.get\("playerOfMatchId"\)/);
   assert.doesNotMatch(finaliseRoute, /pomRecommendationPlayerId/);
   assert.match(page, /APK POM Recommendation/);
-  assert.match(page, /defaultValue=\{recommendedPomId \?\? ""\}/);
+  assert.match(page, /recommendedPomId=\{recommendedPomId\}/);
+  assert.match(finaliseConfirmation, /defaultValue=\{recommendedPomId \?\? ""\}/);
   assert.doesNotMatch(page, /defaultValue=\{apkPomRecommendation/);
+  assert.doesNotMatch(finaliseConfirmation, /defaultValue=\{apkPomRecommendation/);
 });
 
 test("APK POM recommendation respects review-copy stale behavior and demo isolation", () => {
@@ -295,8 +301,87 @@ test("APK POM recommendation respects review-copy stale behavior and demo isolat
   assert.match(helper, /return importRecord\.reviewPayload \?\? importRecord\.rawPayload/);
   assert.match(helper, /reviewSourceSyncVersion/);
   assert.match(route, /DEMO APK IMPORTS CANNOT CREATE OFFICIAL MATCHES/);
-  assert.match(page, /Demo imports cannot create official matches/);
+  assert.match(page, /ApkOfficialFinaliseConfirmation/);
+  assert.match(page, /isDemo=\{importRecord\.isDemo\}/);
   assert.match(page, /Website Admin still chooses the official Player of the Match/);
+});
+
+test("APK official finalisation requires explicit UI confirmation", () => {
+  const component = readFileSync(
+    "components/admin/ApkOfficialFinaliseConfirmation.tsx",
+    "utf8"
+  );
+  const page = readFileSync("app/admin/apk-imports/[importId]/page.tsx", "utf8");
+  const finaliseRoute = readFileSync(
+    "app/api/admin/apk-imports/[importId]/finalize/route.ts",
+    "utf8"
+  );
+
+  assert.match(component, /"use client"/);
+  assert.match(component, /const \[confirming, setConfirming\] = useState\(false\)/);
+  assert.match(component, /FINALISE OFFICIAL MATCH\?/);
+  assert.match(component, /career statistics/);
+  assert.match(component, /XP \/ levels/);
+  assert.match(component, /Player of the Match/);
+  assert.match(component, /Game Number/);
+  assert.match(component, /Archive \/ rankings \/ derived features/);
+  assert.match(component, /type="button"[\s\S]*setConfirming\(true\)/);
+  assert.match(component, /type="submit"[\s\S]*FINALISE OFFICIAL MATCH/);
+  assert.match(page, /action=\{`\/api\/admin\/apk-imports\/\$\{importRecord\.id\}\/finalize`\}/);
+  assert.match(finaliseRoute, /formData\.get\("playerOfMatchId"\)/);
+  assert.match(finaliseRoute, /finalizeImportAtomically/);
+});
+
+test("APK official finalisation cancel is non-mutating UI only", () => {
+  const component = readFileSync(
+    "components/admin/ApkOfficialFinaliseConfirmation.tsx",
+    "utf8"
+  );
+  const cancelTextIndex = component.indexOf("CANCEL");
+  const cancelButtonStart = component.lastIndexOf("<Button", cancelTextIndex);
+  const cancelButtonEnd = component.indexOf("</Button>", cancelTextIndex);
+  const cancelButton = component.slice(cancelButtonStart, cancelButtonEnd);
+
+  assert.ok(cancelButtonStart >= 0);
+  assert.ok(cancelButtonEnd > cancelButtonStart);
+  assert.match(cancelButton, /type="button"/);
+  assert.match(cancelButton, /variant="ghost"/);
+  assert.match(cancelButton, /setConfirming\(false\)/);
+  assert.match(component, />\s*CANCEL\s*<\/Button>/);
+  assert.doesNotMatch(cancelButton, /type="submit"/);
+});
+
+test("Demo APK imports do not expose usable official finalise action", () => {
+  const component = readFileSync(
+    "components/admin/ApkOfficialFinaliseConfirmation.tsx",
+    "utf8"
+  );
+  const page = readFileSync("app/admin/apk-imports/[importId]/page.tsx", "utf8");
+
+  assert.match(component, /if \(isDemo\) \{/);
+  assert.match(component, /DEMO MATCH - CANNOT BE FINALISED AS OFFICIAL/);
+  assert.match(component, /Demo APK imports can be reviewed and corrected/);
+  assert.match(component, /return \([\s\S]*DEMO MATCH - CANNOT BE FINALISED AS OFFICIAL[\s\S]*\);\s*\}\s*return \(\s*<form/);
+  assert.match(page, /canFinalize =[\s\S]*!importRecord\.isDemo/);
+});
+
+test("APK finalisation keeps POM selection authoritative through the confirmed form", () => {
+  const component = readFileSync(
+    "components/admin/ApkOfficialFinaliseConfirmation.tsx",
+    "utf8"
+  );
+  const page = readFileSync("app/admin/apk-imports/[importId]/page.tsx", "utf8");
+  const finaliseRoute = readFileSync(
+    "app/api/admin/apk-imports/[importId]/finalize/route.ts",
+    "utf8"
+  );
+
+  assert.match(component, /name="playerOfMatchId"/);
+  assert.match(component, /defaultValue=\{recommendedPomId \?\? ""\}/);
+  assert.match(page, /recommendedPomId=\{recommendedPomId\}/);
+  assert.match(page, /pomOptions=\{players\.map/);
+  assert.match(finaliseRoute, /const selectedPom = String\(formData\.get\("playerOfMatchId"\)/);
+  assert.doesNotMatch(component, /pomRecommendationPlayerId/);
 });
 
 test("app-sync login route accepts Admin ID and keeps Admin email server-side", () => {
@@ -1012,7 +1097,7 @@ test("Demo APK imports remain editable for review but cannot become official", (
 
   assert.doesNotMatch(workingCopyRoute, /importRecord\.isDemo[\s\S]*ONLY PENDING APK IMPORTS CAN BE EDITED/);
   assert.match(detailPage, /importRecord\.isDemo \? "DEMO TEST MATCH"/);
-  assert.match(detailPage, /Demo imports cannot create official matches/);
+  assert.match(detailPage, /isDemo=\{importRecord\.isDemo\}/);
   assert.match(finaliseRoute, /DEMO APK IMPORTS CANNOT CREATE OFFICIAL MATCHES/);
   assert.doesNotMatch(finaliseRoute, /getNextAvailableMatchNumber/);
 });
