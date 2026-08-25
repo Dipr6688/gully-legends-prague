@@ -244,6 +244,61 @@ test("app-sync same-day and next-day explicit Match Date examples stay calendar 
   assert.notEqual(sameDay.matchDate, nextDay.matchDate);
 });
 
+test("app-sync payload accepts optional APK POM recommendation metadata", () => {
+  const types = readFileSync("lib/app-sync/types.ts", "utf8");
+  const assembler = readFileSync("lib/app-sync/assemble-pending-import.ts", "utf8");
+
+  assert.match(types, /pomRecommendationPlayerId\?: string \| null;/);
+  assert.match(assembler, /value\.pomRecommendationPlayerId === undefined/);
+  assert.match(assembler, /value\.pomRecommendationPlayerId === null/);
+  assert.match(assembler, /typeof value\.pomRecommendationPlayerId === "string"/);
+});
+
+test("app-sync validates APK POM recommendation without blocking the match", () => {
+  const assembler = readFileSync("lib/app-sync/assemble-pending-import.ts", "utf8");
+
+  assert.match(assembler, /const suppliedPomRecommendationId/);
+  assert.match(assembler, /payload\.pomRecommendationPlayerId\?\.trim\(\) \|\| null/);
+  assert.match(assembler, /status: "valid" as const/);
+  assert.match(assembler, /APK POM recommendation ignored: unknown player\./);
+  assert.match(assembler, /APK POM recommendation ignored: player did not participate\./);
+  assert.match(assembler, /performance\.played && performance\.playerId === suppliedPomRecommendationId/);
+  assert.match(assembler, /apkPomRecommendation/);
+});
+
+test("APK POM recommendation never becomes official POM automatically", () => {
+  const assembler = readFileSync("lib/app-sync/assemble-pending-import.ts", "utf8");
+  const finaliseRoute = readFileSync(
+    "app/api/admin/apk-imports/[importId]/finalize/route.ts",
+    "utf8"
+  );
+  const page = readFileSync("app/admin/apk-imports/[importId]/page.tsx", "utf8");
+
+  assert.match(assembler, /playerOfMatchId = null/);
+  assert.match(assembler, /playerOfMatchId &&/);
+  assert.doesNotMatch(assembler, /playerOfMatchId\s*=\s*payload\.pomRecommendationPlayerId/);
+  assert.match(finaliseRoute, /formData\.get\("playerOfMatchId"\)/);
+  assert.doesNotMatch(finaliseRoute, /pomRecommendationPlayerId/);
+  assert.match(page, /APK POM Recommendation/);
+  assert.match(page, /defaultValue=\{recommendedPomId \?\? ""\}/);
+  assert.doesNotMatch(page, /defaultValue=\{apkPomRecommendation/);
+});
+
+test("APK POM recommendation respects review-copy stale behavior and demo isolation", () => {
+  const helper = readFileSync("lib/app-sync/review-working-copy.ts", "utf8");
+  const route = readFileSync(
+    "app/api/admin/apk-imports/[importId]/finalize/route.ts",
+    "utf8"
+  );
+  const page = readFileSync("app/admin/apk-imports/[importId]/page.tsx", "utf8");
+
+  assert.match(helper, /return importRecord\.reviewPayload \?\? importRecord\.rawPayload/);
+  assert.match(helper, /reviewSourceSyncVersion/);
+  assert.match(route, /DEMO APK IMPORTS CANNOT CREATE OFFICIAL MATCHES/);
+  assert.match(page, /Demo imports cannot create official matches/);
+  assert.match(page, /Website Admin still chooses the official Player of the Match/);
+});
+
 test("app-sync login route accepts Admin ID and keeps Admin email server-side", () => {
   const route = readFileSync("app/api/app-sync/login/route.ts", "utf8");
 

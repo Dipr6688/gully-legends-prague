@@ -43,6 +43,52 @@ function getRecommendation(importRecord: ApkMatchImport): string | null {
   return typeof playerId === "string" ? playerId : null;
 }
 
+function getApkPomRecommendation(
+  importRecord: ApkMatchImport,
+  payload: AppSyncMatchPayload
+): {
+  status: "valid" | "ignored" | "none" | "unverified";
+  playerId: string | null;
+  suppliedPlayerId: string | null;
+  message: string | null;
+} {
+  const recommendation =
+    getApkReviewValidationResult(importRecord)?.apkPomRecommendation;
+
+  if (recommendation && typeof recommendation === "object") {
+    const record = recommendation as Record<string, unknown>;
+    const status = record.status;
+
+    if (status === "valid" || status === "ignored" || status === "none") {
+      return {
+        status,
+        playerId: typeof record.playerId === "string" ? record.playerId : null,
+        suppliedPlayerId:
+          typeof record.suppliedPlayerId === "string"
+            ? record.suppliedPlayerId
+            : null,
+        message: typeof record.message === "string" ? record.message : null
+      };
+    }
+  }
+
+  const suppliedPlayerId = payload.pomRecommendationPlayerId?.trim() || null;
+
+  return suppliedPlayerId
+    ? {
+        status: "unverified",
+        playerId: null,
+        suppliedPlayerId,
+        message: "APK recommendation was supplied before website validation metadata was refreshed."
+      }
+    : {
+        status: "none",
+        playerId: null,
+        suppliedPlayerId: null,
+        message: null
+      };
+}
+
 function playerOptions(playerIds: string[], selected?: string | null) {
   return (
     <>
@@ -441,6 +487,7 @@ export default async function ApkImportReviewPage({
   const payload = getApkReviewPayload(importRecord);
   const validationErrors = getValidationErrors(importRecord);
   const recommendedPomId = getRecommendation(importRecord);
+  const apkPomRecommendation = getApkPomRecommendation(importRecord, payload);
   const reviewIsStale = isApkReviewWorkingCopyStale(importRecord);
   const canEditReviewData =
     importRecord.reviewStatus === "pending_review" && !reviewIsStale;
@@ -518,6 +565,27 @@ export default async function ApkImportReviewPage({
               ))}
             </ul>
           )}
+        </section>
+
+        <section className="mt-6 rounded-[8px] border border-neon-yellow/25 bg-neon-yellow/10 p-4">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-neon-yellow">
+            APK POM Recommendation
+          </p>
+          <div className="mt-2 text-2xl font-black uppercase text-white">
+            {apkPomRecommendation.status === "valid" && apkPomRecommendation.playerId
+              ? resolvePlayerName(apkPomRecommendation.playerId)
+              : apkPomRecommendation.status === "ignored" &&
+                  apkPomRecommendation.suppliedPlayerId
+                ? `${resolvePlayerName(apkPomRecommendation.suppliedPlayerId)} ignored`
+                : apkPomRecommendation.status === "unverified" &&
+                    apkPomRecommendation.suppliedPlayerId
+                  ? `${resolvePlayerName(apkPomRecommendation.suppliedPlayerId)} supplied`
+                  : "No unique recommendation"}
+          </div>
+          <p className="mt-1 text-sm text-stone-300">
+            {apkPomRecommendation.message ??
+              "Informational only. Website Admin still chooses the official Player of the Match."}
+          </p>
         </section>
 
         {match ? (
@@ -630,7 +698,7 @@ export default async function ApkImportReviewPage({
                   </label>
                 </div>
                 <p className="mt-3 text-sm text-stone-300">
-                  Recommendation: {recommendedPomId ? resolvePlayerName(recommendedPomId) : "No unique winner"}
+                  Website recommendation: {recommendedPomId ? resolvePlayerName(recommendedPomId) : "No unique winner"}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <Button type="submit" disabled={!canFinalize}>

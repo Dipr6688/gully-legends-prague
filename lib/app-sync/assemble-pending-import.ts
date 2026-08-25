@@ -130,6 +130,9 @@ export function isAppSyncMatchPayload(value: unknown): value is AppSyncMatchPayl
     value.syncVersion > 0 &&
     typeof value.isDemo === "boolean" &&
     (value.matchDate === undefined || typeof value.matchDate === "string") &&
+    (value.pomRecommendationPlayerId === undefined ||
+      value.pomRecommendationPlayerId === null ||
+      typeof value.pomRecommendationPlayerId === "string") &&
     typeof value.startedAt === "string" &&
     (value.completedAt === undefined ||
       value.completedAt === null ||
@@ -487,6 +490,38 @@ export function assemblePendingImportMatch({
   ) {
     errors.push("Player of the Match must be a match participant.");
   }
+  const suppliedPomRecommendationId =
+    payload.pomRecommendationPlayerId?.trim() || null;
+  const apkPomRecommendation = suppliedPomRecommendationId
+    ? activePlayers.some((player) => player.id === suppliedPomRecommendationId)
+      ? performances.some(
+          (performance) =>
+            performance.played && performance.playerId === suppliedPomRecommendationId
+        )
+        ? {
+            status: "valid" as const,
+            suppliedPlayerId: suppliedPomRecommendationId,
+            playerId: suppliedPomRecommendationId,
+            message: null
+          }
+        : {
+            status: "ignored" as const,
+            suppliedPlayerId: suppliedPomRecommendationId,
+            playerId: null,
+            message: "APK POM recommendation ignored: player did not participate."
+          }
+      : {
+          status: "ignored" as const,
+          suppliedPlayerId: suppliedPomRecommendationId,
+          playerId: null,
+          message: "APK POM recommendation ignored: unknown player."
+        }
+    : {
+        status: "none" as const,
+        suppliedPlayerId: null,
+        playerId: null,
+        message: null
+      };
 
   const availablePlayerIds = Array.from(
     new Set([...teamAPlayerIds, ...teamBPlayerIds, ...fieldingHelperIds])
@@ -619,7 +654,8 @@ export function assemblePendingImportMatch({
     ok: errors.length === 0,
     errors,
     result: validation.result,
-    pomRecommendation
+    pomRecommendation,
+    apkPomRecommendation
   };
 
   if (errors.length > 0) {

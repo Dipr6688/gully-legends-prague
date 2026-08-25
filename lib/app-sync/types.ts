@@ -16,6 +16,7 @@ export type AppSyncMatchPayload = {
   syncVersion: number;
   isDemo: boolean;
   matchDate?: string;
+  pomRecommendationPlayerId?: string | null;
   startedAt: string;
   completedAt?: string | null;
   matchName: string;
