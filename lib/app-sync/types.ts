@@ -15,6 +15,7 @@ export type AppSyncMatchPayload = {
   offlineMatchId: string;
   syncVersion: number;
   isDemo: boolean;
+  matchDate?: string;
   startedAt: string;
   completedAt?: string | null;
   matchName: string;

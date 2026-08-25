@@ -22,7 +22,10 @@ import {
 import { deriveQuickScoringInnings } from "@/lib/quick-scoring";
 import { validateMatchInput } from "@/lib/match-validation-core";
 import { activePlayers } from "@/lib/data/players";
-import { getPragueMatchDateFromTimestamp } from "@/lib/app-sync/prague-date";
+import {
+  getPragueMatchDateFromTimestamp,
+  isValidIsoCalendarDate
+} from "@/lib/app-sync/prague-date";
 import type {
   AppSyncMatchPayload
 } from "@/lib/app-sync/types";
@@ -126,6 +129,7 @@ export function isAppSyncMatchPayload(value: unknown): value is AppSyncMatchPayl
     Number.isInteger(value.syncVersion) &&
     value.syncVersion > 0 &&
     typeof value.isDemo === "boolean" &&
+    (value.matchDate === undefined || typeof value.matchDate === "string") &&
     typeof value.startedAt === "string" &&
     (value.completedAt === undefined ||
       value.completedAt === null ||
@@ -349,11 +353,20 @@ export function assemblePendingImportMatch({
   playerOfMatchId?: string | null;
   appliedAt?: string;
 }): AppSyncAssemblyResult {
-  const derivedMatchDate =
-    matchDate ?? getPragueMatchDateFromTimestamp(payload.startedAt);
   const errors: string[] = [];
+  let derivedMatchDate: string | null =
+    matchDate ?? payload.matchDate ?? null;
 
-  if (!derivedMatchDate) {
+  if (derivedMatchDate) {
+    if (!isValidIsoCalendarDate(derivedMatchDate)) {
+      errors.push("Invalid matchDate. Use YYYY-MM-DD.");
+      derivedMatchDate = null;
+    }
+  } else {
+    derivedMatchDate = getPragueMatchDateFromTimestamp(payload.startedAt);
+  }
+
+  if (!derivedMatchDate && !payload.matchDate && !matchDate) {
     errors.push("Invalid startedAt timestamp.");
   }
 

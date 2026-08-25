@@ -185,6 +185,65 @@ test("server-side APK match-date validation accepts only real YYYY-MM-DD dates",
   assert.equal(isValidIsoCalendarDate(""), false);
 });
 
+test("app-sync payload type and validator accept optional explicit Match Date", () => {
+  const types = readFileSync("lib/app-sync/types.ts", "utf8");
+  const assembler = readFileSync("lib/app-sync/assemble-pending-import.ts", "utf8");
+
+  assert.match(types, /matchDate\?: string;/);
+  assert.match(
+    assembler,
+    /value\.matchDate === undefined \|\| typeof value\.matchDate === "string"/
+  );
+});
+
+test("app-sync assembly uses explicit APK Match Date before timestamp fallback", () => {
+  const assembler = readFileSync("lib/app-sync/assemble-pending-import.ts", "utf8");
+
+  assert.match(assembler, /matchDate \?\? payload\.matchDate \?\? null/);
+  assert.match(assembler, /isValidIsoCalendarDate\(derivedMatchDate\)/);
+  assert.match(assembler, /Invalid matchDate\. Use YYYY-MM-DD\./);
+  assert.match(assembler, /derivedMatchDate = getPragueMatchDateFromTimestamp\(payload\.startedAt\)/);
+});
+
+test("app-sync explicit Match Date is not derived from completedAt", () => {
+  const assembler = readFileSync("lib/app-sync/assemble-pending-import.ts", "utf8");
+  const completedAtValidationStart = assembler.search(
+    /\n\s+if \(\r?\n\s+payload\.completedAt/
+  );
+  const dateDerivationBlock = assembler.slice(
+    assembler.indexOf("let derivedMatchDate"),
+    completedAtValidationStart
+  );
+
+  assert.match(dateDerivationBlock, /payload\.matchDate/);
+  assert.doesNotMatch(
+    dateDerivationBlock,
+    /getPragueMatchDateFromTimestamp\(payload\.completedAt\)|new Date\(payload\.completedAt\)|Date\.parse\(payload\.completedAt\)/
+  );
+});
+
+test("app-sync legacy no-Match-Date fallback still uses Prague startedAt conversion", () => {
+  assert.equal(
+    getPragueMatchDateFromTimestamp("2026-08-25T22:30:00.000Z"),
+    "2026-08-26"
+  );
+});
+
+test("app-sync same-day and next-day explicit Match Date examples stay calendar strings", () => {
+  const sameDay = appSyncPayload({
+    matchDate: "2026-08-25",
+    startedAt: "2026-08-25T21:58:00.000Z"
+  });
+  const nextDay = appSyncPayload({
+    matchDate: "2026-08-26",
+    startedAt: "2026-08-25T21:58:00.000Z"
+  });
+
+  assert.equal(sameDay.matchDate, "2026-08-25");
+  assert.equal(nextDay.matchDate, "2026-08-26");
+  assert.notEqual(sameDay.matchDate, nextDay.matchDate);
+});
+
 test("app-sync login route accepts Admin ID and keeps Admin email server-side", () => {
   const route = readFileSync("app/api/app-sync/login/route.ts", "utf8");
 
