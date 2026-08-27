@@ -1,305 +1,237 @@
 {
-  "metadataVersion": 6,
-  "lastUpdated": "2026-08-21",
+  "metadataVersion": 7,
+  "lastUpdated": "2026-08-27",
   "project": {
     "name": "Gully Legends Prague",
-    "purpose": "Gaming/comic styled cricket website, Supabase-backed cricket match management, player progression, Hall of Legends rankings, Gully Face-Off comparisons, Monthly Beasts awards, Formula Room documentation, Post-Match Celebration, Share Match Card export, and shared Gallery for the Gully Legends Prague cricket group.",
+    "purpose": "Gaming/comic styled cricket website and companion APK workflow for the Gully Legends Prague cricket group.",
+    "websiteUrl": "https://www.gullylegends.eu",
     "framework": "Next.js App Router",
     "language": "TypeScript",
     "styling": "Tailwind CSS plus custom CSS in app/globals.css",
-    "primaryDataSource": "Supabase when NEXT_PUBLIC_DATA_SOURCE is unset or set to supabase",
-    "localFallbackMode": "NEXT_PUBLIC_DATA_SOURCE=local preserves local browser fallback behavior for development",
-    "databaseStatus": "Supabase Auth, Postgres, RLS, RPC finalisation, Monthly Beast writes, Demo Reset, Gallery Storage persistence, and APK Pending Review persistence are implemented.",
-    "phaseStatus": "Current project is stable on main at functional checkpoint 275c2fa: 21-player roster, approved responsive dashboard, Supabase-backed public reads, Admin-only writes, APK Pending Review / Admin correction, Quick Scoring, atomic match finalisation, Post-Match Celebration, Historical Match Celebration Replay, Share Match Card export, Gully Face-Off, reset-safe player progression, Monthly Beasts Crown/Reopen, Demo Reset, demo test match helper, Supabase Gallery persistence, private server-side Team Balance / Shuffle, and illustrated match scoring documentation are implemented."
+    "backend": "Supabase Auth, Postgres RLS, RPCs, and Storage",
+    "canonicalRosterCount": 21,
+    "status": "Stable on website main; APK v1.3.0 released/tagged in its own repository."
   },
-  "commands": {
-    "windowsNote": "Use npm.cmd in PowerShell because npm.ps1 may be blocked by execution policy.",
-    "dev": "npm.cmd run dev -- --port 3001",
-    "localUrl": "http://localhost:3001",
-    "lint": "npm.cmd run lint",
-    "typecheck": "npm.cmd run typecheck",
-    "test": "npm.cmd run test",
-    "build": "npm.cmd run build"
+  "repositories": {
+    "website": {
+      "path": "C:/cricket_website/gully-legends-prague",
+      "remote": "https://github.com/Dipr6688/gully-legends-prague.git",
+      "productionBranch": "main",
+      "currentBranch": "main",
+      "productionHead": "651d5d1 Add server-backed Balance Teams",
+      "originMainHead": "651d5d1 Add server-backed Balance Teams",
+      "tagsPresent": []
+    },
+    "apk": {
+      "path": "C:/cricket_website/apk-integration/GullyLegendsArena-source",
+      "remote": "https://github.com/Dipr6688/gully-legends-arena-apk.git",
+      "currentBranch": "main",
+      "mainHead": "dd75200 Release Gully Legends Arena v1.3.0",
+      "tagsPresent": ["v1.3.0", "v1.2.0"],
+      "releaseBranch": "release/v1.3.0 exists at dd75200"
+    },
+    "externalApkHandoff": "C:/cricket_website/GULLY_LEGENDS_APK_INTEGRATION_HANDOFF_CURRENT.md"
   },
-  "releaseState": {
-    "productionBranch": "main",
-    "productionHead": "275c2fa Add Gully Face-Off arena and celebration polish",
-    "functionalCheckpoint": "275c2fa Add Gully Face-Off arena and celebration polish",
-    "gullyFaceOffCommits": [
-      "4b7c7fb Add Gully Face-Off comparison engine",
-      "275c2fa Add Gully Face-Off arena and celebration polish"
-    ],
-    "postMatchCelebrationCommits": [
-      "be0cc79 Add post-match celebration foundation",
-      "2e5902c Add post-match celebration experience",
-      "6e41645 Add historical match celebration replay"
-    ],
-    "apkReviewCorrectionStatus": "APK Pending Review and Admin correction functionality is included in Production main.",
-    "featurePostMatchCelebrationBranch": "feature/post-match-celebration may remain as the completed release branch.",
-    "verification": [
-      "Vercel Preview passed.",
-      "Production deployment passed.",
-      "Production smoke test passed on https://www.gullylegends.eu.",
-      "Historical celebrations tested successfully on gullylegends.eu.",
-      "Localhost historical replay visually inspected.",
-      "Desktop/mobile visual QA passed.",
-      "604/604 tests passing.",
-      "lint passed.",
-      "typecheck passed.",
-      "build passed."
-    ]
-  },
-  "environment": {
-    "exampleFile": ".env.example",
-    "requiredForSupabaseMode": [
-      "NEXT_PUBLIC_SITE_URL",
-      "NEXT_PUBLIC_DATA_SOURCE=supabase",
-      "NEXT_PUBLIC_SUPABASE_URL",
-      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-      "ADMIN_LOGIN_ID",
-      "ADMIN_LOGIN_EMAIL"
-    ],
-    "securityNotes": [
-      "Use the Supabase publishable key only.",
-      "Do not put service-role credentials in .env.local or browser-facing code.",
-      "Admin authorization is enforced by Supabase Auth plus public.is_admin()."
-    ]
-  },
-  "coreFiles": {
-    "dashboardPage": "app/page.tsx",
-    "globalStyles": "app/globals.css",
-    "rootLayout": "app/layout.tsx",
-    "navigation": "components/navigation/SiteHeader.tsx",
-    "navigationConfig": "lib/data/navigation.ts",
-    "dashboardHero": "components/dashboard/HeroSection.tsx",
-    "playerBrowser": "components/dashboard/PlayerBrowserSection.tsx",
-    "monthlyBeastsPanel": "components/dashboard/MonthlyBeastsPanel.tsx",
-    "gullyRules": "components/dashboard/GullyRulesCard.tsx",
-    "recentMatches": "components/dashboard/RecentMatchesPanel.tsx",
-    "topPerformers": "components/dashboard/TopPerformersPanel.tsx",
-    "playersPage": "app/players/page.tsx",
-    "playerCard": "components/players/PlayerCard.tsx",
-    "playerProfile": "components/players/PlayerProfile.tsx",
-    "playerData": "lib/data/players.ts",
-    "playerTypes": "lib/types/player.ts",
-    "playerPowerIcons": "lib/data/player-power-icons.ts",
-    "matchTypes": "lib/types/match.ts",
-    "matchForm": "components/matches/MockMatchEntryForm.tsx",
-    "matchScorecard": "components/matches/MatchScorecard.tsx",
-    "matchArchive": "components/matches/MatchArchive.tsx",
-    "matchLogic": "lib/match-records.ts",
-    "quickScoringLogic": "lib/quick-scoring.ts",
-    "postMatchCelebration": "components/matches/PostMatchCelebration.tsx",
-    "postMatchCelebrationDomain": "lib/post-match-celebration.ts",
-    "matchShareCard": "components/matches/MatchShareCard.tsx",
-    "matchShareCardDomain": "lib/match-share-card.ts",
-    "gullyFaceOffPage": "app/face-off/page.tsx",
-    "gullyFaceOffArena": "components/face-off/GullyFaceOffArena.tsx",
-    "gullyFaceOffDomain": "lib/gully-face-off.ts",
-    "teamBalancingCore": "lib/team-balancing-core.ts",
-    "teamBalancingServer": "server/team-balancing.ts",
-    "teamBalanceApi": "app/api/team-balance/route.ts",
-    "progressionLogic": "lib/progression.ts",
-    "careerStore": "lib/career-store.ts",
-    "dataSourceSwitch": "lib/data-source.ts",
-    "supabasePublicRead": "lib/supabase/public-read-data.ts",
-    "supabaseReadRepositories": "lib/supabase/read-repositories.ts",
-    "supabaseMatchWriteRepository": "lib/supabase/match-write-repository.ts",
-    "supabaseFinalisationPlan": "lib/supabase/match-finalisation-plan.ts",
-    "supabaseFinalisationRepository": "lib/supabase/match-finalisation-repository.ts",
-    "monthlyBeastWritePlans": "lib/supabase/monthly-beast-write-plans.ts",
-    "monthlyBeastWriteRepository": "lib/supabase/monthly-beast-write-repository.ts",
-    "galleryPage": "app/gallery/page.tsx",
-    "galleryFeature": "components/gallery/GalleryFeature.tsx",
-    "galleryRepository": "lib/gallery-repository.ts",
-    "galleryTypes": "lib/gallery.ts",
-    "galleryImageOptimiser": "lib/gallery-image.ts",
-    "adminPage": "app/admin/page.tsx",
-    "apkPendingReviewPage": "app/admin/apk-imports/page.tsx",
-    "apkPendingReviewDetail": "app/admin/apk-imports/[importId]/page.tsx",
-    "apkImportRepository": "lib/supabase/apk-import-repository.ts",
-    "adminAuth": "lib/admin/auth.ts",
-    "adminEnv": "lib/admin/env.ts",
-    "supabaseMigrations": "supabase/migrations",
-    "tests": [
-      "tests/progression.test.ts",
-      "tests/team-balancing.test.ts",
-      "tests/match-records.test.ts",
-      "tests/formula-room.test.ts",
-      "tests/leaderboard.test.ts",
-      "tests/dashboard.test.ts",
-      "tests/monthly-beasts.test.ts",
-      "tests/gallery.test.ts",
-      "tests/admin-auth.test.ts",
-      "tests/advanced-cricket-stats.test.ts",
-      "tests/app-sync.test.ts",
-      "tests/post-match-celebration.test.ts",
-      "tests/player-achievements.test.ts",
-      "tests/gully-face-off.test.ts"
-    ]
-  },
-  "designRules": {
-    "mustDo": [
-      "Use real responsive React/Next.js components.",
-      "Keep navigation and buttons as genuine clickable elements.",
-      "Use next/image for approved raster assets when rendered in React unless the existing component intentionally uses img, such as Gallery.",
-      "Keep text readable on desktop, tablet, and mobile.",
-      "Keep the visual style funky, comic, cricket/gaming themed."
-    ],
-    "mustNotDo": [
-      "Do not use a full-page screenshot with invisible clickable hotspots.",
-      "Do not redesign approved assets or regenerate backgrounds unless explicitly asked.",
-      "Do not modify supplied artwork assets unless explicitly requested.",
-      "Do not expose private team-balancing weights in UI, public player data, API responses, labels, tooltips, logs, or accessibility text.",
-      "Do not add demo toggles to normal public/Admin Create Match forms.",
-      "Do not modify Supabase data manually unless the user explicitly asks."
-    ],
-    "doNotChangeWithoutExplicitRequest": [
-      "Navbar layout and height",
-      "Gully Legends emblem",
-      "Prague hero background treatment",
-      "Dashboard layout",
-      "Monthly Beasts panel",
-      "Gully Rules panel",
-      "Recent Matches panel",
-      "Top Performers / Legend Spotlight panel",
-      "Approved player-card PNG artwork",
-      "XP, Level, Player Power, and match-result formulas"
-    ]
-  },
-  "approvedAssets": {
-    "heroBackground": {
-      "path": "public/backgrounds/prague-gully-arena.png",
-      "rules": [
-        "Use this exact image.",
-        "Do not regenerate, repaint, blur heavily, recolor, replace, or modify it.",
-        "Important baked-in signs and wall text must remain visible.",
-        "Current hero uses full-width image rendering inside an overflow-hidden wrapper with limited top-sky crop only."
-      ]
+  "currentValidation": {
+    "website": {
+      "lastVerified": "2026-08-27",
+      "test": "619/619 passing",
+      "lint": "passed in recent Balance Teams release validation",
+      "typecheck": "passed in recent Balance Teams release validation",
+      "build": "passed in recent Balance Teams release validation"
     },
-    "branding": {
-      "navbarEmblem": "public/branding/gully-legends-emblem-tight.png",
-      "rules": [
-        "The emblem includes the Gully Legends title and No Rules. Only Fun! tagline.",
-        "Do not render a duplicate HTML tagline.",
-        "Do not increase navbar height to enlarge the logo."
-      ]
-    },
-    "playerCards": {
-      "runtimeDirectory": "public/player-cards",
-      "aspectRatio": "2:3",
-      "rules": [
-        "Use approved PNG files exactly.",
-        "Do not crop, resize source files, recolor, regenerate, or replace them.",
-        "Render complete cards with object-fit: contain where full-card presentation is required.",
-        "The title is embedded in the PNG; do not render player.cardTitle as visible duplicate title on cards or detail pages."
-      ]
-    },
-    "dashboardDecorations": {
-      "playHardLaughHarder": "public/ui/play-hard-laugh-harder.png",
-      "nextBallBestFriends": "public/ui/decorations/next-ball-best-friends.png",
-      "recentMatchesWicketBall": "public/ui/recent-matches-wicket-ball.png",
-      "mostRunsBat": "public/ui/most-runs-bat.png",
-      "mostWicketsWicketSmash": "public/ui/most-wickets-wicket-smash.png",
-      "mostCatchesGlovesBall": "public/ui/most-catches-gloves-ball.png",
-      "createMatchButton": "public/ui/create-match-button.png"
-    },
-    "monthlyBeasts": {
-      "batting": "public/ui/monthly-beasts/monthly-batting-beast-trimmed.png",
-      "bowling": "public/ui/monthly-beasts/monthly-bowling-beast-trimmed.png",
-      "catching": "public/ui/monthly-beasts/monthly-catching-beast-trimmed.png"
-    },
-    "gullyRules": {
-      "noBall": "public/ui/gully-rules/rule-no-ball-we-dont-care-trimmed.png",
-      "outOrNotOut": "public/ui/gully-rules/rule-out-or-not-out-umpires-mood-trimmed.png",
-      "overWhenLightGone": "public/ui/gully-rules/rule-over-when-light-gone-trimmed.png",
-      "fightNextBallBestFriends": "public/ui/gully-rules/rule-fight-next-ball-best-friends-trimmed.png"
-    },
-    "playerPowerIcons": {
-      "sharedConfig": "lib/data/player-power-icons.ts",
-      "batting": "/ui/player-batting-power.png",
-      "bowling": "/ui/player-bowling-power.png",
-      "fielding": "/ui/player-fielding-power.png",
-      "usage": [
-        "Player Profile - Player Power",
-        "Player Profile - Player File",
-        "Stats / Formula Room - Player Power tab"
-      ]
-    },
-    "faceOff": {
-      "vsEmblem": "public/ui/face-off/gully-face-off-vs.png",
-      "rule": "Use the dedicated VS artwork asset; do not rebuild the VS emblem with separate CSS text."
-    },
-    "postMatchCelebrationV2Icons": {
-      "winner": "/ui/post-match-celebration/winner-trophy-v2.png",
-      "pom": "/ui/post-match-celebration/pom-star-v2.png",
-      "record": "/ui/post-match-celebration/record-broken-v2.png",
-      "achievement": "/ui/post-match-celebration/achievement-unlocked-v2.png",
-      "personalBest": "/ui/post-match-celebration/personal-best-v2.png",
-      "levelUp": "/ui/post-match-celebration/level-up-v2.png",
-      "xp": "/ui/post-match-celebration/xp-bolt-v2.png"
+    "apk": {
+      "version": "1.3.0",
+      "versionCode": 6,
+      "parityTest": "passed",
+      "contractSmokeTest": "passed",
+      "java": "17.0.20.1",
+      "gradle": "8.7",
+      "gradleTest": "passed",
+      "lintDebug": "passed",
+      "assembleDebug": "passed",
+      "assembleRelease": "passed",
+      "signing": "verified"
     }
+  },
+  "apkRelease": {
+    "appName": "Gully Legends Arena",
+    "applicationId": "com.gullylegends.arena",
+    "versionName": "1.3.0",
+    "versionCode": 6,
+    "minSdk": 24,
+    "targetSdk": 34,
+    "releaseCommit": "dd75200 Release Gully Legends Arena v1.3.0",
+    "releaseTag": "v1.3.0",
+    "releaseApkPath": "C:/cricket_website/apk-integration/GullyLegendsArena-source/app/build/outputs/apk/release/app-release.apk",
+    "releaseApkSizeBytes": 1036529,
+    "signingScheme": "APK Signature Scheme v2",
+    "signerCount": 1,
+    "signerSha256": "2fb53fff5b42b31f63716f8d9da78f87058bcca96f6b9ee678e6f9503431d2e2",
+    "upgradeCompatibility": "Same applicationId, same production signer, versionCode 6 greater than v1.2.0 versionCode 5; should install over v1.2.0 without uninstall.",
+    "localStorageKeysPreserved": ["gla_roster", "gla_matches", "gla_active", "gla_settings"]
+  },
+  "authorityModel": {
+    "rule": "APK is recorder/setup client; website/Admin finalisation is authoritative.",
+    "apkNeverApplies": [
+      "official career stats",
+      "XP",
+      "Game Number",
+      "official POM",
+      "progression",
+      "Hall of Legends",
+      "Monthly Beasts",
+      "Archive effects"
+    ],
+    "flow": [
+      "APK offline/local match",
+      "sync",
+      "website authentication",
+      "server re-derives",
+      "Pending Review",
+      "Admin review/correction",
+      "Admin POM confirmation",
+      "official finalisation"
+    ]
+  },
+  "balanceTeams": {
+    "versionIntroduced": "APK v1.3.0 / website 651d5d1",
+    "websiteEndpoint": "/api/app-sync/team-balance",
+    "requestFields": ["playerIds", "sharedPlayerId"],
+    "responseFields": ["teamAPlayerIds", "teamBPlayerIds", "sharedPlayerId"],
+    "userBehavior": [
+      "requires internet and Admin login",
+      "manual setup remains available",
+      "Use Previous Teams remains available",
+      "balanced teams remain editable",
+      "Balance Again chooses among best/equivalent results",
+      "odd attendance supports manually selected Shared Player",
+      "even attendance uses equal exclusive teams",
+      "offline failure does not clear setup",
+      "Fielding Helper semantics remain intact"
+    ],
+    "highLevelEngineBehavior": [
+      "considers batting strength",
+      "considers bowling strength",
+      "considers fielding strength",
+      "protects stronger batting/bowling distribution",
+      "equal exclusive-team sizes",
+      "does not worsen teams for variety"
+    ],
+    "privacyRules": [
+      "Do not expose individual ratings",
+      "Do not expose hidden weights",
+      "Do not expose private pair/separation rules",
+      "Do not expose candidate scores",
+      "Do not copy private balancing configuration into APK/public docs/UI/API responses/logs"
+    ],
+    "acceptance": [
+      "10 selected -> 5/5",
+      "12 selected -> 6/6",
+      "odd attendance + Shared -> equal exclusive teams + Shared",
+      "no selected player lost",
+      "no selected player duplicated",
+      "unknown/duplicate IDs rejected",
+      "even attendance + Shared rejected",
+      "odd attendance without Shared handled safely",
+      "Balance Again varies only among optimal/equivalent candidates",
+      "APK contains no private balance configuration"
+    ]
+  },
+  "apkV12FeaturesRetained": [
+    "full Run Out handling",
+    "completed runs on Run Out",
+    "striker/non-striker dismissal selection",
+    "new batter selection",
+    "explicit next striker/non-striker",
+    "finished-match Run Out correction",
+    "replay-based correction",
+    "end-of-over Undo",
+    "undo after next-bowler selection",
+    "final-over Undo",
+    "Use Previous Teams",
+    "editable reused teams",
+    "Shared Player alignment",
+    "Fielding Helper alignment",
+    "consecutive-over bowler prevention",
+    "explicit Match Date",
+    "APK POM recommendation",
+    "offline-first recording",
+    "Pending Review sync"
+  ],
+  "apkSyncContract": {
+    "loginBody": ["adminId", "password"],
+    "explicitMatchDate": "APK sends matchDate as YYYY-MM-DD; website uses it for current APK payloads and falls back safely for legacy payloads.",
+    "pomRecommendation": "APK sends pomRecommendationPlayerId as recommendation only; website Admin remains authoritative.",
+    "demoSafety": "Demo Test Match can sync/review but cannot become official."
+  },
+  "pendingReview": {
+    "table": "public.apk_match_imports",
+    "statuses": ["pending_review", "correction_pending", "finalised", "rejected"],
+    "rawPayloadRule": "Preserve raw APK source payload separately from Admin working copy.",
+    "concurrency": "review_version and review_is_stale prevent silent overwrite/finalisation of stale review copies.",
+    "finalisationSafety": "Real imports require explicit official finalisation confirmation; Demo imports show cannot-finalise message and preserve server/RPC guards."
+  },
+  "websiteFeatures": [
+    "Dashboard",
+    "Players",
+    "Player profiles",
+    "Trophy Cabinet",
+    "Matches",
+    "Quick Scoring",
+    "Scorecards",
+    "APK Pending Review",
+    "Hall of Legends",
+    "Monthly Beasts",
+    "Formula Room",
+    "Gallery",
+    "Gully Face-Off",
+    "Post-Match Celebration",
+    "Historical Match Celebration Replay",
+    "Share Match Card",
+    "Demo Test Match",
+    "Reset Demo Data"
+  ],
+  "postMatchCelebration": {
+    "summaryType": "PostMatchCelebrationSummary",
+    "source": "lib/post-match-celebration.ts",
+    "architecture": [
+      "created only after successful official Admin finalisation",
+      "existing finalisation/XP/result/POM engines remain authoritative",
+      "no second XP engine",
+      "no database migration required"
+    ],
+    "historicalReplay": [
+      "read-only from official scorecards",
+      "baseline uses only earlier official finalised matches",
+      "same-day chronology uses official Game Number",
+      "target excluded from own baseline",
+      "later matches never affect earlier replay",
+      "strict improvement required",
+      "missing legacy event-backed data remains unknown"
+    ]
+  },
+  "gullyFaceOff": {
+    "route": "/face-off",
+    "rules": [
+      "same-player comparison prevented",
+      "URL state supported",
+      "no overall weighted winner",
+      "tracked-only advanced metrics compare valid tracked subsets",
+      "legacy missing data is not fabricated",
+      "no private Team Balance inputs used"
+    ]
   },
   "players": {
     "canonicalRosterCount": 21,
-    "canonicalIds": [
-      "aninda",
-      "arunabha",
-      "atripan",
-      "biplab",
-      "dipanjan",
-      "gaurav",
-      "madhab",
-      "rohit",
-      "soman",
-      "utpal",
-      "jogindar",
-      "badhan",
-      "debraj",
-      "dipayan",
-      "dheeraj",
-      "saurav",
-      "naim",
-      "chaitanya",
-      "amrit",
-      "pritvi",
-      "suprateem"
+    "stableIdNotes": [
+      "Jogi stable ID = jogindar",
+      "Naeem stable ID = naim"
     ],
-    "dataFile": "lib/data/players.ts",
-    "rule": "Add players only to the canonical roster and let all player-driven features consume that roster.",
-    "currentDisplayNotes": [
-      "Stable ID jogindar currently displays as Jogi.",
-      "Stable ID naim currently displays as Naeem.",
-      "Gaurav card title is Slow Poison.",
-      "Soman card title is Apex Crusher.",
-      "Dipayan card title is Dipayan the Destroyer.",
-      "Dheeraj card title is Surgical Chase Master."
-    ],
-    "zeroProgress": {
-      "level": 0,
-      "xp": 0,
-      "ratings": {
-        "batting": 0,
-        "bowling": 0,
-        "fielding": 0
-      },
-      "stats": {
-        "matches": 0,
-        "runs": 0,
-        "wickets": 0,
-        "catches": 0,
-        "runOuts": 0,
-        "hatTricks": 0
-      }
-    },
-    "resetStateRule": "After Reset Demo Data or a clean zero-career state, Blade Power, Delivery Threat, and Field Reflex must all show 0/100."
+    "rule": "Never rename stable player IDs casually. Add players only to the canonical roster."
   },
   "supabase": {
-    "authStatus": "Implemented",
-    "publicReads": "Implemented through Supabase anonymous read repositories and RLS.",
-    "adminWrites": "Implemented through authenticated Admin APIs, RLS, and security-definer RPCs.",
-    "storage": "Gallery uses existing public Supabase Storage bucket named gallery.",
-    "tables": [
+    "primaryTables": [
       "public.admin_users",
       "public.players",
       "public.matches",
@@ -309,7 +241,7 @@
       "public.gallery_photos",
       "public.apk_match_imports"
     ],
-    "importantFunctions": [
+    "importantRpcs": [
       "public.is_admin()",
       "public.finalize_match_atomic(finalisation_plan jsonb)",
       "public.crown_monthly_beasts_atomic(crown_plan jsonb)",
@@ -318,388 +250,39 @@
       "public.upsert_apk_match_import_atomic(jsonb, jsonb, jsonb, date, text)",
       "public.finalize_apk_import_atomic(uuid, jsonb)"
     ],
-    "securityRules": [
-      "public.is_admin() uses SECURITY DEFINER and set search_path = ''.",
-      "Fresh match finalisation requires database match status in_progress.",
-      "Finalisation, Monthly Beast Crown/Reopen, and Demo Reset use advisory locks to avoid unsafe races.",
-      "APK imports are Admin-only and must not have public or anonymous access.",
-      "Normal public visitors cannot upload/edit/delete Gallery photos or modify cricket data.",
-      "Do not use service-role credentials in application code."
-    ],
-    "migrations": [
-      "supabase/migrations/20260807090000_admin_users.sql",
-      "supabase/migrations/20260807093000_phase_2a_core_schema.sql",
-      "supabase/migrations/20260807103000_atomic_match_finalisation.sql",
-      "supabase/migrations/20260807110000_monthly_beast_writes_and_demo_reset.sql",
-      "supabase/migrations/20260819120000_apk_pending_imports.sql"
+    "deferredMigration": "supabase/migrations/20260807113000_player_of_match_correction.sql is prepared but not active/applied.",
+    "warnings": [
+      "Do not run deferred migrations blindly",
+      "Do not use blanket supabase db push while manual migration history is unreconciled",
+      "Do not use service-role credentials in application code"
     ]
   },
-  "matchWorkflow": {
-    "status": "Supabase-backed in normal mode with local fallback available.",
-    "createMatchComponent": "components/matches/MockMatchEntryForm.tsx",
-    "adminOnlyRoutes": [
-      "app/matches/new/page.tsx",
-      "app/api/admin/matches/route.ts",
-      "app/api/admin/matches/finalize/route.ts",
-      "app/api/admin/matches/demo-test/route.ts"
-    ],
-    "features": [
-      "Scheduled draft fixtures",
-      "Available Today selection",
-      "Manual team selection with cross-team mutual exclusion",
-      "Server-side auto-balancing",
-      "Odd-player Shared Player support",
-      "Draft saving without complete scorecard data",
-      "Live scoring",
-      "Team Bowling overs",
-      "Team Player Records",
-      "Dismissal details only for wickets that occurred",
-      "Automatic innings stop rules",
-      "Atomic finalisation and idempotent retry",
-      "Post-finalisation celebration for newly finalised official matches",
-      "Share Match Card export/share from celebration",
-      "Read-only finalised scorecard",
-      "Read-only historical celebration replay from official scorecards",
-      "Scheduled fixture delete before play starts",
-      "Quick Scoring with single-batter and two-batter modes",
-      "Mobile-friendly scoring controls, innings breaks, and Undo Last Ball",
-      "Match-day Fielding Helpers",
-      "Cancel and Restart from active scoring",
-      "Private server-side Team Balance / Shuffle"
-    ],
-    "teamBalancing": {
-      "status": "Implemented as a server-only automatic balancing helper.",
-      "clientContract": "Client sends availablePlayerIds and sharedPlayerId; API returns teamAPlayerIds and teamBPlayerIds or a generic error.",
-      "privacyRule": "Do not expose private balancing weights, groups, totals, or separation reasons in UI text, public API responses, accessibility labels, player profiles, logs, README, or public-facing docs.",
-      "implementationFiles": [
-        "server/team-balancing.ts",
-        "lib/team-balancing-core.ts",
-        "app/api/team-balance/route.ts"
-      ],
-      "algorithm": "Small candidate partition search. Shared Player is removed from exclusive candidate pool, valid team sizes are generated, private server-side constraints are applied, candidates are scored lexicographically, and a random equally optimal candidate is returned.",
-      "scoringPriority": [
-        "Minimum total private weight difference",
-        "Minimum high-weight composition difference",
-        "Then remaining private weight-group composition differences in order"
-      ],
-      "manualOverride": "Manual team assignment, Shared Player selection, Update Players, and Cancel & Restart editing remain unrestricted by private automatic balancing preferences.",
-      "fieldingHelpers": "Fielding Helper status has zero effect on automatic team strength."
-    },
-    "resultRules": [
-      "First-batting team wins by first innings runs minus chasing innings runs.",
-      "Chasing team wins by wickets remaining: chasing team player count minus chasing wickets lost.",
-      "Equal final totals mean a tie.",
-      "No Result is only for abandoned or cancelled matches."
-    ],
-    "demoTestHelper": {
-      "route": "app/api/admin/matches/demo-test/route.ts",
-      "buttonLocation": "Admin Control Room Demo Data section",
-      "rule": "Server creates temporary demo draft with is_demo=true; normal Create Match remains is_demo=false and has no demo checkbox."
-    }
+  "incidentNotes": {
+    "accidentalTestMatch": "Internal-only note: an accidental non-demo test match was finalised during acceptance testing, identified precisely, rolled back with a guarded targeted rollback, match/application effects removed, career stats rebuilt from legitimate official matches, four legitimate 22-Aug matches remained intact, and no August Monthly Beast crown cleanup was required. Do not publish destructive SQL in README."
   },
-  "apkIntegration": {
-    "productionStatus": "APK Pending Review / Admin correction is included in Production main and must not be described as feature-branch-only work.",
-    "adminRoutes": [
-      "app/admin/apk-imports/page.tsx",
-      "app/admin/apk-imports/[importId]/page.tsx"
-    ],
-    "repository": "lib/supabase/apk-import-repository.ts",
-    "table": "public.apk_match_imports",
-    "rules": [
-      "APK-submitted matches land in Pending Review.",
-      "Admin can inspect raw APK payload data, edit the website working copy, reject an import, or finalise a valid non-demo import.",
-      "Demo APK imports cannot create official matches.",
-      "Finalised APK imports use the same authoritative website scoring, result, POM, XP, progression ledger, scorecard, and archive paths.",
-      "Raw APK payload data is preserved separately from the Admin working copy.",
-      "APK imports are Admin-only with no public or anonymous access.",
-      "Do not expose Admin credentials, Supabase tokens, APK secrets, raw payload internals, or private review details in public UI, public APIs, logs, or public-facing docs."
-    ]
-  },
-  "progressionSystem": {
-    "file": "lib/progression.ts",
-    "xpRules": {
-      "played": 20,
-      "teamWin": 5,
-      "playerOfMatch": 15,
-      "runsPerXP": 2,
-      "ordinaryBattingCap": 30,
-      "fiftyBonus": 15,
-      "hundredAdditionalBonus": 25,
-      "duckPenalty": -8,
-      "wicket": 10,
-      "hatTrick": 25,
-      "maiden": 5,
-      "fieldingCap": 24,
-      "minimumMatchXP": -15,
-      "maximumMatchXP": 120
-    },
-    "levelFormula": "150 + 50 * currentLevel + 10 * currentLevel * currentLevel",
-    "levelProtection": "Achieved level cannot decrease; penalties cannot drop XP below the current level threshold.",
-    "playerPower": {
-      "bladePower": "Batting performance; zero innings batted returns 0 rather than percentile fallback 50.",
-      "deliveryThreat": "Bowling performance; no bowling data returns 0.",
-      "fieldReflex": "Fielding performance; zero matches returns 0.",
-      "display": "Player cards and player detail both use player.ratings as the single source."
-    }
-  },
-  "postMatchCelebration": {
-    "productionStatus": {
-      "branch": "main",
-      "head": "275c2fa Add Gully Face-Off arena and celebration polish",
-      "previousCommits": [
-        "275c2fa Add Gully Face-Off arena and celebration polish",
-        "6e41645 Add historical match celebration replay",
-        "2e5902c Add post-match celebration experience",
-        "be0cc79 Add post-match celebration foundation"
-      ],
-      "deployed": true,
-      "productionSmokeTested": true,
-      "productionUrl": "https://www.gullylegends.eu"
-    },
-    "coreFiles": [
-      "lib/post-match-celebration.ts",
-      "components/matches/PostMatchCelebration.tsx",
-      "components/matches/MatchShareCard.tsx",
-      "lib/match-share-card.ts",
-      "components/matches/MatchScorecard.tsx",
-      "app/api/admin/matches/finalize/route.ts",
-      "public/ui/post-match-celebration"
-    ],
-    "architecture": [
-      "PostMatchCelebrationSummary is the typed celebration summary.",
-      "Live celebration summary is created only after successful official Admin finalisation.",
-      "Existing finalisation, XP, result, POM, progression, and scorecard engines remain authoritative.",
-      "There is no second XP engine.",
-      "Demo completion, failed finalisation, pending APK imports, rejected imports, and correction-pending imports must not trigger live celebration.",
-      "alreadyApplied retries do not replay unavailable progression snapshots."
-    ],
-    "liveExperience": [
-      "Winner/result hero",
-      "Official Game Number, scores, and result text",
-      "Official Player of the Match",
-      "Gully Records",
-      "Personal Bests",
-      "Level-up cards when authoritative before/after progression snapshots exist",
-      "XP earned",
-      "Responsive celebration UI",
-      "Premium custom PNG assets",
-      "Share Match Card export/share action"
-    ],
-    "historicalReplay": {
-      "entryPoint": "Official historical match scorecard button: VIEW MATCH CELEBRATION",
-      "mode": "Read-only historical mode using the same PostMatchCelebration UI.",
-      "baselineRules": [
-        "Baseline contains only official finalised matches before the target.",
-        "Same-day chronology uses official matchNumber / Game Number.",
-        "Target match is excluded from its own baseline.",
-        "Later matches never affect earlier historical celebration."
-      ],
-      "recordRules": [
-        "Strict record improvement means broken.",
-        "Equal record is not broken.",
-        "No earlier record is firstRecord."
-      ],
-      "personalBestRules": [
-        "Personal Best requires strict improvement.",
-        "First qualifying Personal Best is supported.",
-        "matchXP is intentionally not shown as a Personal Best card.",
-        "Cricket PB metrics remain: runs, wickets, catches, run-outs, stumpings, fours, and sixes."
-      ],
-      "xpSafety": [
-        "Only stored xpBreakdown.awardedXP is displayed.",
-        "Missing XP is omitted and never treated as zero.",
-        "Historical before/after levels are not reconstructed when not provable.",
-        "No fake level-up or XP progress bar is shown."
-      ],
-      "legacyDataSafety": [
-        "Missing event-backed fours, sixes, strike rate, economy, and similar stats remain unknown.",
-        "Never fabricate zeros for missing legacy event-backed data.",
-        "Event-backed historical comparisons run only where valid."
-      ]
-    },
-    "compactHistoricalReplay": [
-      "Identical achievement unlocks are grouped into one card per achievement.",
-      "Personal Bests are grouped by player.",
-      "Historical XP rows are compact and omit fake progression when snapshots are unavailable.",
-      "Achievement cards size to their own content and are not stretched to the tallest card in a grid row."
-    ],
-    "shareMatchCard": [
-      "Exports a 1080x1350 PNG.",
-      "Uses native Web Share where available and Save Image as fallback.",
-      "Uses at most two premium highlights.",
-      "Highlight priority is records, first records, major achievements, Personal Bests, then Level Ups.",
-      "Achievement highlights use one generic premium Achievement Unlocked emblem and do not show Trophy Cabinet-specific icons.",
-      "No Supabase or cricket-data writes are performed by share-card rendering."
-    ],
-    "visualQa": [
-      "Vercel Preview passed.",
-      "Production deployment passed.",
-      "Historical celebrations tested successfully on gullylegends.eu.",
-      "Localhost historical replay visually inspected.",
-      "Desktop/mobile visual QA passed.",
-      "Release-candidate share-card PNG export generated at 1080x1350 and visually inspected."
-    ]
-  },
-  "gullyFaceOff": {
-    "status": "Implemented on main at functional checkpoint 275c2fa.",
-    "route": "/face-off",
-    "navigationLabel": "FACE-OFF",
-    "coreFiles": [
-      "app/face-off/page.tsx",
-      "components/face-off/GullyFaceOffArena.tsx",
-      "lib/gully-face-off.ts",
-      "public/ui/face-off/gully-face-off-vs.png"
-    ],
-    "behavior": [
-      "Compares exactly two different players.",
-      "Same-player comparison is prevented.",
-      "Player selection is reflected in URL state.",
-      "Dedicated premium VS artwork is used instead of CSS/text VS construction.",
-      "Batting, Bowling, Fielding, and Career & Glory sections top-align their metrics.",
-      "Section edge badges and per-metric leader callouts are visually prominent.",
-      "There is no overall weighted winner."
-    ],
-    "dataPolicy": [
-      "Reliable full-career metrics compare official career history.",
-      "Event-backed metrics such as fours, sixes, batting strike rate, and bowling economy compare valid tracked subsets only.",
-      "Tracked-only metrics display coverage context.",
-      "Missing legacy ball-by-ball data is never fabricated as zero.",
-      "Lower bowling economy is better.",
-      "Demo, cancelled, unfinished, pending APK, and rejected-like records are excluded."
-    ],
-    "safety": [
-      "Read-only presentation over supplied match/player data.",
-      "No Supabase writes.",
-      "No private Team Balance dependency.",
-      "No private Team Balance inputs are exposed."
-    ]
-  },
-  "leaderboardAndFormulaRoom": {
-    "hallOfLegends": {
-      "route": "/leaderboard",
-      "visibleNavigationLabel": "HALL OF LEGENDS",
-      "purpose": "Who is leading and where everyone ranks.",
-      "logic": "lib/leaderboard.ts"
-    },
-    "formulaRoom": {
-      "route": "/stats",
-      "visibleNavigationLabel": "FORMULA ROOM",
-      "purpose": "How XP, Levels, Player Power, and cricket results are calculated.",
-      "rule": "Do not maintain separate display formulas and calculation formulas."
-    },
-    "monthlyBeastsDistinction": "Hall of Legends current month uses raw statistical leaders; Monthly Beasts use overall discipline XP awards."
-  },
-  "gallery": {
-    "status": "Supabase-backed in Supabase mode; IndexedDB preserved for local fallback mode.",
-    "page": "app/gallery/page.tsx",
-    "feature": "components/gallery/GalleryFeature.tsx",
-    "repository": "lib/gallery-repository.ts",
-    "imageOptimiser": "lib/gallery-image.ts",
-    "storageBucket": "gallery",
-    "metadataTable": "public.gallery_photos",
-    "publicUrlRule": "Use Supabase Storage getPublicUrl; do not use signed URLs for public Gallery images.",
-    "storagePathFormat": "gallery/YYYY/MM/<uuid>-<sanitised-file-name>.<jpg|png|webp>",
-    "uploadRules": [
-      "Admin selects files in browser.",
-      "Do not upload immediately on selection; preserve preview/review first.",
-      "Optimise in browser before upload.",
-      "Upload directly to Supabase Storage with authenticated Admin JWT.",
-      "Use upsert:false.",
-      "Insert metadata after Storage upload.",
-      "If metadata insert fails, attempt Storage cleanup.",
-      "Normal real Gallery uploads use is_demo=false."
-    ],
-    "deleteRules": [
-      "Use Supabase Storage API remove([...]).",
-      "Do not delete directly from storage.objects.",
-      "Soft-delete metadata by setting deleted_at.",
-      "Restore deleted_at if Storage removal fails."
-    ],
-    "publicRules": [
-      "Logged-out visitors can browse Gallery metadata/images and lightbox.",
-      "Logged-out visitors cannot upload, edit, delete, or feature photos.",
-      "Public reads exclude deleted_at rows."
-    ]
-  },
-  "adminControlRoom": {
-    "route": "/admin",
-    "requires": "requireAdmin()",
-    "features": [
-      "Create Match",
-      "Manage Fixtures",
-      "Crown Monthly Beasts",
-      "Crown History",
-      "Gallery links",
-      "Manage Players link",
-      "Create Demo Test Match",
-      "Reset Demo Data",
-      "Logout"
-    ]
-  },
-  "tests": {
-    "script": "npm.cmd run test",
-    "runner": "node:test after compiling with tsconfig.test.json",
-    "currentPassingCount": 604,
-    "coverageThemes": [
-      "Supabase Auth and Admin security",
-      "Supabase public read mapping",
-      "Atomic match finalisation",
-      "Demo Reset safety",
-      "Admin-only demo test match helper",
-      "XP and Level edge cases",
-      "Player Power clean reset behavior",
-      "Team balancing and match validation",
-      "Private server-side Team Balance / Shuffle behavior",
-      "Quick Scoring delivery events, innings breaks, undo, and mobile source checks",
-      "Advanced cricket stats and Duck Collector logic",
-      "Scorecard and result rules",
-      "Hall of Legends and Monthly Beasts distinction",
-      "Formula Room source-of-truth formulas",
-      "Dashboard behavior",
-      "Supabase Gallery persistence and local fallback",
-      "APK Pending Review and Admin correction safety",
-      "Post-Match Celebration live finalisation summaries",
-      "Historical Match Celebration Replay and legacy-data safety",
-      "Share Match Card export/share behavior",
-      "Player achievements and Trophy Cabinet",
-      "Gully Face-Off domain and UI source checks"
-    ],
-    "generatedArtifact": ".test-build is generated by npm run test and should not be committed."
-  },
-  "lastVerified": {
-    "date": "2026-08-21",
-    "commandsRun": [
-      "npm.cmd run lint",
-      "npm.cmd run typecheck",
-      "npm.cmd run test",
-      "npm.cmd run build"
-    ],
-    "result": "All passed on main after Gully Face-Off release-candidate and Post-Match Celebration / Share Match Card polish.",
-    "testCount": "604/604 tests passed"
-  },
-  "agentGuidance": {
-    "beforeVisualChanges": [
-      "Read CODEX_EXACT_STYLE_INSTRUCTIONS.md completely if present/relevant.",
-      "Inspect design-reference/gully-legends-dashboard.png and exact approved assets relevant to the request.",
-      "Do not make generic redesigns when the user asks for targeted changes."
-    ],
-    "beforeSupabaseChanges": [
-      "Inspect existing migrations and RLS assumptions.",
-      "Do not execute SQL remotely unless explicitly instructed.",
-      "Do not weaken public.is_admin(), RLS, or SECURITY DEFINER search_path hardening.",
-      "Do not use service-role credentials."
-    ],
-    "beforeMatchWorkflowChanges": [
-      "Inspect lib/types/match.ts, lib/match-records.ts, lib/progression.ts, components/matches/MockMatchEntryForm.tsx, and Supabase match repositories.",
-      "Preserve the existing atomic finalisation path.",
-      "Keep normal Create Match is_demo=false.",
-      "Preserve Post-Match Celebration as a presentation layer over authoritative finalisation, result, POM, XP, and progression data.",
-      "Do not list Match Records Broken / Personal Best celebration as wholly deferred; it is implemented for Post-Match Celebration."
-    ],
-    "filesystemSafety": [
-      "Do not reset or revert user changes.",
-      "Use apply_patch for manual edits.",
-      "Do not delete or modify approved image assets unless explicitly requested."
-    ]
-  }
+  "remainingOpenItems": [
+    "encrypted native token storage",
+    "direct Admin striker/non-striker correction if still absent",
+    "empty-innings add-first-event correction if still absent",
+    "APK polling/status feedback if still absent",
+    "post-finalisation POM correction RPC activation after manual review/application"
+  ],
+  "doNotForget": [
+    "Supabase/website Admin finalisation is authoritative",
+    "APK upload is not finalisation",
+    "preserve raw APK payload",
+    "no direct official XP/stat writes from APK",
+    "never expose/copy private Balance Teams configuration into APK",
+    "Jogi stable ID = jogindar",
+    "Naeem stable ID = naim",
+    "same bowler cannot bowl consecutive overs",
+    "no active LBW",
+    "Demo never affects official progression",
+    "do not blindly run deferred migrations",
+    "do not use blanket supabase db push while manually-applied migration history remains unreconciled",
+    "do not git add . when unrelated files exist",
+    "signing secrets stay outside Git",
+    "uninstalling APK can delete local WebView data",
+    "do not touch docs/user-manual/screenshots/03-team-assignment.zip unless explicitly instructed"
+  ]
 }

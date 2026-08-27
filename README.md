@@ -1,17 +1,49 @@
 # Gully Legends Prague
 
-Gaming/comic-style cricket website for the Gully Legends Prague group at
-CZU Gully Arena.
-
-The app is built with real responsive Next.js components. It now uses Supabase
-for shared public data, secure Admin authentication, match management,
-progression, Monthly Beasts, Demo Reset, and Gallery persistence.
+Gaming/comic-style cricket website for the Gully Legends Prague group at CZU Gully Arena.
 
 Production website:
 
 ```text
 https://www.gullylegends.eu
 ```
+
+The website is a Next.js/Supabase application with public cricket pages, protected Admin match management, APK Pending Review, player progression, achievements, celebrations, Gallery, and the server-backed Balance Teams engine used by both website and APK flows.
+
+## Current Production State
+
+Website production branch: `main`
+
+Current website production HEAD:
+
+```text
+651d5d1 Add server-backed Balance Teams
+```
+
+APK repository:
+
+```text
+https://github.com/Dipr6688/gully-legends-arena-apk.git
+```
+
+Current APK release:
+
+```text
+Gully Legends Arena v1.3.0
+applicationId: com.gullylegends.arena
+versionCode: 6
+versionName: 1.3.0
+minSdk: 24
+targetSdk: 34
+tag: v1.3.0
+release commit: dd75200 Release Gully Legends Arena v1.3.0
+```
+
+Recent validation:
+
+- Website: `619/619` tests passing, lint passed, typecheck passed, build passed for the current Balance Teams release.
+- APK: match setup parity test passed, app-sync contract smoke test passed, Gradle test passed, `lintDebug` passed, `assembleDebug` passed, `assembleRelease` passed.
+- APK signer SHA-256 verified: `2fb53fff5b42b31f63716f8d9da78f87058bcca96f6b9ee678e6f9503431d2e2`.
 
 ## Tech Stack
 
@@ -24,128 +56,140 @@ https://www.gullylegends.eu
 - Local fallback mode for development when `NEXT_PUBLIC_DATA_SOURCE=local`
 - Node test runner for project logic and source-level UI checks
 
-## Current Status
-
-Implemented:
+## Main Features
 
 - Public Supabase-backed website reads
 - Secure Admin login with password reset
-- Admin-only Create Match, match scoring, and atomic finalisation
+- Admin-only Create Match, Quick Scoring, and atomic finalisation
 - APK Pending Review / Admin correction workflow for APK-submitted matches
-- Quick Scoring with single-batter/two-batter modes, innings breaks, undo, wides,
-  no-balls, wickets, run-outs, and mobile-friendly scoring controls
-- Post-Match Celebration after official finalisation, plus historical celebration
-  replay from official scorecards
-- Share Match Card export/share flow with the current premium celebration icon
-  family
-- Gully Face-Off player head-to-head arena
-- Private server-side automatic Team Balance / Shuffle for Available Today
-  players
-- Match-day Fielding Helpers for catches and run-outs without changing team
-  strength or bowling eligibility
+- Website and APK server-backed Balance Teams
+- Quick Scoring with single-batter/two-batter modes, innings breaks, undo, wides, no-balls, wickets, run-outs, stumpings, and mobile-friendly scoring controls
+- Explicit Match Date support for APK sync
+- APK Player of the Match recommendation as recommendation only
+- Post-Match Celebration after official finalisation
+- Historical Match Celebration Replay from official scorecards
+- Share Match Card export/share flow
+- Trophy Cabinet achievements and milestones
+- Gully Face-Off player comparison arena
+- Match-day Fielding Helpers
 - Career statistics, XP, Levels, Player Power, and progression ledger
 - Hall of Legends rankings
 - Monthly Beasts Crown/Reopen
 - Reset Demo Data
-- Admin-only demo test match helper
-- Supabase-backed Gallery using Storage plus `public.gallery_photos`
-- Illustrated match creation and scoring user manual under `docs/user-manual`
-- Local fallback mode for match/gallery development data
+- Supabase-backed Gallery
+- Illustrated user manual under `docs/user-manual`
 
-Not done in this repository:
+## Website / APK Authority Model
 
-- Automatic deployment
-- Manual Supabase data changes from code
-- Seeding fabricated Gallery photos
-- Post-finalisation Player of the Match correction is prepared as a migration
-  file but should not be treated as active until manually applied and tested.
+The APK is a recorder and setup client. The website/Admin system is authoritative.
+
+```text
+APK offline/local match
+-> sync
+-> website authentication
+-> server re-derives and validates
+-> apk_match_imports Pending Review
+-> Admin review/correction
+-> Admin POM confirmation
+-> official finalisation
+-> official match/stats/XP/Game Number
+```
+
+APK upload is not finalisation. APK never directly applies official career stats, XP, Game Number, official POM, progression, Hall of Legends, Monthly Beasts, or Archive effects.
+
+## Balance Teams
+
+v1.3.0 adds server-backed Balance Teams for the website and APK.
+
+Production endpoint used by APK:
+
+```text
+POST /api/app-sync/team-balance
+```
+
+APK sends setup information only:
+
+```text
+playerIds
+sharedPlayerId
+```
+
+Server returns only:
+
+```text
+teamAPlayerIds
+teamBPlayerIds
+sharedPlayerId
+```
+
+Balance Teams:
+
+- considers batting, bowling, and fielding strength at a high level
+- protects distribution of stronger batting/bowling resources
+- preserves private server-side automatic balancing constraints
+- produces equal exclusive-team sizes
+- supports Balance Again among best/equivalent candidates
+- supports odd attendance with a manually selected Shared Player
+- keeps balanced teams manually editable
+- works alongside Use Previous Teams and manual setup
+- keeps Fielding Helper semantics intact
+- fails safely offline and leaves manual setup available
+
+Private Balance Teams ratings, hidden weights, private pair/separation rules, candidate scores, and selection internals must never be exposed in APK assets, browser payloads, README text, public documentation, UI labels, logs, or public API responses.
+
+## APK v1.2 Features Retained in v1.3.0
+
+v1.3.0 includes all completed v1.2 functionality:
+
+- full Run Out handling
+- completed runs on Run Out
+- striker/non-striker dismissal selection
+- new batter selection
+- explicit next striker/non-striker
+- finished-match Run Out correction
+- replay-based correction
+- end-of-over Undo
+- undo after next-bowler selection
+- final-over Undo
+- Use Previous Teams
+- editable reused teams
+- Shared Player alignment
+- Fielding Helper alignment
+- consecutive-over bowler prevention
+- explicit Match Date
+- APK POM recommendation
+- offline-first recording
+- Pending Review sync
 
 ## Main Pages
 
-- `/` - Dashboard with approved Prague hero image, next match, player browser,
-  Monthly Beasts preview, Gully Rules, recent match preview, and Legend
-  Spotlight.
-- `/players` - Full roster browser with search, play-style filtering, and
-  sorting.
-- `/players/[playerId]` - Comic-style player dossier with complete approved
-  player-card artwork, Player Power, Player File, stats, and special move.
-- `/matches` - Today fixtures, scheduled matches, and finalised match archive.
-- `/matches/new` - Admin Create Match workflow.
-- `/matches/[matchId]` - Draft editor, live match-entry workflow, or finalised
-  scorecard depending on match status.
-- `/leaderboard` - Hall of Legends rankings.
-- `/face-off` - Gully Face-Off head-to-head player comparison arena.
-- `/monthly-beasts` - Monthly discipline awards based on batting XP, bowling XP,
-  and fielding XP.
-- `/stats` - Formula Room explaining the real XP, Level, Player Power, and
-  match-result calculations.
-- `/gallery` - Shared Gully photo memory wall backed by Supabase Storage.
-- `/admin` - Admin Control Room.
-- `/admin/apk-imports` - Admin-only APK Pending Review and correction workflow.
-- `/admin/apk-imports/[importId]` - Review, correct, reject, or finalise an APK
-  import through the website engine.
-- `/admin/supabase-data-check` - Admin-only Supabase data diagnostics.
-- `/admin/import-local-data` - Admin-only local demo import utility.
+- `/` - Dashboard
+- `/players` - Full roster browser
+- `/players/[playerId]` - Comic-style player dossier with Trophy Cabinet
+- `/matches` - Fixtures and finalised match archive
+- `/matches/new` - Admin Create Match workflow
+- `/matches/[matchId]` - Draft editor, live match entry, or finalised scorecard
+- `/leaderboard` - Hall of Legends
+- `/face-off` - Gully Face-Off
+- `/monthly-beasts` - Monthly discipline awards
+- `/stats` - Formula Room
+- `/gallery` - Supabase-backed photo wall
+- `/admin` - Admin Control Room
+- `/admin/apk-imports` - APK Pending Review
+- `/admin/apk-imports/[importId]` - APK review/correction/finalisation
 
 ## Current Roster
 
-The canonical active roster has 21 players. Add players only through the shared
-roster in `lib/data/players.ts`; do not add separate player lists per page.
+The canonical active roster has 21 players. Add players only through the shared roster in `lib/data/players.ts`; do not add separate player lists per page.
 
-| Player | Card Title | Role |
-| --- | --- | --- |
-| Aninda | Rulebook Rambo | Balanced All-Rounder |
-| Arunabha | Turbo Technician | Pace All-Rounder |
-| Atripan | Smiling Sniper | Spin All-Rounder |
-| Biplab | Nerve Ninja | Mystery-Spin All-Rounder |
-| Dipanjan | Cutter Commander | Seam All-Rounder |
-| Gaurav | Slow Poison | Spin All-Rounder |
-| Madhab | Sweep Samurai | Pace All-Rounder |
-| Rohit | Skidball Sheriff | Fast-Bowling All-Rounder |
-| Soman | Apex Crusher | Power All-Rounder |
-| Utpal | Tempo Tactician | Adaptive All-Rounder |
-| Jogi | Loopy Loyalist | Spin All-Rounder |
-| Badhan | Quiet Quake | Spin All-Rounder |
-| Debraj | Steady Sentinel | Spin All-Rounder |
-| Dipayan | Dipayan the Destroyer | Tactical All-Rounder |
-| Dheeraj | Surgical Chase Master | Leg-Spin All-Rounder |
-| Saurav | Zen Sixsmith | Batting All-Rounder |
-| Naeem | Calm Cannon | Power All-Rounder |
-| Chaitanya | Steady Storm | Utility All-Rounder |
-| Amrit | Looper Legend | Support-Spin All-Rounder |
-| PritVi | Precision Pacer | Seam All-Rounder |
-| Suprateem | Style Striker | Batting All-Rounder |
+Stable display notes:
 
-Every player starts with:
-
-- Level `0`
-- XP `0`
-- Blade Power, Delivery Threat, and Field Reflex at `0/100`
-- All-time statistics at `0`
-
-## Approved Visual Assets
-
-Dashboard hero:
-
-```text
-public/backgrounds/prague-gully-arena.png
-```
-
-Use this approved image directly. Do not regenerate, repaint, replace, blur
-heavily, or remove the signboards and wall text baked into the image.
-
-Navbar brand:
-
-```text
-public/branding/gully-legends-emblem-tight.png
-```
-
-The emblem already includes the `No Rules. Only Fun!` tagline, so the app must
-not render a duplicate tagline beside it.
-
-Player cards use approved 2:3 PNG artwork. The comic card title is already
-printed inside each PNG. The app renders the complete artwork and keeps dynamic
-values such as name, role, Level, XP, ratings, and statistics in HTML.
+- stable ID `jogindar` displays as `Jogi`
+- stable ID `naim` displays as `Naeem`
+- Gaurav card title is `Slow Poison`
+- Soman card title is `Apex Crusher`
+- Dipayan card title is `Dipayan the Destroyer`
+- Dheeraj card title is `Surgical Chase Master`
 
 ## Supabase Architecture
 
@@ -160,15 +204,7 @@ Main tables:
 - `public.match_stat_applications`
 - `public.monthly_beast_crowns`
 - `public.gallery_photos`
-
-Key security rules:
-
-- Public visitors can read approved public data.
-- Only authenticated Admin users can write protected data.
-- Admin authorization is checked by `public.is_admin()`.
-- Security-definer RPCs use `set search_path = ''`.
-- Normal visitors cannot upload, edit, delete, feature photos, or modify match
-  data.
+- `public.apk_match_imports`
 
 Important RPCs:
 
@@ -176,119 +212,42 @@ Important RPCs:
 - `public.crown_monthly_beasts_atomic(crown_plan jsonb)`
 - `public.reopen_monthly_beast_crown(month_key text)`
 - `public.reset_demo_data_atomic(reset_plan jsonb)`
+- `public.upsert_apk_match_import_atomic(jsonb, jsonb, jsonb, date, text)`
+- `public.finalize_apk_import_atomic(uuid, jsonb)`
 
-The match finalisation RPC applies career stats and progression atomically and
-preserves idempotency through `match_stat_applications`.
+Security rules:
 
-## APK Pending Review
+- public visitors can read approved public data
+- protected writes require authenticated Admin
+- Admin authorization uses `public.admin_users` and `public.is_admin()`
+- SECURITY DEFINER functions use controlled `search_path`
+- no service-role credentials in browser-facing code
+- APK imports are Admin-only and have no public/anonymous access
 
-APK review/correction functionality is included in Production `main`.
+## APK Pending Review and Demo Safety
 
-The APK can upload match payloads to the website for Admin review. Imports land
-in Pending Review rather than becoming official immediately. The website Admin
-can inspect the raw APK data, edit the Admin working copy, reject the import, or
-finalise it through the existing website finalisation engine.
+APK review/correction functionality is in Production `main`.
 
-Key rules:
-
-- APK imports are Admin-only and have no public/anonymous access.
+- APK-submitted matches land in Pending Review.
+- Admin can inspect raw APK payload data.
+- Admin can edit the website-side working copy.
+- Admin can reject an import.
+- Admin can finalise a valid non-demo import through the website finalisation engine.
 - Demo APK imports cannot create official matches.
-- Corrections use the Admin working copy and preserve the raw payload.
-- Finalising an APK import still uses the website's authoritative scoring,
-  result, POM, XP, progression, and ledger architecture.
-- The APK integration does not replace normal Create Match / Quick Scoring.
+- Raw APK payload data remains preserved separately from Admin review copies.
+- `pending_review`, `correction_pending`, `finalised`, and `rejected` statuses are preserved.
 
-## Admin Authentication
+Pending Review has explicit finalisation safety:
 
-Admin login uses:
-
-- Supabase Auth user
-- `public.admin_users`
-- `ADMIN_LOGIN_ID`
-- `ADMIN_LOGIN_EMAIL`
-
-Password recovery flow:
-
-```text
-Admin Login
-Forgot password?
-Supabase email link
-/admin/reset-password
-New password + confirmation
-Back to Admin Login
-```
-
-The public UI does not expose signup or private admin email addresses.
-
-## Match Workflow
-
-The match workflow supports:
-
-- Scheduled draft fixtures
-- Available Today selection
-- Manual team selection with cross-team mutual exclusion
-- Private server-side auto-balancing from available player IDs
-- Balance Teams and Shuffle use the same server-side constrained partition
-  search and return only Team A / Team B IDs to the browser
-- Odd-player support through one Shared Player
-- Single Batter and Two Batter scoring modes
-- Fielding Helpers for selected non-bowling fielders
-- Draft saving without requiring complete scorecard data
-- Live match entry
-- Quick Scoring event history with autosave and Undo Last Ball
-- Team Bowling over entry
-- Player Match Records under each team
-- Dismissal details only for wickets that have actually occurred
-- Automatic innings stop rules
-- Atomic Supabase finalisation
-- Post-finalisation celebration for newly finalised official matches
-- Read-only finalised scorecard view
-- Read-only historical celebration replay from official scorecards
-- Scheduled fixture deletion before play starts
-
-Result rules:
-
-- First-batting team wins by run margin.
-- Chasing team wins by wickets remaining.
-- Equal final totals mean a tie.
-- No Result is only for abandoned or cancelled matches.
-
-## Demo Data Tools
-
-The Admin Control Room includes:
-
-- Reset Demo Data
-- Create Demo Test Match
-
-Demo test matches are created server-side with `is_demo = true`. They use the
-same normal match workflow and atomic finalisation path as real matches, then
-Reset Demo Data can remove them later.
-
-Normal Create Match remains `is_demo = false`; there is no public demo checkbox.
+- real imports require a `FINALISE OFFICIAL MATCH` confirmation
+- Demo imports show `DEMO MATCH - CANNOT BE FINALISED AS OFFICIAL`
+- server/database Demo guards remain authoritative
 
 ## XP, Levels, Player Power, and Awards
 
-The calculation source is `lib/progression.ts`. Formula Room displays values
-from the same constants and utilities used by the app.
+The calculation source is `lib/progression.ts`. Formula Room displays values from the same constants/utilities used by the app.
 
-Core XP rules include:
-
-- Played: `20 XP`
-- Team win: `5 XP`
-- Player of the Match: `15 XP`
-- Batting runs: `floor(runs / 2)`, capped at `30 XP`
-- Fifty: `15 XP`
-- Century additional bonus: `25 XP`
-- Dismissed duck: `-8 XP`
-- Wicket: `10 XP`
-- Hat-trick: `25 XP`
-- Maiden over: `5 XP`
-- Expensive-over penalties, capped at `-20 XP`
-- Catch: `6 XP`
-- Run-out: `8 XP`
-- Stumping: `8 XP`
-- Fielding XP capped at `24 XP`
-- Match XP clamped to a minimum of `-15 XP` and maximum of `120 XP`
+Core XP rules include Played XP, Win XP, Player of the Match XP, batting runs, milestone bonuses, duck penalty, wicket XP, hat-tricks, maidens, expensive-over penalties, catches, run-outs, stumpings, fielding cap, and match XP clamp.
 
 Level progression uses:
 
@@ -298,24 +257,9 @@ Level progression uses:
 
 Once achieved, a player's Level cannot be reduced by later penalties.
 
-Player Power:
+A clean zero-career player shows `0/100` for Blade Power, Delivery Threat, and Field Reflex.
 
-- Blade Power: batting performance
-- Delivery Threat: bowling performance
-- Field Reflex: fielding performance
-
-A clean zero-career player shows `0/100` for all three Player Power values.
-
-Monthly Beasts are discipline awards:
-
-- Batting Beast: batting XP
-- Bowling Beast: bowling XP
-- Catching Beast: fielding XP
-
-Hall of Legends is separate from Monthly Beasts. It ranks raw statistical and
-career leaders such as runs, bowler wickets, catches, XP, and Level.
-
-## Post-Match Celebration
+## Post-Match Celebration and Share Match Card
 
 Production `main` includes the Post-Match Celebration system.
 
@@ -330,125 +274,30 @@ Core files:
 
 Architecture:
 
-- `PostMatchCelebrationSummary` is the typed celebration payload.
-- A live summary is created only after successful official Admin finalisation.
+- `PostMatchCelebrationSummary` is created only after successful official Admin finalisation.
 - Existing finalisation, XP, result, and POM engines remain authoritative.
 - There is no second XP engine.
-- Demo completion, failed finalisation, pending APK imports, and idempotent
-  retries without progression snapshots do not replay fake progression.
+- Demo completion, failed finalisation, pending APK imports, and idempotent retries without progression snapshots do not replay fake progression.
 
-Live celebration includes:
+Historical replay is read-only and available from official scorecards through `VIEW MATCH CELEBRATION`. Historical baselines use only official finalised matches before the target, same-day ordering uses official Game Number, later matches never affect earlier replay, equal records are not broken, and missing legacy event-backed data is never fabricated.
 
-- winner/result hero
-- official Game Number, scores, and result text
-- official Player of the Match
-- Gully Records
-- Personal Bests
-- level-up cards when authoritative before/after progression exists
-- XP earned
-- responsive celebration UI with premium custom PNG assets
-
-Historical Match Celebration Replay:
-
-- available from official historical scorecards through `VIEW MATCH CELEBRATION`
-- read-only
-- reuses the same UI in historical mode
-- baseline contains only official finalised matches before the target match
-- same-day chronology uses official `matchNumber` / Game Number
-- target match is excluded from its own baseline
-- later matches never affect earlier historical celebrations
-- strict record improvement means broken; equal record is not broken; no earlier
-  record is `firstRecord`
-- Personal Best requires strict improvement, with first qualifying PB supported
-
-Historical XP and legacy-data safety:
-
-- only stored `xpBreakdown.awardedXP` is displayed
-- missing XP is omitted, never treated as zero
-- historical before/after levels are not reconstructed when not provable
-- no fake level-up or XP progress bar is shown
-- missing event-backed fours, sixes, and related metrics remain unknown and are
-  not fabricated as zero
-
-Personal Best UI:
-
-- cricket PB metrics remain: runs, wickets, catches, run-outs, stumpings, fours,
-  and sixes
-- `matchXP` is intentionally not shown as a Personal Best card
-- XP has its own Match XP section
-- cricket metric singular/plural formatting is handled in the celebration UI
-
-Share Match Card:
-
-- exports a `1080x1350` PNG
-- supports native Web Share where available
-- keeps Save Image / download fallback
-- uses at most two premium highlights
-- prioritises Gully Records, First Gully Records, major achievements, Personal
-  Bests, then Level Ups
-- uses the generic premium Achievement Unlocked emblem for achievement
-  highlights
-- does not include full Trophy Cabinet, XP lists, or every celebration item
+Share Match Card exports a `1080x1350` PNG, supports native Web Share where available, and uses Save Image/download fallback.
 
 ## Gully Face-Off
 
-The Gully Face-Off arena at `/face-off` compares two different players without
-declaring an artificial overall winner.
+`/face-off` compares two different players without declaring an artificial overall winner.
 
-Core files:
-
-- `app/face-off/page.tsx`
-- `components/face-off/GullyFaceOffArena.tsx`
-- `lib/gully-face-off.ts`
-- `public/ui/face-off/gully-face-off-vs.png`
-
-Rules:
-
-- same-player comparison is blocked
-- URL state is supported
-- metrics are grouped into Batting Battle, Bowling Battle, Fielding Battle, and
-  Career & Glory
+- URL state supported
+- same-player comparison prevented
+- dedicated premium VS artwork used
 - full-career metrics use reliable official history
-- event-backed metrics such as fours, sixes, strike rate, and economy compare
-  the valid ball-by-ball tracked subset only
-- legacy missing ball-by-ball data is never fabricated as zero
-- lower bowling economy remains better
-- there is no overall weighted winner
+- tracked-only advanced metrics compare valid ball-by-ball subsets only
+- legacy missing ball-by-ball data is not fabricated
 - no private Team Balance inputs are used
 
-## Gallery
+## Demo Data
 
-The Gallery at `/gallery` is backed by:
-
-- Supabase Storage public bucket: `gallery`
-- Metadata table: `public.gallery_photos`
-- Repository: `lib/gallery-repository.ts`
-- Browser image optimisation: `lib/gallery-image.ts`
-
-Admin upload flow:
-
-1. Select one or more images.
-2. Review previews and metadata.
-3. Optimise image in the browser.
-4. Upload directly to Supabase Storage with authenticated Admin JWT.
-5. Insert `gallery_photos` metadata.
-6. If metadata insert fails, attempt Storage cleanup.
-
-Storage paths use:
-
-```text
-gallery/YYYY/MM/<uuid>-<sanitised-file-name>.<jpg|png|webp>
-```
-
-Uploads use `upsert: false`.
-
-Public visitors can browse photos, use filters, open the lightbox, and follow
-related match scorecard links. They cannot upload, edit, delete, or feature
-photos.
-
-When `NEXT_PUBLIC_DATA_SOURCE=local`, the Gallery can still use the existing
-IndexedDB implementation. In Supabase mode, it does not silently fall back to
-IndexedDB.
+Demo Test Match is safe for Preview/testing and uses `is_demo=true`.
 
 ## Environment Variables
 
@@ -463,26 +312,12 @@ ADMIN_LOGIN_ID=your-admin-id
 ADMIN_LOGIN_EMAIL=your-admin-email@example.com
 ```
 
-For local fallback mode:
-
-```powershell
-NEXT_PUBLIC_DATA_SOURCE=local
-```
-
-Use the publishable Supabase key only. Do not put service-role credentials in
-the browser or `.env.local`.
+Use the publishable Supabase key only. Do not put service-role credentials in browser code or `.env.local`.
 
 ## Local Development
 
-Install dependencies:
-
 ```powershell
 npm.cmd install
-```
-
-Start the development server:
-
-```powershell
 npm.cmd run dev -- --port 3001
 ```
 
@@ -492,12 +327,11 @@ Open:
 http://localhost:3001
 ```
 
-Use `npm.cmd` in Windows PowerShell because `npm.ps1` may be blocked by the
-system execution policy.
+Use `npm.cmd` in Windows PowerShell because `npm.ps1` may be blocked.
 
 ## Verification
 
-Run before committing changes:
+Run before committing website changes:
 
 ```powershell
 npm.cmd run lint
@@ -506,31 +340,16 @@ npm.cmd run test
 npm.cmd run build
 ```
 
-The current test suite covers progression, Player Power reset behavior, team
-balancing, match records, scorecard validation, APK review safety, Hall of
-Legends, Monthly Beasts, Formula Room, Dashboard behavior, Gallery persistence,
-Post-Match Celebration, historical celebration replay, and Admin security
-checks, plus Gully Face-Off and Share Match Card behavior.
-
-Current release-candidate verification:
-
-- `604/604` tests passing
-- lint passed
-- typecheck passed
-- build passed
-- latest committed functional checkpoint: `275c2fa Add Gully Face-Off arena and
-  celebration polish`
-
-Latest known production deployment before this docs refresh was smoke-tested
-successfully on `https://www.gullylegends.eu`.
+For this documentation refresh, `npm.cmd run test` passed `619/619`; post-edit lint and typecheck were also run.
 
 ## Agent Handoff
 
-Detailed project metadata for future agents is stored in:
+Detailed metadata for future agents is stored in:
 
 ```text
 AGENT_PROJECT_METADATA.json
 GULLY_LEGENDS_PROJECT_HANDOFF_METADATA_UPDATED.md
+C:\cricket_website\GULLY_LEGENDS_APK_INTEGRATION_HANDOFF_CURRENT.md
 ```
 
-Future agents should read those files before making broad changes.
+Future agents should read those files before broad changes.
