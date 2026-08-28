@@ -17,6 +17,7 @@ import {
   type SupabaseMonthlyBeastCrownRow,
   type SupabasePlayerRow
 } from "@/lib/supabase/read-repositories";
+import { SupabaseMatchStoryRepository } from "@/lib/supabase/match-story-repository";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { validateSupabaseMatchPayload } from "@/lib/admin/supabase-data-check";
 
@@ -164,12 +165,15 @@ export async function loadSupabaseReadData(
   const matchRepository = new SupabaseMatchRepository(client);
   const careerRepository = new SupabaseCareerStatsRepository(client);
   const crownRepository = new SupabaseMonthlyBeastCrownRepository(client);
-  const [playerRows, matchRows, careerRows, crownRows] = await Promise.all([
+  const storyRepository = new SupabaseMatchStoryRepository(client);
+  const [playerRows, matchRows, careerRows, crownRows, storyRows] = await Promise.all([
     playerRepository.getPlayers(),
     matchRepository.getMatches(),
     careerRepository.getCareerStats(),
-    crownRepository.getCrowns()
+    crownRepository.getCrowns(),
+    storyRepository.getStories().catch(() => [])
   ]);
+  const storyByMatchId = new Map(storyRows.map((story) => [story.matchId, story]));
   const players = playerRows
     .filter((player) => player.is_active)
     .map(playerFromSupabaseRow);
@@ -185,7 +189,8 @@ export async function loadSupabaseReadData(
       isDemo: row.is_demo,
       isDemoTestMatch: row.is_demo && result.match.isDemoTestMatch === true,
       supabaseUpdatedAt: row.updated_at,
-      matchNumber: row.match_sequence ?? result.match.matchNumber ?? null
+      matchNumber: row.match_sequence ?? result.match.matchNumber ?? null,
+      matchStory: storyByMatchId.get(row.id) ?? null
     };
   });
   const careerPlayers = mergePlayersWithCareerState(players, buildCareerState(careerRows));

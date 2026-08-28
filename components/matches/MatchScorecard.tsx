@@ -138,6 +138,14 @@ export function MatchScorecard({
         ))}
       </div>
 
+      {match.matchStory ? (
+        <section className="match-scorecard-story" aria-labelledby="match-story-title">
+          <p className="scorecard-section-kicker">Match Story</p>
+          <h2 id="match-story-title">{match.matchStory.title}</h2>
+          <p>{match.matchStory.storyText}</p>
+        </section>
+      ) : null}
+
       <section className="match-scorecard-player-of-match">
         <p className="scorecard-section-kicker">Player of the Match</p>
         {playerOfMatch ? (

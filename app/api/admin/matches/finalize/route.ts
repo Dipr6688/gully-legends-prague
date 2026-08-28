@@ -9,6 +9,8 @@ import {
   type PostMatchProgressionSnapshot
 } from "@/lib/post-match-celebration";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { safelyCreateMatchStoryAfterOfficialFinalisation } from "@/lib/supabase/match-story-finalisation";
+import { SupabaseMatchStoryRepository } from "@/lib/supabase/match-story-repository";
 import { buildFinalisationPlan } from "@/lib/supabase/match-finalisation-plan";
 import {
   SupabaseMatchFinalisationError,
@@ -109,6 +111,7 @@ function revalidateFinalisationPages(matchId: string, playerIds: string[]) {
   revalidatePath("/");
   revalidatePath("/matches");
   revalidatePath(`/matches/${matchId}`);
+  revalidatePath("/match-diary");
   revalidatePath("/leaderboard");
   revalidatePath("/monthly-beasts");
 
@@ -246,7 +249,8 @@ async function getAdminFinalisationRepository() {
   }
 
   return {
-    repository: new SupabaseMatchFinalisationRepository(supabase)
+    repository: new SupabaseMatchFinalisationRepository(supabase),
+    storyRepository: new SupabaseMatchStoryRepository(supabase)
   };
 }
 
@@ -323,16 +327,21 @@ export async function POST(request: Request) {
       existingApplications
     });
     const result = await auth.repository.finalizeAtomically(plan);
+    const finalisedMatchForReadModels = {
+      ...body.match,
+      isDemo: currentRow.is_demo || body.match.isDemo,
+      isDemoTestMatch: currentRow.is_demo && body.match.isDemoTestMatch === true,
+      supabaseUpdatedAt: result.statsAppliedAt ?? body.match.supabaseUpdatedAt
+    };
     const celebration = await buildCelebrationAfterSuccessfulFinalisation({
       repository: auth.repository,
-      match: {
-        ...body.match,
-        isDemo: currentRow.is_demo || body.match.isDemo,
-        isDemoTestMatch: currentRow.is_demo && body.match.isDemoTestMatch === true,
-        supabaseUpdatedAt: result.statsAppliedAt ?? body.match.supabaseUpdatedAt
-      },
+      match: finalisedMatchForReadModels,
       plan,
       alreadyApplied: result.alreadyApplied
+    });
+    await safelyCreateMatchStoryAfterOfficialFinalisation({
+      repository: auth.storyRepository,
+      match: finalisedMatchForReadModels
     });
 
     revalidateFinalisationPages(body.match.id, playerIds);

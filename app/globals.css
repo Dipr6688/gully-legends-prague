@@ -5952,6 +5952,21 @@ textarea {
   text-transform: uppercase;
 }
 
+.match-archive-story-title {
+  width: fit-content;
+  max-width: 100%;
+  border-left: 3px solid #f7c734;
+  background: rgba(247, 199, 52, 0.1);
+  padding: 7px 10px;
+  color: #fff5d8;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: 1.1rem;
+  font-style: italic;
+  line-height: 0.95;
+  text-transform: uppercase;
+  text-shadow: 1px 1px 0 #05080d;
+}
+
 .match-archive-card-header strong,
 .match-scorecard-header strong {
   flex: 0 0 auto;
@@ -6162,7 +6177,8 @@ textarea {
 }
 
 .scorecard-innings-card,
-.match-scorecard-player-of-match {
+.match-scorecard-player-of-match,
+.match-scorecard-story {
   min-width: 0;
   overflow: hidden;
   border: 1px solid rgba(70, 223, 255, 0.24);
@@ -6176,6 +6192,38 @@ textarea {
 
 .scorecard-innings-card {
   padding: clamp(16px, 3vw, 22px);
+}
+
+.match-scorecard-story {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  border-color: rgba(247, 199, 52, 0.32);
+  background:
+    radial-gradient(circle at 86% 0%, rgba(247, 199, 52, 0.16), transparent 12rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(0, 0, 0, 0.26)),
+    #071017;
+  padding: clamp(16px, 3vw, 22px);
+}
+
+.match-scorecard-story h2 {
+  color: #fff5d8;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-style: italic;
+  line-height: 0.95;
+  text-transform: uppercase;
+  text-shadow:
+    2px 2px 0 #05080d,
+    0 0 20px rgba(247, 199, 52, 0.22);
+}
+
+.match-scorecard-story p:last-child {
+  max-width: 72ch;
+  color: #f8f1d6;
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.7;
 }
 
 .scorecard-innings-header {
@@ -6371,6 +6419,115 @@ textarea {
 
 .scorecard-bottom-back {
   margin-top: 18px;
+}
+
+.match-diary-page {
+  display: grid;
+  gap: 18px;
+}
+
+.match-diary-hero {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 86% 8%, rgba(247, 199, 52, 0.18), transparent 14rem),
+    radial-gradient(circle at 8% 0%, rgba(70, 223, 255, 0.12), transparent 13rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.26)),
+    #071017;
+}
+
+.match-diary-hero p:last-child {
+  max-width: 68ch;
+  margin-top: 10px;
+  color: #d8d2c0;
+  font-weight: 750;
+  line-height: 1.65;
+}
+
+.match-diary-list {
+  display: grid;
+  gap: 14px;
+}
+
+.match-diary-entry {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid rgba(70, 223, 255, 0.24);
+  border-left: 4px solid #f7c734;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 88% 8%, rgba(247, 199, 52, 0.13), transparent 12rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(0, 0, 0, 0.24)),
+    #071017;
+  padding: clamp(16px, 3vw, 22px);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.28);
+}
+
+.match-diary-entry-header,
+.match-diary-entry-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+}
+
+.match-diary-entry-header span {
+  color: #46dfff;
+  font-size: 0.74rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.match-diary-entry-header h2 {
+  margin-top: 4px;
+  color: #fff5d8;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-style: italic;
+  line-height: 0.95;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 #05080d;
+}
+
+.match-diary-entry-header strong {
+  flex: 0 0 auto;
+  border: 1px solid rgba(247, 199, 52, 0.34);
+  border-radius: 999px;
+  background: rgba(247, 199, 52, 0.1);
+  padding: 7px 10px;
+  color: #f7c734;
+  font-size: 0.7rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.match-diary-entry > p {
+  color: #f8f1d6;
+  font-size: 0.96rem;
+  font-weight: 750;
+  line-height: 1.7;
+}
+
+.match-diary-entry-footer {
+  align-items: center;
+}
+
+.match-diary-entry-footer span,
+.match-diary-entry-footer a {
+  color: #f7c734;
+  font-size: 0.76rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.match-diary-entry-footer a {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
 }
 
 .top-performers-header {

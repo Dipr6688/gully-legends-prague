@@ -212,6 +212,18 @@ export type TeamMatchData = {
   completedBowlingOvers: number;
 };
 
+export type MatchStory = {
+  matchId: string;
+  title: string;
+  storyText: string;
+  storyVersion: number;
+  storyStyle: string;
+  storySignature: string;
+  generatedAt: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
 export type MatchRecord = {
   id: string;
   supabaseUpdatedAt?: string;
@@ -243,6 +255,7 @@ export type MatchRecord = {
   progressionAppliedAt?: string;
   appliedFinalisationVersion?: number;
   quickScoring?: QuickScoringMetadata;
+  matchStory?: MatchStory | null;
 };
 
 export type MockMatchFormValues = {

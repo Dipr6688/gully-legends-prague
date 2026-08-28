@@ -100,6 +100,12 @@ function MatchArchiveCard({
         <strong>Finalised</strong>
       </div>
 
+      {match.matchStory?.title ? (
+        <div className="match-archive-story-title" aria-label="Match story title">
+          {match.matchStory.title}
+        </div>
+      ) : null}
+
       <div className="match-archive-length" aria-label="Scheduled match length">
         <span>Match Length</span>
         <strong>{getMatchScheduledOversLabel(match)}</strong>

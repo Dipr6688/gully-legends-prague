@@ -12,6 +12,8 @@ import {
 } from "@/lib/app-sync/review-working-copy";
 import { isValidIsoCalendarDate } from "@/lib/app-sync/prague-date";
 import { buildFinalisationPlan } from "@/lib/supabase/match-finalisation-plan";
+import { safelyCreateMatchStoryAfterOfficialFinalisation } from "@/lib/supabase/match-story-finalisation";
+import { SupabaseMatchStoryRepository } from "@/lib/supabase/match-story-repository";
 import {
   SupabaseMatchFinalisationError,
   SupabaseMatchFinalisationRepository
@@ -61,6 +63,7 @@ function revalidateFinalisedImportPages(importId: string, matchId: string, playe
   revalidatePath("/");
   revalidatePath("/matches");
   revalidatePath(`/matches/${matchId}`);
+  revalidatePath("/match-diary");
   revalidatePath("/leaderboard");
   revalidatePath("/monthly-beasts");
   revalidatePath("/admin/apk-imports");
@@ -189,6 +192,15 @@ export async function POST(
     const result = await apkRepository.finalizeImportAtomically({
       importId,
       finalisationPlan: plan
+    });
+    await safelyCreateMatchStoryAfterOfficialFinalisation({
+      repository: new SupabaseMatchStoryRepository(supabase),
+      match: {
+        ...assembly.derivedMatch,
+        matchNumber: result.matchNumber ?? assembly.derivedMatch.matchNumber ?? null,
+        progressionAppliedAt: result.statsAppliedAt ?? undefined,
+        supabaseUpdatedAt: result.statsAppliedAt ?? undefined
+      }
     });
 
     revalidateFinalisedImportPages(importId, result.matchId || assembly.derivedMatch.id, playerIds);
