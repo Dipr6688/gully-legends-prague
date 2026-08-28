@@ -1,6 +1,7 @@
 import { Camera, Crown, DownloadCloud, LogOut, Swords, Trophy, Users } from "lucide-react";
 import { logoutAdmin } from "@/app/admin/actions";
 import { DemoDataResetControl } from "@/components/admin/DemoDataResetControl";
+import { MatchStoryBackfillControl } from "@/components/admin/MatchStoryBackfillControl";
 import { LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { requireAdmin } from "@/lib/admin/auth";
@@ -87,6 +88,7 @@ export default async function AdminPage() {
               </section>
             );
           })}
+          <MatchStoryBackfillControl />
           <DemoDataResetControl demoMatchCount={count ?? 0} />
         </div>
 

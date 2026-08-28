@@ -2,9 +2,11 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { MatchSectionTabs } from "@/components/matches/MatchSectionTabs";
 import { formatMatchDisplayDate, getMatchResultHeadline } from "@/lib/match-display";
 import { getMatchArchiveGameLabel } from "@/lib/match-archive";
 import { getFinalisedMatches } from "@/lib/match-repository";
+import { isOfficialCelebrationMatch } from "@/lib/official-match-history";
 import { isSupabaseDataSource } from "@/lib/data-source";
 import { loadPublicSupabaseReadData } from "@/lib/supabase/public-read-data";
 import type { MatchRecord } from "@/lib/types/match";
@@ -14,15 +16,15 @@ export const revalidate = 30;
 
 function sortDiaryMatches(left: MatchRecord, right: MatchRecord): number {
   if (left.matchDate !== right.matchDate) {
-    return left.matchDate.localeCompare(right.matchDate);
+    return right.matchDate.localeCompare(left.matchDate);
   }
 
   const leftNumber = left.matchNumber ?? Number.MAX_SAFE_INTEGER;
   const rightNumber = right.matchNumber ?? Number.MAX_SAFE_INTEGER;
 
-  if (leftNumber !== rightNumber) return leftNumber - rightNumber;
+  if (leftNumber !== rightNumber) return rightNumber - leftNumber;
 
-  return left.id.localeCompare(right.id);
+  return right.id.localeCompare(left.id);
 }
 
 export default async function MatchDiaryPage() {
@@ -45,7 +47,7 @@ export default async function MatchDiaryPage() {
 
   const matchesWithStories = data?.matches
     ? getFinalisedMatches(data.matches)
-        .filter((match) => match.matchStory)
+        .filter((match) => isOfficialCelebrationMatch(match) && match.matchStory)
         .sort(sortDiaryMatches)
     : [];
 
@@ -58,12 +60,13 @@ export default async function MatchDiaryPage() {
           Short official stories from finalised Gully Legends matches, kept for the
           memory rather than the scoreboard noise.
         </p>
+        <MatchSectionTabs active="diary" />
       </Card>
 
       {matchesWithStories.length === 0 ? (
-        <EmptyState title="NO STORIES YET">
-          Finalised matches will appear here once their automatic Match Stories
-          have been generated.
+        <EmptyState title="THE DIARY IS WAITING FOR ITS FIRST STORY">
+          Official Match Stories will appear here automatically after matches are
+          finalised.
         </EmptyState>
       ) : (
         <section className="match-diary-list" aria-label="Match stories">
@@ -71,16 +74,18 @@ export default async function MatchDiaryPage() {
             <article key={match.id} className="match-diary-entry">
               <div className="match-diary-entry-header">
                 <div>
-                  <span>{formatMatchDisplayDate(match.matchDate)}</span>
+                  <span>
+                    {formatMatchDisplayDate(match.matchDate)} ·{" "}
+                    {getMatchArchiveGameLabel(match)}
+                  </span>
                   <h2>{match.matchStory?.title}</h2>
                 </div>
-                <strong>{getMatchArchiveGameLabel(match)}</strong>
               </div>
               <p>{match.matchStory?.storyText}</p>
               <div className="match-diary-entry-footer">
                 <span>{getMatchResultHeadline(match)}</span>
                 <Link href={`/matches/${match.id}`}>
-                  View Scorecard
+                  View Match
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </div>

@@ -9,6 +9,10 @@ import {
   isEligibleForMatchStory,
   type MatchStoryDraft
 } from "../lib/match-story";
+import {
+  backfillHistoricalMatchStories,
+  sortMatchStoryBackfillMatches
+} from "../lib/supabase/match-story-backfill";
 import type {
   BowlingOver,
   FinalisedPlayerMatchRecord,
@@ -594,6 +598,164 @@ test("Match Story backfill candidates are eligible official matches without an e
   );
 });
 
+test("Match Story backfill sorts historical matches oldest to newest by date and game number", () => {
+  const sorted = sortMatchStoryBackfillMatches([
+    match({ id: "aug-24-game-3", matchDate: "2026-08-24", matchNumber: 3 }),
+    match({ id: "aug-22-game-4", matchDate: "2026-08-22", matchNumber: 4 }),
+    match({ id: "aug-22-game-2", matchDate: "2026-08-22", matchNumber: 2 }),
+    match({ id: "aug-22-no-game", matchDate: "2026-08-22", matchNumber: null })
+  ]);
+
+  assert.deepEqual(
+    sorted.map((item) => item.id),
+    ["aug-22-game-2", "aug-22-game-4", "aug-22-no-game", "aug-24-game-3"]
+  );
+});
+
+test("Match Story historical backfill uses the story engine chronologically and skips existing stories", async () => {
+  const savedStories: MatchStoryDraft[] = [];
+  const existingDraft = buildMatchStory({ match: match({ id: "already-stored" }) });
+  const summary = await backfillHistoricalMatchStories({
+    matches: [
+      match({ id: "newer", matchDate: "2026-08-24", matchNumber: 3 }),
+      match({
+        id: "already-stored",
+        matchDate: "2026-08-22",
+        matchNumber: 2,
+        records: [record({ playerId: "aninda", teamId: "teamA", runs: 18 })],
+        result: {
+          type: "win_by_runs",
+          winnerTeamId: "teamA",
+          loserTeamId: "teamB",
+          marginRuns: 2
+        },
+        teamARuns: 52,
+        teamBRuns: 50
+      }),
+      match({ id: "older", matchDate: "2026-08-22", matchNumber: 1 }),
+      match({ id: "demo", matchDate: "2026-08-21", matchNumber: 1, isDemo: true }),
+      match({ id: "draft", matchDate: "2026-08-21", matchNumber: 2, status: "draft" })
+    ].map((item) =>
+      item.id === "already-stored" && existingDraft
+        ? { ...item, matchStory: storedStory(existingDraft) }
+        : item
+    ),
+    recentStories: existingDraft ? [storedStory(existingDraft)] : [],
+    repository: {
+      async createStoryIfAbsent(story) {
+        savedStories.push(story);
+      }
+    }
+  });
+
+  assert.equal(summary.eligible, 3);
+  assert.equal(summary.generated, 2);
+  assert.equal(summary.skipped, 1);
+  assert.equal(summary.failed, 0);
+  assert.deepEqual(
+    savedStories.map((story) => story.matchId),
+    ["older", "newer"]
+  );
+  assert.ok(savedStories.every((story) => story.storyVersion === 1));
+});
+
+test("Match Story backfill is idempotent and does not duplicate stories on a second run", async () => {
+  const savedStories: MatchStoryDraft[] = [];
+  const matches = [
+    match({ id: "first", matchDate: "2026-08-22", matchNumber: 1 }),
+    match({ id: "second", matchDate: "2026-08-24", matchNumber: 1 })
+  ];
+  const repository = {
+    async createStoryIfAbsent(story: MatchStoryDraft) {
+      if (!savedStories.some((saved) => saved.matchId === story.matchId)) {
+        savedStories.push(story);
+      }
+    }
+  };
+
+  const firstRun = await backfillHistoricalMatchStories({
+    matches,
+    recentStories: [],
+    repository
+  });
+  const secondRun = await backfillHistoricalMatchStories({
+    matches: matches.map((item) => {
+      const saved = savedStories.find((story) => story.matchId === item.id);
+
+      return saved ? { ...item, matchStory: storedStory(saved) } : item;
+    }),
+    recentStories: savedStories.map(storedStory),
+    repository
+  });
+
+  assert.equal(firstRun.generated, 2);
+  assert.equal(secondRun.generated, 0);
+  assert.equal(secondRun.skipped, 2);
+  assert.equal(savedStories.length, 2);
+});
+
+test("Match Story backfill continues after one failure and does not overwrite existing stories", async () => {
+  const existingDraft = buildMatchStory({ match: match({ id: "existing" }) });
+  const savedStories: MatchStoryDraft[] = [];
+  const summary = await backfillHistoricalMatchStories({
+    matches: [
+      existingDraft
+        ? { ...match({ id: "existing", matchDate: "2026-08-20" }), matchStory: storedStory(existingDraft) }
+        : match({ id: "existing", matchDate: "2026-08-20" }),
+      match({ id: "fails", matchDate: "2026-08-21" }),
+      match({ id: "works", matchDate: "2026-08-22" })
+    ],
+    recentStories: existingDraft ? [storedStory(existingDraft)] : [],
+    repository: {
+      async createStoryIfAbsent(story) {
+        if (story.matchId === "fails") {
+          throw new Error("simulated insert failure");
+        }
+
+        savedStories.push(story);
+      }
+    }
+  });
+
+  assert.equal(summary.eligible, 3);
+  assert.equal(summary.generated, 1);
+  assert.equal(summary.skipped, 1);
+  assert.equal(summary.failed, 1);
+  assert.deepEqual(summary.failures.map((failure) => failure.matchId), ["fails"]);
+  assert.deepEqual(savedStories.map((story) => story.matchId), ["works"]);
+});
+
+test("Match Story legacy-safe stories avoid unsupported advanced facts", () => {
+  const legacyStory = buildMatchStory({
+    match: {
+      ...match({
+        id: "legacy-safe",
+        records: [
+          record({ playerId: "dheeraj", teamId: "teamA", runs: 34 }),
+          record({ playerId: "rohit", teamId: "teamB", runs: 26, wickets: 2 })
+        ],
+        firstBowlingOvers: [
+          bowlingOver({
+            id: "rohit-legacy",
+            bowlerId: "rohit",
+            battingTeamId: "teamA",
+            bowlingTeamId: "teamB",
+            wickets: 2,
+            runsConceded: 5
+          })
+        ]
+      }),
+      quickScoring: undefined
+    }
+  });
+
+  assertStoryShape(legacyStory);
+  assert.doesNotMatch(
+    legacyStory?.storyText ?? "",
+    /four|six|strike rate|economy|stumping|exact turning point/i
+  );
+});
+
 test("Match Story persistence is isolated, idempotent and hooked after finalisation", () => {
   const migration = readFileSync(
     "supabase/migrations/20260827120000_match_stories.sql",
@@ -636,6 +798,22 @@ test("Match Story persistence is isolated, idempotent and hooked after finalisat
   assert.match(finaliseRoute, /revalidatePath\("\/match-diary"\)/);
 });
 
+test("Match Diary is discoverable from Matches without joining main navigation", () => {
+  const navigation = readFileSync("lib/data/navigation.ts", "utf8");
+  const matchesPage = readFileSync("app/matches/page.tsx", "utf8");
+  const diaryPage = readFileSync("app/match-diary/page.tsx", "utf8");
+  const tabs = readFileSync("components/matches/MatchSectionTabs.tsx", "utf8");
+
+  assert.doesNotMatch(navigation, /match-diary/i);
+  assert.match(matchesPage, /<MatchSectionTabs active="matches" \/>/);
+  assert.match(diaryPage, /<MatchSectionTabs active="diary" \/>/);
+  assert.match(tabs, /label: "MATCHES"/);
+  assert.match(tabs, /label: "MATCH DIARY"/);
+  assert.match(tabs, /href: "\/matches"/);
+  assert.match(tabs, /href: "\/match-diary"/);
+  assert.match(tabs, /aria-current=\{isActive \? "page" : undefined\}/);
+});
+
 test("Match Story UI renders scorecard and diary surfaces without render-time generation", () => {
   const scorecard = readFileSync("components/matches/MatchScorecard.tsx", "utf8");
   const archive = readFileSync("components/matches/MatchArchive.tsx", "utf8");
@@ -646,8 +824,31 @@ test("Match Story UI renders scorecard and diary surfaces without render-time ge
   assert.match(scorecard, /Match Story/);
   assert.match(archive, /match-archive-story-title/);
   assert.match(diary, /Match Diary/);
-  assert.match(diary, /filter\(\(match\) => match\.matchStory\)/);
+  assert.match(diary, /isOfficialCelebrationMatch\(match\) && match\.matchStory/);
+  assert.match(diary, /right\.matchDate\.localeCompare\(left\.matchDate\)/);
+  assert.match(diary, /THE DIARY IS WAITING FOR ITS FIRST STORY/);
+  assert.match(diary, /View Match/);
   assert.doesNotMatch(scorecard + archive + diary, /buildMatchStory\(/);
   assert.match(publicRead, /SupabaseMatchStoryRepository/);
   assert.match(publicRead, /storyRepository\.getStories\(\)\.catch\(\(\) => \[\]\)/);
+});
+
+test("Match Story admin backfill is confirmed and protected server-side", () => {
+  const adminPage = readFileSync("app/admin/page.tsx", "utf8");
+  const control = readFileSync("components/admin/MatchStoryBackfillControl.tsx", "utf8");
+  const route = readFileSync("app/api/admin/match-stories/backfill/route.ts", "utf8");
+  const backfill = readFileSync("lib/supabase/match-story-backfill.ts", "utf8");
+
+  assert.match(adminPage, /<MatchStoryBackfillControl \/>/);
+  assert.match(control, /MATCH STORIES/);
+  assert.match(control, /GENERATE HISTORICAL STORIES\?/);
+  assert.match(control, /Existing stories will not be changed/);
+  assert.match(control, /fetch\("\/api\/admin\/match-stories\/backfill"/);
+  assert.doesNotMatch(control, /textarea|contentEditable|manual text editor/i);
+  assert.match(route, /isAdminWithClient\(supabase\)/);
+  assert.match(route, /status: 403/);
+  assert.match(route, /backfillHistoricalMatchStories/);
+  assert.match(route, /revalidatePath\("\/match-diary"\)/);
+  assert.match(backfill, /buildMatchStory\(\{ match, recentStories: rollingRecentStories \}\)/);
+  assert.match(backfill, /createStoryIfAbsent\(story\)/);
 });

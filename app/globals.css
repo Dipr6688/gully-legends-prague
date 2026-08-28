@@ -2797,6 +2797,64 @@ textarea {
   gap: 10px;
 }
 
+.match-story-admin-card {
+  border-color: rgba(247, 199, 52, 0.24);
+}
+
+.match-story-admin-confirmation,
+.match-story-admin-result,
+.match-story-admin-error {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.match-story-admin-confirmation {
+  border: 1px solid rgba(247, 199, 52, 0.28);
+  background: rgba(247, 199, 52, 0.08);
+}
+
+.match-story-admin-confirmation h3 {
+  color: #fff5d8;
+  font-size: 0.95rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.match-story-admin-confirmation p,
+.match-story-admin-result li {
+  color: #d8d2c0;
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.match-story-admin-confirmation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.match-story-admin-result {
+  border: 1px solid rgba(70, 223, 255, 0.26);
+  background: rgba(70, 223, 255, 0.08);
+}
+
+.match-story-admin-error {
+  border: 1px solid rgba(248, 113, 113, 0.34);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.match-story-admin-result strong,
+.match-story-admin-error strong {
+  color: #f8f1d6;
+  font-size: 0.86rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
 .formula-room-page {
   display: grid;
   gap: 18px;
@@ -5653,6 +5711,47 @@ textarea {
   min-width: 0;
 }
 
+.matches-section-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 18px;
+  border: 1px solid rgba(70, 223, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.32);
+  padding: 5px;
+}
+
+.matches-section-tab {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0 14px;
+  color: #d8d2c0;
+  font-size: 0.76rem;
+  font-weight: 950;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.matches-section-tab:hover,
+.matches-section-tab:focus-visible,
+.matches-section-tab.is-active {
+  border-color: rgba(247, 199, 52, 0.48);
+  background: rgba(247, 199, 52, 0.14);
+  color: #f7c734;
+  outline: none;
+}
+
 .match-archive-shell,
 .match-archive-group-stack,
 .match-archive-date-group {
@@ -6435,7 +6534,7 @@ textarea {
     #071017;
 }
 
-.match-diary-hero p:last-child {
+.match-diary-hero > p:last-of-type {
   max-width: 68ch;
   margin-top: 10px;
   color: #d8d2c0;
@@ -10812,6 +10911,18 @@ textarea {
 
   .admin-control-links {
     display: grid;
+  }
+
+  .matches-section-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    border-radius: 12px;
+  }
+
+  .matches-section-tab {
+    min-width: 0;
+    padding-inline: 10px;
   }
 
   .players-carousel {

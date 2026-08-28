@@ -2,6 +2,7 @@ import { Plus } from "lucide-react";
 import { LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { MatchArchive } from "@/components/matches/MatchArchive";
+import { MatchSectionTabs } from "@/components/matches/MatchSectionTabs";
 import { TodayFixtures } from "@/components/matches/TodayFixtures";
 import { getFinalisedMatches } from "@/lib/match-repository";
 import { isSupabaseDataSource } from "@/lib/data-source";
@@ -49,6 +50,7 @@ export default async function MatchesPage({
             Create Match
           </LinkButton>
         </div>
+        <MatchSectionTabs active="matches" />
         <div className="mt-6 grid gap-5">
           <TodayFixtures dateFilter={params?.date} matches={matches} />
           <MatchArchive finalisedMatches={finalisedMatches} />

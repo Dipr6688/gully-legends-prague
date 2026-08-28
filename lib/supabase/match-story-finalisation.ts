@@ -1,4 +1,4 @@
-import { buildMatchStory } from "@/lib/match-story";
+import { MATCH_STORY_RECENT_LIMIT, buildMatchStory } from "@/lib/match-story";
 import { SupabaseMatchStoryRepository } from "@/lib/supabase/match-story-repository";
 import type { MatchRecord } from "@/lib/types/match";
 
@@ -9,7 +9,7 @@ export async function createMatchStoryAfterOfficialFinalisation({
   repository: SupabaseMatchStoryRepository;
   match: MatchRecord;
 }): Promise<void> {
-  const recentStories = await repository.getRecentStories(10);
+  const recentStories = await repository.getRecentStories(MATCH_STORY_RECENT_LIMIT);
   const story = buildMatchStory({ match, recentStories });
 
   if (!story) return;
