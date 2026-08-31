@@ -196,14 +196,14 @@ export async function POST(
     await safelyCreateMatchStoryAfterOfficialFinalisation({
       repository: new SupabaseMatchStoryRepository(supabase),
       match: {
-        ...assembly.derivedMatch,
-        matchNumber: result.matchNumber ?? assembly.derivedMatch.matchNumber ?? null,
+        ...plan.finalMatch,
+        matchNumber: result.matchNumber ?? plan.finalMatch.matchNumber ?? null,
         progressionAppliedAt: result.statsAppliedAt ?? undefined,
         supabaseUpdatedAt: result.statsAppliedAt ?? undefined
       }
     });
 
-    revalidateFinalisedImportPages(importId, result.matchId || assembly.derivedMatch.id, playerIds);
+    revalidateFinalisedImportPages(importId, result.matchId || plan.finalMatch.id, playerIds);
 
     return redirectToImport(
       request,

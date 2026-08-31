@@ -120,6 +120,7 @@ export type PlayerMatchPerformance = {
 };
 
 export type PlayerMatchXPBreakdown = {
+  xpRuleVersion?: "v1" | "v2";
   participationXP: number;
   winBonusXP: number;
   playerOfMatchXP: number;
@@ -131,6 +132,12 @@ export type PlayerMatchXPBreakdown = {
   maidenXP: number;
   expensiveOverPenaltyXP: number;
   fieldingXP: number;
+  overQualityXP?: number;
+  rawPositiveOverQualityPoints?: number;
+  rawNegativeOverQualityPoints?: number;
+  rawBattingPoints?: number;
+  rawBowlingPoints?: number;
+  rawFieldingPoints?: number;
   rawTotalXP: number;
   awardedXP: number;
 };

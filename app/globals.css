@@ -2941,6 +2941,47 @@ textarea {
   text-transform: uppercase;
 }
 
+.formula-version-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgba(156, 255, 36, 0.48);
+  border-radius: 10px;
+  background:
+    linear-gradient(100deg, rgba(156, 255, 36, 0.14), transparent 55%),
+    rgba(0, 0, 0, 0.34);
+  padding: 14px 16px;
+  box-shadow: inset 4px 0 0 #9cff24;
+}
+
+.formula-version-banner > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #9cff24;
+  padding: 6px 9px;
+  color: #07100e;
+  font-size: 0.72rem;
+  font-weight: 1000;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.formula-version-banner strong {
+  display: block;
+  color: #f8f1d6;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: 1.55rem;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.formula-version-banner p {
+  margin-top: 3px;
+  color: #d8d2c0;
+  font-weight: 800;
+}
+
 .formula-tabs {
   display: flex;
   gap: 10px;
@@ -3139,6 +3180,17 @@ textarea {
   text-transform: uppercase;
 }
 
+.formula-equation-stacked {
+  display: grid;
+  gap: 5px;
+}
+
+.formula-note {
+  border-left: 3px solid var(--formula-accent, #46dfff);
+  background: color-mix(in srgb, var(--formula-accent, #46dfff) 8%, transparent);
+  padding: 10px 12px;
+}
+
 .formula-reward {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
@@ -3264,6 +3316,96 @@ textarea {
 .formula-damage-box strong {
   color: #ffd7c2;
   font-weight: 900;
+}
+
+.formula-over-table {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid rgba(178, 76, 255, 0.36);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.formula-over-table > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(118px, 0.45fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 11px;
+}
+
+.formula-over-table > div + div {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.formula-over-table-heading {
+  background: rgba(178, 76, 255, 0.16);
+  color: #f8f1d6;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.formula-over-table span {
+  color: #d8d2c0;
+  font-weight: 850;
+}
+
+.formula-over-table > div > :last-child {
+  color: #9cff24;
+  text-align: right;
+}
+
+.formula-over-table > div > .negative {
+  color: #ff9a70;
+}
+
+.formula-range-compact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1px solid rgba(178, 76, 255, 0.34);
+  border-radius: 9px;
+  background: rgba(178, 76, 255, 0.1);
+  padding: 13px;
+  text-transform: uppercase;
+}
+
+.formula-range-compact strong {
+  color: #f7c734;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1;
+}
+
+.formula-range-compact span {
+  color: #d8d2c0;
+  font-weight: 950;
+}
+
+.formula-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.formula-compare-grid > div {
+  border: 1px solid rgba(70, 223, 255, 0.2);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.28);
+  padding: 13px;
+}
+
+.formula-compare-grid strong {
+  color: #f7c734;
+  font-size: 1.08rem;
+  text-transform: uppercase;
+}
+
+.formula-compare-grid p {
+  margin-top: 5px;
 }
 
 .formula-credit-grid {
@@ -8443,6 +8585,7 @@ textarea {
   .formula-compact-table,
   .formula-journey-grid,
   .rating-status-grid,
+  .formula-compare-grid,
   .power-split,
   .formula-final-grid {
     grid-template-columns: 1fr;

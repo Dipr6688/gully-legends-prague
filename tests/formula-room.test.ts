@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import {
-  calculatePlayerMatchXP,
   cumulativeXPForLevel,
   PLAYER_POWER_RULES,
   RATING_STATUS_RULES,
-  XP_RULES
+  XP_V2_EFFECTIVE_DATE_LABEL,
+  XP_V2_OVER_QUALITY_RULES,
+  XP_V2_RULES
 } from "../lib/progression";
 import {
   PLAYER_FILE_ICONS,
@@ -145,58 +146,73 @@ test("Formula Room documents shared advanced boundary calculations without dupli
   );
 });
 
-test("XP Engine displays values from shared XP rules and utility examples", () => {
+test("XP Engine presents XP v2 as current and covers every public rule", () => {
   const formulaRoom = formulaRoomSource();
-  const regularMatch = calculatePlayerMatchXP(
-    performance({ didBat: true, runs: 18, wickets: 1, catches: 1 }),
-    {
-      result: {
-        type: "win_by_runs",
-        winnerTeamId: "teamA",
-        loserTeamId: "teamB",
-        marginRuns: 8
-      }
-    }
-  );
-  const strongMatch = calculatePlayerMatchXP(
-    performance({
-      playerOfMatch: true,
-      didBat: true,
-      runs: 52,
-      wickets: 2,
-      catches: 1
-    }),
-    {
-      result: {
-        type: "win_by_runs",
-        winnerTeamId: "teamA",
-        loserTeamId: "teamB",
-        marginRuns: 18
-      }
-    }
-  );
 
-  assert.match(formulaRoom, /XP_RULES\.participation/);
-  assert.match(formulaRoom, /XP_RULES\.winBonus/);
-  assert.match(formulaRoom, /XP_RULES\.playerOfMatch/);
-  assert.match(formulaRoom, /XP_RULES\.runsPerXP/);
-  assert.match(formulaRoom, /XP_RULES\.fiftyBonus/);
-  assert.match(formulaRoom, /XP_RULES\.hundredAdditionalBonus/);
-  assert.match(formulaRoom, /XP_RULES\.duckPenalty/);
-  assert.match(formulaRoom, /XP_RULES\.wicket/);
-  assert.match(formulaRoom, /XP_RULES\.hatTrick/);
-  assert.match(formulaRoom, /XP_RULES\.maiden/);
-  assert.match(formulaRoom, /XP_RULES\.catch/);
-  assert.match(formulaRoom, /XP_RULES\.runOut/);
-  assert.match(formulaRoom, /XP_RULES\.stumping/);
-  assert.match(formulaRoom, /XP_RULES\.fieldingCap/);
-  assert.equal(XP_RULES.participation, 20);
-  assert.equal(XP_RULES.winBonus, 5);
-  assert.equal(XP_RULES.playerOfMatch, 15);
-  assert.equal(XP_RULES.minimumMatchXP, -15);
-  assert.equal(XP_RULES.maximumMatchXP, 120);
-  assert.equal(regularMatch.awardedXP, 50);
-  assert.equal(strongMatch.awardedXP, 107);
+  assert.equal(XP_V2_EFFECTIVE_DATE_LABEL, "1 September 2026");
+  assert.match(formulaRoom, /XP_V2_EFFECTIVE_DATE_LABEL/);
+  assert.match(formulaRoom, /XP_V2_OVER_QUALITY_RULES/);
+  assert.match(formulaRoom, /XP_V2_RULES/);
+  assert.match(formulaRoom, /Current rules/);
+  assert.match(formulaRoom, /XP Engine v2/);
+  assert.match(formulaRoom, /General XP/);
+  assert.equal(XP_V2_RULES.participation, 20);
+  assert.equal(XP_V2_RULES.winBonus, 5);
+  assert.equal(XP_V2_RULES.playerOfMatch, 15);
+
+  assert.match(formulaRoom, /Batting XP v2/);
+  assert.match(formulaRoom, /Completed pairs in the first 60 runs/);
+  assert.match(formulaRoom, /completed groups of 4 after 60/);
+  assert.equal(XP_V2_RULES.fiftyBonus, 15);
+  assert.equal(XP_V2_RULES.hundredAdditionalBonus, 25);
+  assert.equal(XP_V2_RULES.duckPenalty, -8);
+  assert.equal(XP_V2_RULES.regularBattingCareerCap, 50);
+  assert.match(formulaRoom, /not-out zero and Did Not Bat are not ducks/);
+
+  assert.match(formulaRoom, /Bowling XP v2/);
+  assert.deepEqual(
+    XP_V2_OVER_QUALITY_RULES.map(({ label, points }) => [label, points]),
+    [
+      ["0 runs", 10],
+      ["1-3 runs", 6],
+      ["4-6 runs", 3],
+      ["7-9 runs", 1],
+      ["10-12 runs", 0],
+      ["13-15 runs", -2],
+      ["16-18 runs", -4],
+      ["19-21 runs", -6],
+      ["22-24 runs", -8],
+      ["25-29 runs", -11],
+      ["30+ runs", -15]
+    ]
+  );
+  assert.match(formulaRoom, /Only a completed\s+six-legal-ball over earns a quality score/);
+  assert.match(formulaRoom, /0-run over is the maiden reward: \+10 once/);
+  assert.match(formulaRoom, /There is no separate\s+maiden bonus in v2/);
+  assert.equal(XP_V2_RULES.positiveOverQualityCareerCap, 30);
+  assert.equal(XP_V2_RULES.negativeOverQualityCareerFloor, -20);
+
+  assert.match(formulaRoom, /Fielding XP v2/);
+  assert.equal(XP_V2_RULES.catch, 6);
+  assert.equal(XP_V2_RULES.runOut, 8);
+  assert.equal(XP_V2_RULES.stumping, 8);
+  assert.equal(XP_V2_RULES.fieldingCareerCap, 40);
+
+  assert.match(formulaRoom, /Career match XP/);
+  assert.equal(XP_V2_RULES.minimumMatchXP, -15);
+  assert.equal(XP_V2_RULES.maximumMatchXP, 160);
+  assert.match(formulaRoom, /Monthly Beast raw category points/);
+  assert.match(formulaRoom, /Career XP vs Beast Points/);
+  assert.match(formulaRoom, /Participation, win bonus and Player of the Match XP do not count toward\s+Beast crowns/);
+  assert.match(formulaRoom, /Total career XP does not count either/);
+  assert.match(formulaRoom, /Earlier Matches Keep Their Original Rules/);
+
+  assert.doesNotMatch(formulaRoom, /XP_RULES/);
+  assert.doesNotMatch(formulaRoom, /Ordinary batting XP cap/);
+  assert.doesNotMatch(formulaRoom, /Over Damage Penalties/);
+  assert.doesNotMatch(formulaRoom, /Combined fielding cap/);
+  assert.doesNotMatch(formulaRoom, /const XP_V2\s*=/);
+  assert.doesNotMatch(formulaRoom, /const BOWLING_OVER_QUALITY\s*=/);
 });
 
 test("Formula Room XP examples expand independently without grid row stretching", () => {

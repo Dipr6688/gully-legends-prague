@@ -1,4 +1,8 @@
-import { calculatePlayerMatchXP, XP_RULES } from "./progression";
+import {
+  calculatePlayerMatchXP,
+  getStoredXPRuleVersion,
+  XP_RULES
+} from "./progression";
 import {
   isSuccessfullyFinalisedMatch,
   parseLocalMatchDate
@@ -71,7 +75,7 @@ export const MONTHLY_BEAST_CATEGORIES = {
   batting: {
     title: "BATTING BEAST",
     compactTitle: "Batting Beast",
-    xpLabel: "BATTING XP",
+    xpLabel: "BATTING POINTS",
     icon: "/ui/monthly-beasts/monthly-batting-beast-trimmed.png",
     accent: "orange",
     emptyTitle: "THE BATTING ARENA AWAITS",
@@ -80,7 +84,7 @@ export const MONTHLY_BEAST_CATEGORIES = {
   bowling: {
     title: "BOWLING BEAST",
     compactTitle: "Bowling Beast",
-    xpLabel: "BOWLING XP",
+    xpLabel: "BOWLING POINTS",
     icon: "/ui/monthly-beasts/monthly-bowling-beast-trimmed.png",
     accent: "purple",
     emptyTitle: "THE BOWLING ARENA AWAITS",
@@ -89,7 +93,7 @@ export const MONTHLY_BEAST_CATEGORIES = {
   fielding: {
     title: "FIELDING BEAST",
     compactTitle: "Fielding Beast",
-    xpLabel: "FIELDING XP",
+    xpLabel: "FIELDING POINTS",
     icon: "/ui/monthly-beasts/monthly-catching-beast-trimmed.png",
     accent: "green",
     emptyTitle: "THE FIELDING ARENA AWAITS",
@@ -148,7 +152,8 @@ function getXpBreakdown(
 
   return calculatePlayerMatchXP(performance, {
     result: match.result,
-    overs: getPlayerOvers(match, performance.playerId)
+    overs: getPlayerOvers(match, performance.playerId),
+    matchDate: match.matchDate
   });
 }
 
@@ -238,6 +243,12 @@ export function getMonthlyBeastCategoryXp({
   if (!performance.played || match.result.type === "no_result") return 0;
 
   const breakdown = getXpBreakdown(match, performance);
+
+  if (getStoredXPRuleVersion(breakdown) === "v2") {
+    if (category === "batting") return breakdown.rawBattingPoints ?? 0;
+    if (category === "bowling") return breakdown.rawBowlingPoints ?? 0;
+    return breakdown.rawFieldingPoints ?? 0;
+  }
 
   if (category === "batting") {
     return (

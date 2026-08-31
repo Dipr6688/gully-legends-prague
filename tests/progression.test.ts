@@ -5,18 +5,31 @@ import {
   applyMatchXP,
   applyMatchXPWithLevelProtection,
   calculateDisplayedRating,
+  calculateCareerBattingXP,
+  calculateCareerBowlingXP,
+  calculateCareerFieldingXP,
   calculateExpensiveOverPenalty,
   calculateMatchXP,
+  calculateOverQualityPoints,
   calculatePlayerMatchXP,
+  calculateRawBattingPoints,
+  calculateRawBowlingPoints,
+  calculateRawFieldingPoints,
+  calculateRawOverQualityPoints,
   calculateSharedPlayerMatchXP,
+  calculateV2RawRegularBattingPoints,
   calculatePlayerRatingSnapshots,
   clampAwardedMatchXP,
   cumulativeXPForLevel,
   cumulativeXPThresholdForLevel,
   formatPercentage,
+  getStoredXPRuleVersion,
   getLevelProgress,
   getOverPenalty,
+  getXPRuleVersionForMatchDate,
   XP_RULES,
+  XP_V2_RULES,
+  withAuthoritativeXPBreakdowns,
   xpNeededToAdvance
 } from "../lib/progression";
 import {
@@ -408,6 +421,55 @@ test("POM correction preserves non-POM XP components and cricket statistics", ()
   assert.equal(corrected.state.playerCareers.naim.matches, 1);
   assert.equal(corrected.state.playerCareers.naim.runs, 22);
   assert.equal(corrected.state.playerCareers.naim.catches, 1);
+});
+
+test("POM correction keeps legacy V1 application JSON free of new metadata", () => {
+  const match = finalisedMatch([
+    performance({
+      playerId: "rohit",
+      teamId: "teamA",
+      playerOfMatch: true,
+      didBat: true,
+      runs: 20
+    }),
+    performance({
+      playerId: "naim",
+      teamId: "teamB",
+      didBat: true,
+      runs: 22
+    })
+  ]);
+  const initialState = applyFinalisedMatchToCareerStats(
+    match,
+    createEmptyCareerProgressionState(),
+    "2026-08-10T10:00:00.000Z"
+  );
+
+  for (const application of Object.values(initialState.appliedProgressions)) {
+    delete application.xpBreakdown.xpRuleVersion;
+    delete application.xpBreakdown.overQualityXP;
+    delete application.xpBreakdown.rawPositiveOverQualityPoints;
+    delete application.xpBreakdown.rawNegativeOverQualityPoints;
+    delete application.xpBreakdown.rawBattingPoints;
+    delete application.xpBreakdown.rawBowlingPoints;
+    delete application.xpBreakdown.rawFieldingPoints;
+  }
+
+  const corrected = applyPlayerOfMatchCorrectionToFinalisedMatch({
+    match,
+    currentState: initialState,
+    nextPlayerOfMatchId: "naim"
+  });
+
+  for (const playerId of ["rohit", "naim"]) {
+    const breakdown =
+      corrected.state.appliedProgressions[`match-1:${playerId}`].xpBreakdown;
+
+    assert.equal("xpRuleVersion" in breakdown, false);
+    assert.equal("rawBattingPoints" in breakdown, false);
+    assert.equal("rawBowlingPoints" in breakdown, false);
+    assert.equal("rawFieldingPoints" in breakdown, false);
+  }
 });
 
 test("POM correction to none removes only the POM bonus", () => {
@@ -846,6 +908,325 @@ test("approved XP examples are reproducible", () => {
   );
 });
 
+test("XP rule version is selected from matchDate and missing stored versions are V1", () => {
+  assert.equal(getXPRuleVersionForMatchDate("2026-08-31"), "v1");
+  assert.equal(getXPRuleVersionForMatchDate("2026-09-01"), "v2");
+  assert.equal(getXPRuleVersionForMatchDate("invalid"), "v1");
+  assert.equal(getStoredXPRuleVersion(undefined), "v1");
+  assert.equal(getStoredXPRuleVersion({}), "v1");
+  assert.equal(getStoredXPRuleVersion({ xpRuleVersion: "v2" }), "v2");
+});
+
+test("server finalisation replaces submitted XP with a match-date-authoritative breakdown", () => {
+  const submittedPerformance = performance({ didBat: true, runs: 100 });
+  const submittedBreakdown = {
+    ...calculatePlayerMatchXP(submittedPerformance),
+    awardedXP: 999
+  };
+  const submittedMatch = {
+    ...finalisedMatch([submittedPerformance]),
+    matchDate: "2026-09-01",
+    finalisedPlayerRecords: [
+      {
+        ...submittedPerformance,
+        xpBreakdown: submittedBreakdown
+      }
+    ]
+  };
+  submittedMatch.teams.teamA.playerPerformances = [
+    {
+      ...submittedPerformance,
+      xpBreakdown: submittedBreakdown
+    }
+  ];
+
+  const authoritative = withAuthoritativeXPBreakdowns(submittedMatch);
+  const record = authoritative.finalisedPlayerRecords?.[0];
+
+  assert.equal(record?.xpBreakdown.xpRuleVersion, "v2");
+  assert.equal(record?.xpBreakdown.awardedXP, 106);
+  assert.equal(
+    (authoritative.teams.teamA.playerPerformances[0] as typeof record)?.xpBreakdown
+      .awardedXP,
+    106
+  );
+});
+
+test("XP V2 batting uses two run bands, cumulative milestones, and raw points beyond the career cap", () => {
+  const regularExamples = new Map([
+    [1, 0],
+    [2, 1],
+    [20, 10],
+    [40, 20],
+    [50, 25],
+    [60, 30],
+    [61, 30],
+    [64, 31],
+    [70, 32],
+    [80, 35],
+    [90, 37],
+    [100, 40],
+    [120, 45],
+    [140, 50],
+    [160, 55],
+    [200, 65]
+  ]);
+
+  for (const [runs, points] of regularExamples) {
+    assert.equal(calculateV2RawRegularBattingPoints(runs), points, `${runs} runs`);
+  }
+
+  const fifty = performance({ didBat: true, runs: 50 });
+  const hundred = performance({ didBat: true, runs: 100 });
+  const oneSixty = performance({ didBat: true, runs: 160 });
+  const v2Context = { matchDate: "2026-09-01" };
+
+  assert.equal(calculateRawBattingPoints(fifty), 40);
+  assert.equal(calculateRawBattingPoints(hundred), 80);
+  assert.equal(calculateCareerBattingXP(hundred), 80);
+  assert.equal(calculateRawBattingPoints(oneSixty), 95);
+  assert.equal(calculateCareerBattingXP(oneSixty), 90);
+  assert.equal(calculatePlayerMatchXP(oneSixty, v2Context).battingRunsXP, 50);
+  assert.equal(calculatePlayerMatchXP(oneSixty, v2Context).rawBattingPoints, 95);
+});
+
+test("XP V2 duck applies only to a dismissed batter who actually batted", () => {
+  const v2Context = { matchDate: "2026-09-01" };
+
+  assert.equal(
+    calculatePlayerMatchXP(
+      performance({ didBat: true, wasOut: true, runs: 0 }),
+      v2Context
+    ).duckPenaltyXP,
+    -8
+  );
+  assert.equal(
+    calculatePlayerMatchXP(
+      performance({ didBat: true, wasOut: false, runs: 0 }),
+      v2Context
+    ).duckPenaltyXP,
+    0
+  );
+  assert.equal(
+    calculatePlayerMatchXP(
+      performance({ didBat: false, wasOut: false, runs: 0 }),
+      v2Context
+    ).duckPenaltyXP,
+    0
+  );
+});
+
+test("XP V2 completed-over quality table covers every boundary", () => {
+  const examples = new Map([
+    [0, 10],
+    [1, 6],
+    [3, 6],
+    [4, 3],
+    [6, 3],
+    [7, 1],
+    [9, 1],
+    [10, 0],
+    [12, 0],
+    [13, -2],
+    [15, -2],
+    [16, -4],
+    [18, -4],
+    [19, -6],
+    [21, -6],
+    [22, -8],
+    [24, -8],
+    [25, -11],
+    [29, -11],
+    [30, -15],
+    [50, -15]
+  ]);
+
+  for (const [runs, points] of examples) {
+    assert.equal(calculateOverQualityPoints(runs), points, `${runs} conceded`);
+  }
+});
+
+test("XP V2 ignores incomplete overs and gives a maiden exactly +10 once", () => {
+  const completeMaiden = over("teamA", 1, 0, { maiden: true, legalBalls: 6 });
+  const incompleteMaiden = over("teamA", 2, 0, { maiden: true, legalBalls: 5 });
+  const breakdown = calculatePlayerMatchXP(performance(), {
+    matchDate: "2026-09-01",
+    overs: [completeMaiden, incompleteMaiden]
+  });
+
+  assert.deepEqual(calculateRawOverQualityPoints([incompleteMaiden]), {
+    positive: 0,
+    negative: 0,
+    total: 0
+  });
+  assert.equal(breakdown.maidenXP, 0);
+  assert.equal(breakdown.overQualityXP, 10);
+  assert.equal(breakdown.rawBowlingPoints, 10);
+});
+
+test("XP V2 wickets and hat-tricks stack with protected career over quality", () => {
+  const positiveOvers = [1, 2, 3, 4].map((overNumber) =>
+    over("teamA", overNumber, 0, { legalBalls: 6 })
+  );
+  const negativeOvers = [1, 2].map((overNumber) =>
+    over("teamA", overNumber, 30, { legalBalls: 6 })
+  );
+  const bowlingPerformance = performance({ wickets: 3, hatTricks: 1 });
+
+  assert.equal(calculateRawBowlingPoints(bowlingPerformance, positiveOvers), 95);
+  assert.equal(calculateCareerBowlingXP(bowlingPerformance, positiveOvers), 85);
+  assert.equal(calculateRawBowlingPoints(performance(), negativeOvers), -30);
+  assert.equal(calculateCareerBowlingXP(performance(), negativeOvers), -20);
+
+  const breakdown = calculatePlayerMatchXP(bowlingPerformance, {
+    matchDate: "2026-09-01",
+    overs: positiveOvers
+  });
+  assert.equal(breakdown.wicketXP, 30);
+  assert.equal(breakdown.hatTrickXP, 25);
+  assert.equal(breakdown.overQualityXP, XP_V2_RULES.positiveOverQualityCareerCap);
+  assert.equal(breakdown.rawPositiveOverQualityPoints, 40);
+});
+
+test("XP V2 fielding raw points remain uncapped while career fielding stops at 40", () => {
+  assert.equal(calculateRawFieldingPoints(performance({ catches: 1 })), 6);
+  assert.equal(calculateRawFieldingPoints(performance({ runOuts: 1 })), 8);
+  assert.equal(calculateRawFieldingPoints(performance({ stumpings: 1 })), 8);
+
+  const hugeFielding = performance({ catches: 7, runOuts: 1, stumpings: 1 });
+  assert.equal(calculateRawFieldingPoints(hugeFielding), 58);
+  assert.equal(calculateCareerFieldingXP(hugeFielding), 40);
+
+  const breakdown = calculatePlayerMatchXP(hugeFielding, {
+    matchDate: "2026-09-01"
+  });
+  assert.equal(breakdown.fieldingXP, 40);
+  assert.equal(breakdown.rawFieldingPoints, 58);
+});
+
+test("XP V2 career match award clamps to -15 and +160 without capping raw categories", () => {
+  assert.equal(clampAwardedMatchXP(-100, "v2"), -15);
+  assert.equal(clampAwardedMatchXP(500, "v2"), 160);
+
+  const monster = calculatePlayerMatchXP(
+    performance({
+      playerOfMatch: true,
+      didBat: true,
+      runs: 200,
+      wickets: 10,
+      catches: 10
+    }),
+    {
+      matchDate: "2026-09-01",
+      result: result(),
+      overs: [over("teamA", 1, 0, { legalBalls: 6 })]
+    }
+  );
+
+  assert.equal(monster.awardedXP, 160);
+  assert.equal(monster.rawBattingPoints, 105);
+  assert.equal(monster.rawBowlingPoints, 110);
+  assert.equal(monster.rawFieldingPoints, 60);
+});
+
+test("XP V2 POM recommendation uses uncapped raw performance and avoids cap-created ties", () => {
+  const stronger = performance({
+    playerId: "naim",
+    teamId: "teamA",
+    didBat: true,
+    runs: 200,
+    wickets: 8
+  });
+  const cappedRunnerUp = performance({
+    playerId: "dipanjan",
+    teamId: "teamB",
+    didBat: true,
+    runs: 180,
+    wickets: 8
+  });
+  const context = { matchDate: "2026-09-01", result: result({ type: "tie" }) };
+
+  assert.equal(calculatePrePomPlayerMatchXP(stronger, context).awardedXP, 160);
+  assert.equal(calculatePrePomPlayerMatchXP(cappedRunnerUp, context).awardedXP, 160);
+
+  const recommendation = getPlayerOfMatchRecommendation({
+    performances: [stronger, cappedRunnerUp],
+    allBowlingOvers: [],
+    result: result({ type: "tie" }),
+    sharedPlayerId: null,
+    matchDate: "2026-09-01"
+  });
+
+  assert.equal(recommendation.recommendedPlayerId, "naim");
+  assert.equal(recommendation.isTie, false);
+  assert.equal(recommendation.leaders[0]?.prePomXP, 205);
+});
+
+test("XP V2 POM recommendation still returns no recommendation for a true raw tie", () => {
+  const recommendation = getPlayerOfMatchRecommendation({
+    performances: [
+      performance({ playerId: "naim", teamId: "teamA", didBat: true, runs: 80 }),
+      performance({ playerId: "dipanjan", teamId: "teamB", didBat: true, runs: 80 })
+    ],
+    allBowlingOvers: [],
+    result: result({ type: "tie" }),
+    sharedPlayerId: null,
+    matchDate: "2026-09-01"
+  });
+
+  assert.equal(recommendation.recommendedPlayerId, null);
+  assert.equal(recommendation.isTie, true);
+});
+
+test("XP V2 Shared Player remains one application with no normal win bonus", () => {
+  const shared = calculateSharedPlayerMatchXP(
+    [
+      performance({ playerId: "aninda", teamId: "teamA", didBat: true, runs: 40 }),
+      performance({ playerId: "aninda", teamId: "teamB", didBat: true, runs: 20 })
+    ],
+    { matchDate: "2026-09-01", result: result() }
+  );
+
+  assert.equal(shared.xpRuleVersion, "v2");
+  assert.equal(shared.participationXP, 20);
+  assert.equal(shared.winBonusXP, 0);
+  assert.equal(shared.battingRunsXP, 30);
+  assert.equal(shared.rawBattingPoints, 30);
+});
+
+test("late finalisation uses matchDate and stores the selected XP version in the ledger", () => {
+  const augustMatch = {
+    ...finalisedMatch([performance({ playerId: "aninda", didBat: true, runs: 160 })]),
+    matchDate: "2026-08-31"
+  };
+  const septemberMatch = {
+    ...finalisedMatch([performance({ playerId: "aninda", didBat: true, runs: 160 })]),
+    id: "match-2",
+    matchDate: "2026-09-01"
+  };
+  const augustState = applyFinalisedMatchToCareerStats(
+    augustMatch,
+    createEmptyCareerProgressionState(),
+    "2026-09-10T12:00:00.000Z"
+  );
+  const septemberState = applyFinalisedMatchToCareerStats(
+    septemberMatch,
+    augustState,
+    "2026-09-10T12:05:00.000Z"
+  );
+
+  assert.equal(
+    augustState.appliedProgressions["match-1:aninda"].xpBreakdown.xpRuleVersion,
+    "v1"
+  );
+  assert.equal(
+    septemberState.appliedProgressions["match-2:aninda"].xpBreakdown.xpRuleVersion,
+    "v2"
+  );
+  assert.equal(augustState.playerCareers.aninda.totalXP, 95);
+  assert.equal(septemberState.playerCareers.aninda.totalXP, 211);
+});
+
 test("approved level curve and cumulative thresholds are used", () => {
   assert.equal(xpNeededToAdvance(0), 150);
   assert.equal(xpNeededToAdvance(1), 210);
@@ -1000,6 +1381,14 @@ test("draft in-progress and no-result matches do not apply permanent career stat
   );
   assert.deepEqual(
     applyFinalisedMatchToCareerStats(noResultMatch, createEmptyCareerProgressionState()),
+    createEmptyCareerProgressionState()
+  );
+
+  assert.deepEqual(
+    applyFinalisedMatchToCareerStats(
+      { ...finalisedMatch([performance()]), isDemo: true },
+      createEmptyCareerProgressionState()
+    ),
     createEmptyCareerProgressionState()
   );
 });

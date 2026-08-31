@@ -328,7 +328,7 @@ export async function POST(request: Request) {
     });
     const result = await auth.repository.finalizeAtomically(plan);
     const finalisedMatchForReadModels = {
-      ...body.match,
+      ...plan.finalMatch,
       isDemo: currentRow.is_demo || body.match.isDemo,
       isDemoTestMatch: currentRow.is_demo && body.match.isDemoTestMatch === true,
       supabaseUpdatedAt: result.statsAppliedAt ?? body.match.supabaseUpdatedAt

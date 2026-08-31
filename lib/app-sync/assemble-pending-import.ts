@@ -256,7 +256,8 @@ function aggregateFinalisedPlayerRecords({
   sharedPlayerId,
   appliedAt,
   finalStatus,
-  playerOfMatchId
+  playerOfMatchId,
+  matchDate
 }: {
   performances: PlayerMatchPerformance[];
   allBowlingOvers: BowlingOver[];
@@ -265,6 +266,7 @@ function aggregateFinalisedPlayerRecords({
   appliedAt: string;
   finalStatus: MatchStatus;
   playerOfMatchId: string | null;
+  matchDate: string;
 }): FinalisedPlayerMatchRecord[] {
   const groupedByPlayerId = new Map<string, PlayerMatchPerformance[]>();
 
@@ -323,11 +325,13 @@ function aggregateFinalisedPlayerRecords({
       xpBreakdown: isSharedPlayerRecord
         ? calculateSharedPlayerMatchXP(playerPerformances, {
             result,
-            overs: playerOvers
+            overs: playerOvers,
+            matchDate
           })
         : calculatePlayerMatchXP(aggregatePerformance, {
             result,
-            overs: playerOvers
+            overs: playerOvers,
+            matchDate
           }),
       progressionAppliedAt:
         finalStatus === "finalised" && result.type !== "no_result"
@@ -615,7 +619,8 @@ export function assemblePendingImportMatch({
     sharedPlayerId,
     appliedAt,
     finalStatus: "finalised",
-    playerOfMatchId
+    playerOfMatchId,
+    matchDate: derivedMatchDate ?? ""
   });
   const derivedMatch: MatchRecord = {
     id: matchId ?? `apk-pending-${payload.offlineMatchId}`,
@@ -648,7 +653,8 @@ export function assemblePendingImportMatch({
     performances,
     allBowlingOvers: [...teamABowlingOvers, ...teamBBowlingOvers],
     result: validation.result,
-    sharedPlayerId
+    sharedPlayerId,
+    matchDate: derivedMatchDate ?? ""
   });
   const validationResult = {
     ok: errors.length === 0,

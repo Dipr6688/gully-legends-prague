@@ -1118,9 +1118,10 @@ export function MockMatchEntryForm({
         performances: performanceList,
         allBowlingOvers,
         result: liveResult,
-        sharedPlayerId
+        sharedPlayerId,
+        matchDate: values.matchDate
       }),
-    [allBowlingOvers, liveResult, performanceList, sharedPlayerId]
+    [allBowlingOvers, liveResult, performanceList, sharedPlayerId, values.matchDate]
   );
   const recordedActivityPlayerIds = useMemo(
     () =>
@@ -2925,7 +2926,8 @@ export function MockMatchEntryForm({
           result,
           overs: allBowlingOvers.filter(
             (over) => over.bowlerId === performance.playerId
-          )
+          ),
+          matchDate: recordValues.matchDate
         }),
         progressionAppliedAt:
           finalStatus === "finalised" && result.type !== "no_result"
@@ -2942,7 +2944,8 @@ export function MockMatchEntryForm({
       result,
       sharedPlayerId: recordSharedPlayerId,
       appliedAt,
-      finalStatus
+      finalStatus,
+      matchDate: recordValues.matchDate
     });
     const teamAMatchData = buildTeamMatchData({
       teamId: "teamA",
@@ -3883,8 +3886,8 @@ export function MockMatchEntryForm({
             teamBName={values.teamBName}
             teamAInningsScore={teamAInningsScore}
             teamBInningsScore={teamBInningsScore}
-            teamAXP={calculateTeamMatchXP(teamAPerformances, liveResult, bowlingOvers.teamA)}
-            teamBXP={calculateTeamMatchXP(teamBPerformances, liveResult, bowlingOvers.teamB)}
+            teamAXP={calculateTeamMatchXP(teamAPerformances, liveResult, bowlingOvers.teamA, values.matchDate)}
+            teamBXP={calculateTeamMatchXP(teamBPerformances, liveResult, bowlingOvers.teamB, values.matchDate)}
             canReopen={canSafelyReopenFinalisedMatch}
           />
         ) : (
@@ -5018,7 +5021,8 @@ function aggregateFinalisedPlayerRecords({
   result,
   sharedPlayerId,
   appliedAt,
-  finalStatus
+  finalStatus,
+  matchDate
 }: {
   performances: PlayerMatchPerformance[];
   allBowlingOvers: BowlingOver[];
@@ -5026,6 +5030,7 @@ function aggregateFinalisedPlayerRecords({
   sharedPlayerId: string | null;
   appliedAt: string;
   finalStatus: MatchStatus;
+  matchDate: string;
 }): FinalisedPlayerMatchRecord[] {
   const groupedByPlayerId = new Map<string, PlayerMatchPerformance[]>();
 
@@ -5083,11 +5088,13 @@ function aggregateFinalisedPlayerRecords({
       xpBreakdown: isSharedPlayerRecord
         ? calculateSharedPlayerMatchXP(playerPerformances, {
             result,
-            overs: playerOvers
+            overs: playerOvers,
+            matchDate
           })
         : calculatePlayerMatchXP(aggregatePerformance, {
             result,
-            overs: playerOvers
+            overs: playerOvers,
+            matchDate
           }),
       progressionAppliedAt:
         finalStatus === "finalised" && result.type !== "no_result"
@@ -5100,7 +5107,8 @@ function aggregateFinalisedPlayerRecords({
 function calculateTeamMatchXP(
   performances: PlayerMatchPerformance[],
   result: MatchResult,
-  bowlingOvers: BowlingOver[]
+  bowlingOvers: BowlingOver[],
+  matchDate: string
 ) {
   return performances.reduce((total, performance) => {
     const playerOvers = bowlingOvers.filter(
@@ -5112,7 +5120,8 @@ function calculateTeamMatchXP(
       calculateMatchXP(performance, {
         result,
         teamWon: isWinningTeam(performance.teamId, result),
-        overs: playerOvers
+        overs: playerOvers,
+        matchDate
       })
     );
   }, 0);

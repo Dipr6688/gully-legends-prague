@@ -1,9 +1,12 @@
 import {
   applyMatchXPWithLevelProtection,
+  calculatePrePomPerformanceScore,
+  calculatePrePomSharedPerformanceScore,
   calculatePlayerMatchXP,
   calculateSharedPlayerMatchXP,
   getLevelFromXP,
-  type XPMatchContext
+  type XPMatchContext,
+  type XPRuleVersion
 } from "./progression";
 import type { CareerProgressionState } from "./career-store";
 import type {
@@ -57,12 +60,16 @@ export function getPlayerOfMatchRecommendation({
   performances,
   allBowlingOvers,
   result,
-  sharedPlayerId
+  sharedPlayerId,
+  matchDate,
+  xpRuleVersion
 }: {
   performances: PlayerMatchPerformance[];
   allBowlingOvers: BowlingOver[];
   result: MatchResult;
   sharedPlayerId: string | null;
+  matchDate?: string;
+  xpRuleVersion?: XPRuleVersion;
 }): PlayerOfMatchRecommendation {
   const groupedByPlayerId = new Map<string, PlayerMatchPerformance[]>();
 
@@ -86,19 +93,22 @@ export function getPlayerOfMatchRecommendation({
       );
       const isSharedPlayer =
         sharedPlayerId === playerId && playerPerformances.length > 1;
+      const context: XPMatchContext = {
+        result,
+        overs: playerOvers,
+        matchDate,
+        xpRuleVersion
+      };
       const xpBreakdown = isSharedPlayer
-        ? calculatePrePomSharedPlayerMatchXP(playerPerformances, {
-            result,
-            overs: playerOvers
-          })
-        : calculatePrePomPlayerMatchXP(playerPerformances[0], {
-            result,
-            overs: playerOvers
-          });
+        ? calculatePrePomSharedPlayerMatchXP(playerPerformances, context)
+        : calculatePrePomPlayerMatchXP(playerPerformances[0], context);
+      const prePomXP = isSharedPlayer
+        ? calculatePrePomSharedPerformanceScore(playerPerformances, context)
+        : calculatePrePomPerformanceScore(playerPerformances[0], context);
 
       return {
         playerId,
-        prePomXP: xpBreakdown.awardedXP,
+        prePomXP,
         xpBreakdown
       };
     })
@@ -138,7 +148,8 @@ function recalculateFinalisedTeamRecords(
   records: FinalisedPlayerMatchRecord[],
   allBowlingOvers: BowlingOver[],
   result: MatchResult,
-  playerOfMatchId: string | null
+  playerOfMatchId: string | null,
+  matchDate: string
 ): FinalisedPlayerMatchRecord[] {
   return records.map((record) => {
     const nextRecord = setPlayerOfMatchFlag(record, playerOfMatchId);
@@ -150,7 +161,8 @@ function recalculateFinalisedTeamRecords(
       ...nextRecord,
       xpBreakdown: calculatePlayerMatchXP(nextRecord, {
         result,
-        overs: playerOvers
+        overs: playerOvers,
+        matchDate
       })
     };
   });
@@ -161,13 +173,15 @@ function aggregateFinalisedRecordsByPlayer({
   allBowlingOvers,
   result,
   sharedPlayerId,
-  playerOfMatchId
+  playerOfMatchId,
+  matchDate
 }: {
   records: FinalisedPlayerMatchRecord[];
   allBowlingOvers: BowlingOver[];
   result: MatchResult;
   sharedPlayerId: string | null;
   playerOfMatchId: string | null;
+  matchDate: string;
 }): FinalisedPlayerMatchRecord[] {
   const groupedByPlayerId = new Map<string, FinalisedPlayerMatchRecord[]>();
 
@@ -209,11 +223,13 @@ function aggregateFinalisedRecordsByPlayer({
       xpBreakdown: isSharedPlayer
         ? calculateSharedPlayerMatchXP(playerRecords, {
             result,
-            overs: playerOvers
+            overs: playerOvers,
+            matchDate
           })
         : calculatePlayerMatchXP(aggregateRecord, {
             result,
-            overs: playerOvers
+            overs: playerOvers,
+            matchDate
           })
     };
   });
@@ -268,20 +284,23 @@ export function applyPlayerOfMatchCorrectionToFinalisedMatch({
     match.teams.teamA.playerPerformances as FinalisedPlayerMatchRecord[],
     allBowlingOvers,
     match.result,
-    nextPlayerOfMatchId
+    nextPlayerOfMatchId,
+    match.matchDate
   );
   const nextTeamBRecords = recalculateFinalisedTeamRecords(
     match.teams.teamB.playerPerformances as FinalisedPlayerMatchRecord[],
     allBowlingOvers,
     match.result,
-    nextPlayerOfMatchId
+    nextPlayerOfMatchId,
+    match.matchDate
   );
   const nextFinalisedPlayerRecords = aggregateFinalisedRecordsByPlayer({
     records: [...nextTeamARecords, ...nextTeamBRecords],
     allBowlingOvers,
     result: match.result,
     sharedPlayerId: match.sharedPlayerId ?? null,
-    playerOfMatchId: nextPlayerOfMatchId
+    playerOfMatchId: nextPlayerOfMatchId,
+    matchDate: match.matchDate
   });
   const nextApplications = { ...currentState.appliedProgressions };
   const nextCareers = { ...currentState.playerCareers };
@@ -302,8 +321,18 @@ export function applyPlayerOfMatchCorrectionToFinalisedMatch({
 
     if (!previousApplication || !nextRecord) continue;
 
+    const playerOfMatchXPDelta =
+      nextRecord.xpBreakdown.playerOfMatchXP -
+      previousApplication.xpBreakdown.playerOfMatchXP;
+    const correctedBreakdown: PlayerMatchXPBreakdown = {
+      ...previousApplication.xpBreakdown,
+      playerOfMatchXP: nextRecord.xpBreakdown.playerOfMatchXP,
+      rawTotalXP:
+        previousApplication.xpBreakdown.rawTotalXP + playerOfMatchXPDelta,
+      awardedXP: nextRecord.xpBreakdown.awardedXP
+    };
     const xpDelta =
-      nextRecord.xpBreakdown.awardedXP - previousApplication.xpBreakdown.awardedXP;
+      correctedBreakdown.awardedXP - previousApplication.xpBreakdown.awardedXP;
     const currentCareer = nextCareers[playerId];
 
     if (currentCareer) {
@@ -322,7 +351,10 @@ export function applyPlayerOfMatchCorrectionToFinalisedMatch({
 
     nextApplications[key] = {
       ...previousApplication,
-      xpBreakdown: nextRecord.xpBreakdown,
+      // Preserve the stored schema exactly. Historical V1 applications may not
+      // carry an explicit version marker, and the protected correction RPC
+      // permits only these three POM-dependent fields to change.
+      xpBreakdown: correctedBreakdown,
       progressionAppliedAt: correctedAt
     };
   }

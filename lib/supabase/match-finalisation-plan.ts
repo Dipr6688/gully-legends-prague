@@ -8,6 +8,7 @@ import {
 } from "@/lib/career-store";
 import type { SupabaseCareerStatsRow, SupabaseMatchStatApplicationRow } from "@/lib/supabase/read-repositories";
 import type { MatchRecord } from "@/lib/types/match";
+import { withAuthoritativeXPBreakdowns } from "@/lib/progression";
 
 export type FinalisationCareerSnapshot = PlayerCareerStats & {
   updatedAt: string;
@@ -89,7 +90,8 @@ export function buildFinalisationPlan({
     throw new Error("Finalisation plan requires a finalised MatchRecord.");
   }
 
-  const playerIds = getPlayedPlayerIds(finalMatch);
+  const authoritativeFinalMatch = withAuthoritativeXPBreakdowns(finalMatch);
+  const playerIds = getPlayedPlayerIds(authoritativeFinalMatch);
   const careerRowsByPlayerId = new Map(careerRows.map((row) => [row.player_id, row]));
   const missingPlayerId = playerIds.find((playerId) => !careerRowsByPlayerId.has(playerId));
 
@@ -110,7 +112,11 @@ export function buildFinalisationPlan({
     };
   }
 
-  const nextState = applyFinalisedMatchToCareerStats(finalMatch, currentState, appliedAt);
+  const nextState = applyFinalisedMatchToCareerStats(
+    authoritativeFinalMatch,
+    currentState,
+    appliedAt
+  );
   const applications = playerIds.map((playerId) => {
     const row = careerRowsByPlayerId.get(playerId);
     const progression = nextState.appliedProgressions[`${finalMatch.id}:${playerId}`];
@@ -133,7 +139,7 @@ export function buildFinalisationPlan({
   return {
     matchId: finalMatch.id,
     expectedMatchUpdatedAt: expectedMatchUpdatedAt ?? null,
-    finalMatch,
+    finalMatch: authoritativeFinalMatch,
     appliedAt,
     finalisationVersion: FINALISATION_VERSION,
     applications

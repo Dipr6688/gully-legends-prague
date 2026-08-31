@@ -484,6 +484,86 @@ test("Fielding Beast uses catches and run-outs, respects the cap, and ignores st
   );
 });
 
+test("September V2 Monthly Beasts use raw category points without general or career caps", () => {
+  const match = matchRecord({
+    id: "september-v2-raw",
+    matchDate: "2026-09-01",
+    records: [
+      record({
+        playerId: "aninda",
+        runs: 160,
+        catches: 8,
+        stumpings: 1,
+        breakdown: xpBreakdown({
+          xpRuleVersion: "v2",
+          participationXP: 20,
+          winBonusXP: 5,
+          playerOfMatchXP: 15,
+          battingRunsXP: 50,
+          battingMilestoneXP: 40,
+          overQualityXP: 30,
+          fieldingXP: 40,
+          rawBattingPoints: 95,
+          rawBowlingPoints: 40,
+          rawFieldingPoints: 56,
+          rawTotalXP: 200,
+          awardedXP: 160
+        })
+      })
+    ]
+  });
+  const performance = match.finalisedPlayerRecords![0];
+
+  assert.equal(
+    getMonthlyBeastCategoryXp({ match, performance, category: "batting" }),
+    95
+  );
+  assert.equal(
+    getMonthlyBeastCategoryXp({ match, performance, category: "bowling" }),
+    40
+  );
+  assert.equal(
+    getMonthlyBeastCategoryXp({ match, performance, category: "fielding" }),
+    56
+  );
+});
+
+test("September V2 raw points still support joint Monthly Beast winners", () => {
+  const match = matchRecord({
+    id: "september-v2-joint",
+    matchDate: "2026-09-12",
+    records: [
+      record({
+        playerId: "aninda",
+        breakdown: xpBreakdown({
+          xpRuleVersion: "v2",
+          battingRunsXP: 50,
+          rawBattingPoints: 60
+        })
+      }),
+      record({
+        playerId: "arunabha",
+        breakdown: xpBreakdown({
+          xpRuleVersion: "v2",
+          battingRunsXP: 45,
+          rawBattingPoints: 60
+        })
+      })
+    ]
+  });
+  const summary = getMonthlyBeastSummary({
+    matches: [match],
+    monthKey: "2026-09",
+    category: "batting"
+  });
+
+  assert.equal(summary.status, "joint-leaders");
+  assert.deepEqual(
+    summary.leaders.map((leader) => leader.playerId),
+    ["aninda", "arunabha"]
+  );
+});
+
 test("Joint leaders share rank one and crowned snapshots preserve all winners", () => {
   const matches = [
     matchRecord({

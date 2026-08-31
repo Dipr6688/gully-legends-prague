@@ -5,7 +5,11 @@ import {
   getLevelFromXP,
   type PlayerProgressionTotals
 } from "./progression";
-import type { MatchRecord, PlayerMatchPerformance } from "./types/match";
+import type {
+  FinalisedPlayerMatchRecord,
+  MatchRecord,
+  PlayerMatchPerformance
+} from "./types/match";
 import type { Player } from "./types/player";
 
 export const CAREER_PROGRESS_STORAGE_KEY = "gully-legends-prague-career-v1";
@@ -111,7 +115,12 @@ export function applyFinalisedMatchToCareerStats(
   currentState: CareerProgressionState = createEmptyCareerProgressionState(),
   appliedAt = new Date().toISOString()
 ): CareerProgressionState {
-  if (match.status !== "finalised" || match.result.type === "no_result") {
+  if (
+    match.status !== "finalised" ||
+    match.result.type === "no_result" ||
+    match.isDemo ||
+    match.isDemoTestMatch
+  ) {
     return currentState;
   }
 
@@ -136,9 +145,11 @@ export function applyFinalisedMatchToCareerStats(
     const playerOvers = allBowlingOvers.filter(
       (over) => over.bowlerId === performance.playerId
     );
-    const xpBreakdown = calculatePlayerMatchXP(performance, {
+    const storedBreakdown = (performance as FinalisedPlayerMatchRecord).xpBreakdown;
+    const xpBreakdown = storedBreakdown ?? calculatePlayerMatchXP(performance, {
       result: match.result,
-      overs: playerOvers
+      overs: playerOvers,
+      matchDate: match.matchDate
     });
     const currentCareer =
       playerCareers[performance.playerId] ??

@@ -10,12 +10,13 @@ import {
   type ReactNode
 } from "react";
 import {
-  calculatePlayerMatchXP,
   cumulativeXPForLevel,
   LEVEL_RULES,
   PLAYER_POWER_RULES,
   RATING_STATUS_RULES,
-  XP_RULES
+  XP_V2_EFFECTIVE_DATE_LABEL,
+  XP_V2_OVER_QUALITY_RULES,
+  XP_V2_RULES
 } from "@/lib/progression";
 import {
   calculateBattingAllocation,
@@ -50,6 +51,7 @@ type FormulaSectionIconProps = {
 };
 
 type FormulaCardProps = {
+  id?: string;
   eyebrow?: string;
   title: string;
   formula?: ReactNode;
@@ -153,6 +155,7 @@ function getResultHeadline(result: MatchResult) {
 }
 
 function FormulaCard({
+  id,
   eyebrow,
   title,
   formula,
@@ -163,7 +166,7 @@ function FormulaCard({
   children
 }: FormulaCardProps) {
   return (
-    <article className={`formula-card formula-card-${accent}`}>
+    <article id={id} className={`formula-card formula-card-${accent}`}>
       <div className="formula-card-header">
         {icon && iconSize ? (
           <FormulaSectionIcon
@@ -368,37 +371,6 @@ function XPEnginePanel() {
     solidAllRound: false,
     strongMatch: false
   });
-  const regularMatch = calculatePlayerMatchXP(
-    makePerformance({ didBat: true, runs: 18, wickets: 1, catches: 1 }),
-    {
-      result: {
-        type: "win_by_runs",
-        winnerTeamId: "teamA",
-        loserTeamId: "teamB",
-        marginRuns: 8
-      }
-    }
-  );
-  const strongMatch = calculatePlayerMatchXP(
-    makePerformance({
-      playerOfMatch: true,
-      didBat: true,
-      runs: 52,
-      wickets: 2,
-      catches: 1
-    }),
-    {
-      result: {
-        type: "win_by_runs",
-        winnerTeamId: "teamA",
-        loserTeamId: "teamB",
-        marginRuns: 18
-      }
-    }
-  );
-  const batting18 = calculatePlayerMatchXP(makePerformance({ didBat: true, runs: 18 }));
-  const batting52 = calculatePlayerMatchXP(makePerformance({ didBat: true, runs: 52 }));
-  const batting100 = calculatePlayerMatchXP(makePerformance({ didBat: true, runs: 100 }));
 
   function toggleExample(id: FormulaExampleId) {
     setOpenExamples((previous) => ({
@@ -414,190 +386,290 @@ function XPEnginePanel() {
       aria-labelledby="xp-engine-tab"
       className="formula-tab-panel"
     >
+      <div className="formula-version-banner">
+        <span>Current rules</span>
+        <div>
+          <strong>XP v2</strong>
+          <p>Applies to matches dated {XP_V2_EFFECTIVE_DATE_LABEL} onward.</p>
+        </div>
+      </div>
+
       <div className="formula-section-intro">
-        <h2>XP Engine</h2>
+        <h2>XP Engine v2</h2>
         <p>
-          Every finalised performance feeds the XP Engine. Draft and in-progress
-          matches never change permanent XP.
+          Play, perform and build your Legend career. Only official, finalised,
+          non-demo matches award career XP. The match date decides which rules apply.
         </p>
       </div>
 
-      <div className="formula-grid three">
-        <RewardCard
-          title="Play the Match"
-          value={formatSignedXP(XP_RULES.participation)}
-          text="Every player marked as Played receives participation XP."
-          accent="purple"
-        />
-        <RewardCard
-          title="Win the Battle"
-          value={formatSignedXP(XP_RULES.winBonus)}
-          text="Every participating player on the winning team receives the win bonus."
-          accent="gold"
-        />
-        <RewardCard
-          title="Rule the Match"
-          value={formatSignedXP(XP_RULES.playerOfMatch)}
-          text="One outstanding player may receive the Player of the Match reward."
-          accent="cyan"
-        />
-      </div>
+      <FormulaCard
+        eyebrow="General XP"
+        title="Show Up. Win. Rule the Match."
+        accent="cyan"
+      >
+        <p>
+          These match rewards sit alongside your batting, bowling and fielding XP.
+          Player of the Match is the official selection recorded when the match is finalised.
+        </p>
+        <div className="formula-grid three">
+          <RewardCard
+            title="Played"
+            value={formatSignedXP(XP_V2_RULES.participation)}
+            text="Awarded once when you play in the official match."
+            accent="purple"
+          />
+          <RewardCard
+            title="Win"
+            value={formatSignedXP(XP_V2_RULES.winBonus)}
+            text="Added for a participating player on the winning team."
+            accent="gold"
+          />
+          <RewardCard
+            title="Official POM"
+            value={formatSignedXP(XP_V2_RULES.playerOfMatch)}
+            text="Added only to the officially selected Player of the Match."
+            accent="cyan"
+          />
+        </div>
+        <p className="formula-note">
+          A Shared Player still receives one career match and one XP award, with no
+          normal win bonus.
+        </p>
+      </FormulaCard>
 
-      <div className="formula-grid two">
+      <div className="formula-grid three">
         <FormulaCard
-          eyebrow="Batting XP"
-          title="Blade Rewards"
+          eyebrow="Batting XP v2"
+          title="Runs Build in Two Gears"
           accent="orange"
           icon={icons.batting}
           iconArtworkScale={FORMULA_ICON_SCALE.batting}
           iconSize="hero"
         >
+          <div className="formula-equation formula-equation-stacked">
+            <span>Completed pairs in the first 60 runs</span>
+            <span>+ completed groups of 4 after 60</span>
+          </div>
           <dl className="formula-rule-list">
-            <div><dt>Every {XP_RULES.runsPerXP} runs</dt><dd>+1 XP</dd></div>
-            <div><dt>Ordinary batting XP cap</dt><dd>{XP_RULES.ordinaryBattingCap} XP</dd></div>
-            <div><dt>50 or more runs</dt><dd>{formatSignedXP(XP_RULES.fiftyBonus)}</dd></div>
-            <div><dt>100 or more runs</dt><dd>{formatSignedXP(XP_RULES.hundredAdditionalBonus)}</dd></div>
-            <div><dt>Out for zero</dt><dd>{formatSignedXP(XP_RULES.duckPenalty)}</dd></div>
+            <div><dt>50+ milestone</dt><dd>{formatSignedXP(XP_V2_RULES.fiftyBonus)}</dd></div>
+            <div><dt>100+ milestone</dt><dd>Another {formatSignedXP(XP_V2_RULES.hundredAdditionalBonus)}</dd></div>
+            <div><dt>Dismissed for zero</dt><dd>{formatSignedXP(XP_V2_RULES.duckPenalty)}</dd></div>
+            <div><dt>Career regular-run safeguard</dt><dd>{XP_V2_RULES.regularBattingCareerCap} XP</dd></div>
           </dl>
           <p>
-            The duck penalty applies only when the player batted, scored zero and
-            was dismissed. Not-out zero and Did Not Bat receive no duck penalty.
-            Extras belong to the team, not to an individual batter.
+            A century earns both milestone bonuses: +15 for passing 50 and another
+            +25 for passing 100. The duck penalty applies only when you batted,
+            scored zero and were dismissed. A not-out zero and Did Not Bat are not ducks.
           </p>
           <div className="formula-mini-examples">
-            <div><strong>18 Runs</strong><span>{batting18.battingRunsXP} XP</span></div>
-            <div>
-              <strong>52 Runs</strong>
-              <span>
-                {batting52.battingRunsXP} run XP + {batting52.battingMilestoneXP} milestone XP ={" "}
-                {batting52.battingRunsXP + batting52.battingMilestoneXP} XP
-              </span>
-            </div>
-            <div>
-              <strong>100 Runs</strong>
-              <span>
-                {batting100.battingRunsXP} run XP + {XP_RULES.fiftyBonus} fifty bonus +{" "}
-                {XP_RULES.hundredAdditionalBonus} century bonus ={" "}
-                {batting100.battingRunsXP + batting100.battingMilestoneXP} XP
-              </span>
-            </div>
+            <div><strong>20 runs</strong><span>10 regular points</span></div>
+            <div><strong>80 runs</strong><span>35 regular + 15 milestone = 50</span></div>
+            <div><strong>100 runs</strong><span>40 regular + 40 milestones = 80</span></div>
+          </div>
+          <p className="formula-note">
+            For Monthly Beast, regular run points keep growing beyond the career
+            safeguard. Example: 160 runs gives 95 raw Batting Beast points, but 90
+            career batting XP.
+          </p>
+        </FormulaCard>
+
+        <FormulaCard
+          eyebrow="Fielding XP v2"
+          title="Every Clean Chance Counts"
+          accent="green"
+          icon={icons.fielding}
+          iconArtworkScale={FORMULA_ICON_SCALE.fielding}
+          iconSize="hero"
+        >
+          <dl className="formula-rule-list">
+            <div><dt>Catch</dt><dd>{formatSignedXP(XP_V2_RULES.catch)}</dd></div>
+            <div><dt>Run-out</dt><dd>{formatSignedXP(XP_V2_RULES.runOut)}</dd></div>
+            <div><dt>Stumping</dt><dd>{formatSignedXP(XP_V2_RULES.stumping)}</dd></div>
+            <div><dt>Career fielding safeguard</dt><dd>{XP_V2_RULES.fieldingCareerCap} XP</dd></div>
+          </dl>
+          <p>
+            Career fielding XP is capped at 40 in one match. Raw Fielding Beast
+            points are not capped, so every catch, run-out and stumping still counts
+            in the monthly race.
+          </p>
+          <p>
+            On the scorecard, a catch records +1 catch for the fielder and a
+            stumping records +1 stumping for the keeper. Both also credit the bowler&apos;s wicket.
+          </p>
+          <div className="formula-score-example">
+            <span>4 catches = 24 points</span>
+            <span>2 run-outs = 16 points</span>
+            <strong>40 career XP and 40 raw Fielding Beast points</strong>
           </div>
         </FormulaCard>
 
         <FormulaCard
-          eyebrow="Bowling XP"
-          title="Delivery Rewards"
+          eyebrow="Career match XP"
+          title="Your Final Match Award"
           accent="purple"
-          icon={icons.bowling}
-          iconArtworkScale={FORMULA_ICON_SCALE.bowling}
-          iconSize="hero"
         >
-          <dl className="formula-rule-list">
-            <div><dt>Bowler-credited wicket</dt><dd>{formatSignedXP(XP_RULES.wicket)}</dd></div>
-            <div><dt>Hat-trick</dt><dd>{formatSignedXP(XP_RULES.hatTrick)}</dd></div>
-            <div><dt>Maiden over</dt><dd>{formatSignedXP(XP_RULES.maiden)}</dd></div>
-            <div><dt>Run-out</dt><dd>No wicket XP for the bowler</dd></div>
-          </dl>
-          <p>Bowled, LBW, caught, stumped and other bowler-credited dismissals credit the bowler. A run-out dismisses the batter but does not credit the bowler.</p>
-          <div className="formula-damage-box">
-            <h4>Over Damage Penalties</h4>
-            <span>21-24 runs: {formatSignedXP(XP_RULES.expensiveOver.twentyOneToTwentyFour)}</span>
-            <span>25-29 runs: {formatSignedXP(XP_RULES.expensiveOver.twentyFiveToTwentyNine)}</span>
-            <span>30 or more: {formatSignedXP(XP_RULES.expensiveOver.thirtyOrMore)}</span>
-            <strong>Match floor: {XP_RULES.expensiveOver.matchPenaltyFloor} XP</strong>
-            <p>Each completed over is assessed separately. The cap keeps one difficult spell from destroying long-term progress.</p>
+          <div className="formula-equation formula-equation-stacked">
+            <span>Played + Win + Official POM</span>
+            <span>+ Career Batting + Bowling + Fielding XP</span>
           </div>
+          <p>
+            Category safeguards are applied first, then the complete career award
+            is kept inside the match range.
+          </p>
+          <div className="formula-range-compact">
+            <strong>{XP_V2_RULES.minimumMatchXP}</strong>
+            <span>to</span>
+            <strong>+{XP_V2_RULES.maximumMatchXP}</strong>
+          </div>
+          <p>
+            Negative over quality and a dismissed duck can pull a tough match down,
+            but no career match awards less than -15 XP. A monster performance can
+            award no more than +160 career XP.
+          </p>
         </FormulaCard>
       </div>
 
       <FormulaCard
-        eyebrow="Fielding XP"
-        title="Fielding Rewards"
-        accent="green"
-        icon={icons.fielding}
-        iconArtworkScale={FORMULA_ICON_SCALE.fielding}
+        eyebrow="Bowling XP v2"
+        title="Every Completed Over Has a Quality Score"
+        accent="purple"
+        icon={icons.bowling}
+        iconArtworkScale={FORMULA_ICON_SCALE.bowling}
         iconSize="hero"
       >
-        <dl className="formula-rule-list four">
-          <div><dt>Catch</dt><dd>{formatSignedXP(XP_RULES.catch)}</dd></div>
-          <div><dt>Run-out</dt><dd>{formatSignedXP(XP_RULES.runOut)}</dd></div>
-          <div><dt>Stumping</dt><dd>{formatSignedXP(XP_RULES.stumping)}</dd></div>
-          <div><dt>Combined fielding cap</dt><dd>{XP_RULES.fieldingCap} XP</dd></div>
-        </dl>
-        <div className="formula-credit-grid">
-          <CreditCard title="Caught" bowler="+1 wicket and wicket XP" fielder="+1 catch and catch XP" innings="+1 wicket" />
-          <CreditCard title="Run-out" bowler="No wicket" fielder="+1 run-out and run-out XP" innings="+1 wicket" />
-          <CreditCard title="Stumped" bowler="+1 wicket and wicket XP" fielder="+1 stumping and stumping XP" innings="+1 wicket" />
+        <div className="formula-grid two">
+          <div>
+            <dl className="formula-rule-list">
+              <div><dt>Bowler-credited wicket</dt><dd>{formatSignedXP(XP_V2_RULES.wicket)}</dd></div>
+              <div><dt>Hat-trick</dt><dd>Additional {formatSignedXP(XP_V2_RULES.hatTrick)}</dd></div>
+              <div><dt>Run-out</dt><dd>No wicket XP for the bowler</dd></div>
+              <div><dt>Positive over-quality career cap</dt><dd>+{XP_V2_RULES.positiveOverQualityCareerCap}</dd></div>
+              <div><dt>Negative over-quality career floor</dt><dd>{XP_V2_RULES.negativeOverQualityCareerFloor}</dd></div>
+            </dl>
+            <p>
+              Wickets and hat-tricks stack with over quality. Only a completed
+              six-legal-ball over earns a quality score. An incomplete over earns none.
+            </p>
+            <p className="formula-note">
+              A 0-run over is the maiden reward: +10 once. There is no separate
+              maiden bonus in v2. Existing wide and no-ball scoring stays unchanged.
+            </p>
+          </div>
+          <div className="formula-over-table" role="table" aria-label="Bowling over quality points">
+            <div className="formula-over-table-heading" role="row">
+              <strong role="columnheader">Runs in completed over</strong>
+              <strong role="columnheader">Quality points</strong>
+            </div>
+            {XP_V2_OVER_QUALITY_RULES.map(({ label, points }) => (
+              <div key={label} role="row">
+                <span role="cell">{label}</span>
+                <strong role="cell" className={points < 0 ? "negative" : ""}>
+                  {points > 0 ? `+${points}` : points}
+                </strong>
+              </div>
+            ))}
+          </div>
         </div>
+        <p>
+          Career bowling XP uses wickets + hat-tricks + capped positive quality
+          points + protected negative quality points. Raw Bowling Beast points use
+          the same ingredients with no +30 or -20 over-quality limits.
+        </p>
       </FormulaCard>
 
-      <div id="monthly-beasts">
+      <div className="formula-grid two">
         <FormulaCard
-          eyebrow="Monthly Beasts"
-          title="How Beast Crowns Are Decided"
+          id="monthly-beasts"
+          eyebrow="Monthly Beast raw category points"
+          title="The Monthly Race Has No Career Caps"
           accent="gold"
         >
           <dl className="formula-rule-list">
-            <div><dt>Batting Beast</dt><dd>Monthly batting XP</dd></div>
-            <div><dt>Bowling Beast</dt><dd>Monthly bowling XP</dd></div>
-            <div>
-              <dt>Fielding Beast</dt>
-              <dd>Catches and run-out XP</dd>
-            </div>
+            <div><dt>Batting Beast</dt><dd>Raw batting points</dd></div>
+            <div><dt>Bowling Beast</dt><dd>Raw bowling points</dd></div>
+            <div><dt>Fielding Beast</dt><dd>Raw fielding points</dd></div>
           </dl>
           <p>
-            Only successfully finalised matches count. Participation, win bonus
-            and Player of the Match XP do not count toward Beast crowns.
+            Each category adds the player&apos;s raw performance points from eligible
+            finalised matches in that calendar month. Career category safeguards
+            and the overall +160 match cap do not reduce Beast points.
           </p>
           <p>
-            Equal category XP creates joint leaders, and crowned months store
-            those winners as official snapshots.
+            Participation, win bonus and Player of the Match XP do not count toward
+            Beast crowns. Total career XP does not count either. Equal category
+            totals create joint winners.
           </p>
         </FormulaCard>
-      </div>
 
-      <div className="formula-range-panel">
-        <h3>Match XP Range</h3>
-        <div><strong>{XP_RULES.minimumMatchXP} Minimum</strong><strong>+{XP_RULES.maximumMatchXP} Maximum</strong></div>
-        <p>
-          Exceptional performances receive major rewards, but the match cap keeps
-          progression balanced. Penalties can reduce XP progress, but they can
-          never remove an achieved Level.
-        </p>
+        <FormulaCard
+          eyebrow="Career XP vs Beast Points"
+          title="Two Scores, Two Jobs"
+          accent="cyan"
+        >
+          <div className="formula-compare-grid">
+            <div>
+              <strong>Career XP</strong>
+              <p>Builds your Level and uses category safeguards plus the -15 to +160 match range.</p>
+            </div>
+            <div>
+              <strong>Beast Points</strong>
+              <p>Ranks one monthly category and keeps that category&apos;s raw performance uncapped.</p>
+            </div>
+          </div>
+          <p className="formula-note">
+            Example: 7 catches are worth 42 raw Fielding Beast points. The same
+            performance contributes 40 fielding XP to the career match calculation.
+          </p>
+        </FormulaCard>
       </div>
 
       <div className="formula-grid two">
         <XPReceipt
           id="solidAllRound"
-          title="Solid All-Round Match"
+          title="Solid All-Round v2 Match"
           rows={[
-            ["Played", regularMatch.participationXP],
-            ["Team won", regularMatch.winBonusXP],
-            ["18 runs", regularMatch.battingRunsXP],
-            ["1 wicket", regularMatch.wicketXP],
-            ["1 catch", regularMatch.fieldingXP]
+            ["Played", 20],
+            ["Team won", 5],
+            ["18 runs", 9],
+            ["1 wicket", 10],
+            ["1-3 run completed over", 6],
+            ["1 catch", 6]
           ]}
-          total={regularMatch.awardedXP}
+          total={56}
           isOpen={openExamples.solidAllRound}
           onToggle={toggleExample}
         />
         <XPReceipt
           id="strongMatch"
-          title="Strong Match"
+          title="Strong v2 Match"
           rows={[
-            ["Played", strongMatch.participationXP],
-            ["Team won", strongMatch.winBonusXP],
-            ["Player of the Match", strongMatch.playerOfMatchXP],
-            ["52 runs", strongMatch.battingRunsXP],
-            ["50-run milestone", strongMatch.battingMilestoneXP],
-            ["2 wickets", strongMatch.wicketXP],
-            ["1 catch", strongMatch.fieldingXP]
+            ["Played", 20],
+            ["Team won", 5],
+            ["Official Player of the Match", 15],
+            ["52 run points", 26],
+            ["50+ milestone", 15],
+            ["2 wickets", 20],
+            ["0-run over", 10],
+            ["4-6 run over", 3],
+            ["1 catch", 6]
           ]}
-          total={strongMatch.awardedXP}
+          total={120}
           isOpen={openExamples.strongMatch}
           onToggle={toggleExample}
         />
       </div>
+
+      <FormulaCard
+        eyebrow="Historical transparency"
+        title="Earlier Matches Keep Their Original Rules"
+        accent="orange"
+      >
+        <p>
+          Matches dated before {XP_V2_EFFECTIVE_DATE_LABEL} remain on the original XP
+          rules. They are not recalculated. Matches dated {XP_V2_EFFECTIVE_DATE_LABEL} or
+          later use XP v2, even if an older match is corrected or finalised later.
+        </p>
+      </FormulaCard>
     </section>
   );
 }
