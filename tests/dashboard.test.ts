@@ -1795,6 +1795,43 @@ test("Scorecard page renders read-only cricket tables and no editing controls", 
   );
 });
 
+test("Scorecard mobile layout keeps batting and bowling rows compact", () => {
+  const css = cssSource();
+
+  assert.match(
+    css,
+    /@media \(max-width:\s*640px\)[\s\S]*?main > div\[class\*="max-w-"\],[\s\S]*?main > section\[class\*="max-w-"\]\s*{[\s\S]*?width:\s*100%/
+  );
+  assert.match(
+    css,
+    /@media \(max-width:\s*640px\)[\s\S]*?\.scorecard-batting-table tr\s*{[\s\S]*?grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/
+  );
+  assert.match(
+    css,
+    /@media \(max-width:\s*640px\)[\s\S]*?\.scorecard-bowling-table tr\s*{[\s\S]*?grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/
+  );
+  assert.match(
+    css,
+    /\.scorecard-batting-table td:nth-child\(1\),[\s\S]*?\.scorecard-bowling-table td:nth-child\(1\)\s*{[\s\S]*?grid-column:\s*1 \/ -1/
+  );
+  assert.match(
+    css,
+    /\.scorecard-batting-table td:nth-child\(n \+ 3\),[\s\S]*?\.scorecard-bowling-table td:nth-child\(n \+ 2\)\s*{[\s\S]*?justify-items:\s*center/
+  );
+  assert.match(
+    css,
+    /\.scorecard-batting-table td:nth-child\(1\)::before,[\s\S]*?\.scorecard-bowling-table td:nth-child\(1\)::before\s*{[\s\S]*?content:\s*none/
+  );
+  assert.doesNotMatch(
+    css,
+    /\.scorecard-batting-table td:nth-child\(1\)::before\s*{[\s\S]*?content:\s*"Batter"/
+  );
+  assert.doesNotMatch(
+    css,
+    /\.scorecard-bowling-table td:nth-child\(1\)::before\s*{[\s\S]*?content:\s*"Bowler"/
+  );
+});
+
 test("Dashboard Recent Matches is capped at the latest finalised archive match", () => {
   const summary = getDashboardSummary({
     matches: [

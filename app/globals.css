@@ -10995,6 +10995,18 @@ textarea {
 }
 
 @media (max-width: 640px) {
+  main,
+  main > div,
+  main > section {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  main > div[class*="max-w-"],
+  main > section[class*="max-w-"] {
+    width: 100%;
+  }
+
   .comic-title {
     display: block;
     width: 100%;
@@ -11228,10 +11240,12 @@ textarea {
   }
 
   .scorecard-table tr {
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(70, 223, 255, 0.18);
     border-radius: 9px;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 8px;
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.045), rgba(0, 0, 0, 0.18)),
+      rgba(0, 0, 0, 0.22);
+    padding: 10px;
   }
 
   .scorecard-table tr + tr {
@@ -11242,20 +11256,12 @@ textarea {
     display: grid;
     grid-template-columns: 1fr;
     align-items: start;
-    gap: 3px;
+    gap: 4px;
     border-bottom: 0;
     padding: 6px 0;
     text-align: left;
     overflow-wrap: anywhere;
     white-space: normal;
-  }
-
-  .scorecard-batting-table td:nth-child(1)::before {
-    content: "Batter";
-  }
-
-  .scorecard-batting-table td:nth-child(2)::before {
-    content: "Dismissal";
   }
 
   .scorecard-batting-table td:nth-child(3)::before {
@@ -11278,35 +11284,82 @@ textarea {
     content: "SR";
   }
 
-  .scorecard-bowling-table td:nth-child(1)::before {
-    content: "Bowler";
-  }
-
   .scorecard-bowling-table td:nth-child(2)::before {
-    content: "Overs";
+    content: "O";
   }
 
   .scorecard-bowling-table td:nth-child(3)::before {
-    content: "Maidens";
+    content: "M";
   }
 
   .scorecard-bowling-table td:nth-child(4)::before {
-    content: "Runs";
+    content: "R";
   }
 
   .scorecard-bowling-table td:nth-child(5)::before {
-    content: "Wickets";
+    content: "W";
   }
 
   .scorecard-bowling-table td:nth-child(6)::before {
-    content: "Economy";
+    content: "ECO";
+  }
+
+  .scorecard-batting-table tr {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    column-gap: 8px;
+    row-gap: 2px;
+  }
+
+  .scorecard-bowling-table tr {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    column-gap: 8px;
+    row-gap: 2px;
+  }
+
+  .scorecard-batting-table td:nth-child(1),
+  .scorecard-batting-table td:nth-child(2),
+  .scorecard-bowling-table td:nth-child(1) {
+    grid-column: 1 / -1;
+  }
+
+  .scorecard-batting-table td:nth-child(1),
+  .scorecard-bowling-table td:nth-child(1) {
+    padding-bottom: 2px;
+  }
+
+  .scorecard-batting-table td:nth-child(2) {
+    padding-top: 0;
+    padding-bottom: 8px;
+  }
+
+  .scorecard-batting-table td:nth-child(n + 3),
+  .scorecard-bowling-table td:nth-child(n + 2) {
+    justify-items: center;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.045);
+    padding: 7px 3px;
+    text-align: center;
+  }
+
+  .scorecard-batting-table td:nth-child(n + 3) .scorecard-cell-value,
+  .scorecard-bowling-table td:nth-child(n + 2) .scorecard-cell-value {
+    justify-self: center;
+    text-align: center;
+  }
+
+  .scorecard-batting-table td:nth-child(1)::before,
+  .scorecard-batting-table td:nth-child(2)::before,
+  .scorecard-bowling-table td:nth-child(1)::before {
+    content: none;
   }
 
   .scorecard-table td::before {
     color: #46dfff;
     font-size: 0.68rem;
     font-weight: 950;
-    text-align: left;
+    text-align: center;
     text-transform: uppercase;
   }
 
@@ -11323,8 +11376,17 @@ textarea {
 
   .scorecard-table td:first-child .scorecard-cell-value {
     color: #fff5d8;
+    font-size: 1rem;
     font-weight: 950;
     text-transform: uppercase;
+  }
+
+  .scorecard-batting-table td:nth-child(2) .scorecard-cell-value {
+    color: #d8d2c0;
+    font-size: 0.84rem;
+    font-weight: 800;
+    line-height: 1.35;
+    text-transform: none;
   }
 
   .scorecard-total-strip,
