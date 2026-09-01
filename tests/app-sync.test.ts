@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import {
   getPragueMatchDateFromTimestamp,
   isValidIsoCalendarDate
 } from "../lib/app-sync/prague-date";
+import { describeApkFinaliseError } from "../lib/supabase/apk-import-repository";
 import { buildBowlingFigures } from "../lib/match-scorecard";
 import { calculateCompletedBowlingOvers } from "../lib/match-records";
 import { XP_RULES, calculateSharedPlayerMatchXP } from "../lib/progression";
@@ -419,11 +420,19 @@ test("app-sync login route preserves safe failure categories and refresh flow re
   assert.match(refreshRoute, /ADMIN ACCESS REQUIRED/);
 });
 
-test("APK login sends adminId and does not embed Admin email or credentials", () => {
-  const apkIndex = readFileSync(
-    "../apk-integration/GullyLegendsArena-source/app/src/main/assets/index.html",
-    "utf8"
-  );
+const APK_SOURCE_INDEX_PATH =
+  process.env.APK_SOURCE_INDEX_PATH ??
+  "../apk-integration/GullyLegendsArena-source/app/src/main/assets/index.html";
+
+test("APK login sends adminId and does not embed Admin email or credentials", (t) => {
+  if (!existsSync(APK_SOURCE_INDEX_PATH)) {
+    t.skip(
+      "APK source not checked out at " + APK_SOURCE_INDEX_PATH + " - set APK_SOURCE_INDEX_PATH to run this check"
+    );
+    return;
+  }
+
+  const apkIndex = readFileSync(APK_SOURCE_INDEX_PATH, "utf8");
   const loginFunction = apkIndex.match(
     /function doLogin\(adminId,password\)\{([\s\S]*?)\n\}/
   )?.[0] ?? "";
@@ -1134,4 +1143,46 @@ test("website-created Demo Test Match finalisation is server-blocked", () => {
 
   assert.match(finaliseRoute, /currentRow\.is_demo && currentRow\.status !== "finalised"/);
   assert.doesNotMatch(finaliseRoute, /!isDemoTestMatchPayload\(currentPayload\.match\)/);
+});
+
+test("APK finalise surfaces the real Supabase refusal instead of a generic banner", () => {
+  const sameDay = describeApkFinaliseError({ message: "same_day_pending" });
+
+  assert.equal(sameDay.code, "same_day_pending");
+  assert.match(sameDay.message, /EARLIER MATCH FROM THE SAME DAY/);
+
+  const crowned = describeApkFinaliseError({
+    message: 'error returned from database: month_already_crowned'
+  });
+
+  assert.equal(crowned.code, "not_allowed");
+  assert.match(crowned.message, /ALREADY CROWNED/);
+
+  const notPending = describeApkFinaliseError({
+    message: "apk_import_not_pending_review"
+  });
+
+  assert.equal(notPending.code, "not_allowed");
+  assert.match(notPending.message, /NO LONGER PENDING REVIEW/);
+
+  const duplicate = describeApkFinaliseError({
+    message: 'duplicate key value violates unique constraint "matches_pkey"',
+    code: "23505"
+  });
+
+  assert.equal(duplicate.code, "conflict");
+  assert.match(duplicate.message, /ALREADY EXISTS/);
+});
+
+test("unmapped APK finalise failures keep the underlying Supabase message", () => {
+  const unknown = describeApkFinaliseError({
+    message: "permission denied for table player_career_stats"
+  });
+
+  assert.equal(unknown.code, "write_failed");
+  assert.match(unknown.message, /permission denied for table player_career_stats/);
+
+  const empty = describeApkFinaliseError({ message: "" });
+
+  assert.equal(empty.message, "COULD NOT FINALISE APK IMPORT");
 });

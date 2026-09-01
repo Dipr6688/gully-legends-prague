@@ -129,7 +129,10 @@ function parseUpsertResult(value: unknown): ApkImportUpsertResult {
 
 function parseFinalisationResult(value: unknown): ApkImportFinalisationResult {
   if (!isRecord(value)) {
-    throw new SupabaseApkImportError("COULD NOT FINALISE APK IMPORT", "write_failed");
+    throw new SupabaseApkImportError(
+      "COULD NOT READ THE FINALISATION RESULT RETURNED BY SUPABASE",
+      "write_failed"
+    );
   }
 
   const matchNumber =
@@ -190,6 +193,162 @@ function sortImportChronology(left: ApkMatchImport, right: ApkMatchImport): numb
   if (leftEnd !== rightEnd) return leftEnd - rightEnd;
 
   return left.offlineMatchId.localeCompare(right.offlineMatchId);
+}
+
+type ApkFinaliseFailure = {
+  code: SupabaseApkImportError["code"];
+  message: string;
+};
+
+/**
+ * finalize_apk_import_atomic and finalize_match_atomic signal every refusal with
+ * "raise exception '<reason>'". PostgREST surfaces that reason verbatim as the
+ * error message, so map the known reasons onto Admin-readable copy instead of
+ * collapsing every failure into one opaque banner.
+ */
+const APK_FINALISE_FAILURES: Record<string, ApkFinaliseFailure> = {
+  not_admin: {
+    code: "not_allowed",
+    message: "ADMIN ACCESS IS REQUIRED TO FINALISE APK IMPORTS"
+  },
+  apk_import_not_found: {
+    code: "not_found",
+    message: "APK IMPORT NOT FOUND"
+  },
+  apk_import_not_pending_review: {
+    code: "not_allowed",
+    message: "THIS APK IMPORT IS NO LONGER PENDING REVIEW - RELOAD TO SEE ITS CURRENT STATUS"
+  },
+  apk_import_finalised_link_conflict: {
+    code: "conflict",
+    message: "THIS APK IMPORT IS ALREADY LINKED TO A FINALISED MATCH"
+  },
+  invalid_finalised_apk_import: {
+    code: "conflict",
+    message:
+      "THIS APK IMPORT IS MARKED FINALISED BUT ITS MATCH IS INCOMPLETE - CHECK THE LINKED MATCH BEFORE RETRYING"
+  },
+  demo_apk_import_not_allowed: {
+    code: "not_allowed",
+    message: "DEMO APK IMPORTS CANNOT CREATE OFFICIAL MATCHES"
+  },
+  demo_final_match_not_allowed: {
+    code: "not_allowed",
+    message: "DEMO APK IMPORTS CANNOT CREATE OFFICIAL MATCHES"
+  },
+  same_day_pending: {
+    code: "same_day_pending",
+    message:
+      "AN EARLIER MATCH FROM THE SAME DAY IS STILL PENDING REVIEW - FINALISE OR REJECT THAT MATCH FIRST"
+  },
+  month_already_crowned: {
+    code: "not_allowed",
+    message:
+      "THIS MONTH'S BEASTS ARE ALREADY CROWNED - REOPEN THE MONTH BEFORE FINALISING A MATCH FROM IT"
+  },
+  missing_match_id: {
+    code: "invalid_request",
+    message: "FINALISATION PLAN IS MISSING A MATCH ID"
+  },
+  missing_match_date: {
+    code: "invalid_request",
+    message: "MATCH DATE IS MISSING FROM THE DERIVED MATCH"
+  },
+  invalid_final_match_payload: {
+    code: "invalid_request",
+    message: "DERIVED MATCH PAYLOAD IS INVALID"
+  },
+  payload_match_id_mismatch: {
+    code: "invalid_request",
+    message: "DERIVED MATCH ID DOES NOT MATCH THE FINALISATION PLAN"
+  },
+  payload_not_finalised: {
+    code: "invalid_request",
+    message: "DERIVED MATCH IS NOT IN A FINALISED STATE"
+  },
+  match_not_found: {
+    code: "not_found",
+    message: "THE MATCH ROW DISAPPEARED DURING FINALISATION"
+  },
+  match_deleted: {
+    code: "conflict",
+    message: "THE TARGET MATCH HAS BEEN DELETED"
+  },
+  invalid_match_state: {
+    code: "conflict",
+    message: "THE TARGET MATCH IS NOT IN A FINALISABLE STATE"
+  },
+  stale_match: {
+    code: "conflict",
+    message: "THE MATCH CHANGED WHILE FINALISING - RELOAD AND TRY AGAIN"
+  },
+  stale_career: {
+    code: "conflict",
+    message: "PLAYER CAREER STATS CHANGED WHILE FINALISING - RELOAD AND TRY AGAIN"
+  },
+  career_missing: {
+    code: "write_failed",
+    message: "A PLAYER IN THIS MATCH HAS NO CAREER STATS ROW IN SUPABASE"
+  },
+  application_player_not_rostered: {
+    code: "write_failed",
+    message: "A PLAYER IN THIS MATCH IS NOT LISTED IN EITHER TEAM ON THE SAVED MATCH"
+  },
+  application_player_not_in_match: {
+    code: "write_failed",
+    message: "A PLANNED PLAYER UPDATE DOES NOT MATCH ANY PLAYER WHO PLAYED"
+  },
+  application_player_count_mismatch: {
+    code: "write_failed",
+    message: "PLAYER COUNT IN THE FINALISATION PLAN DOES NOT MATCH THE MATCH RECORD"
+  },
+  missing_played_player_application: {
+    code: "write_failed",
+    message: "A PLAYER WHO PLAYED IS MISSING FROM THE FINALISATION PLAN"
+  },
+  already_applied_conflict: {
+    code: "conflict",
+    message: "THIS MATCH WAS ALREADY APPLIED WITH DIFFERENT STATS"
+  },
+  already_applied_incomplete: {
+    code: "conflict",
+    message: "A PREVIOUS FINALISATION OF THIS MATCH DID NOT COMPLETE"
+  },
+  already_applied_payload_mismatch: {
+    code: "conflict",
+    message: "THIS MATCH WAS ALREADY APPLIED FROM A DIFFERENT PAYLOAD"
+  }
+};
+
+const POSTGRES_UNIQUE_VIOLATION = "23505";
+
+export function describeApkFinaliseError(error: SupabaseErrorLike): SupabaseApkImportError {
+  const rawMessage = (error.message ?? "").trim();
+  const directMatch = APK_FINALISE_FAILURES[rawMessage];
+
+  if (directMatch) {
+    return new SupabaseApkImportError(directMatch.message, directMatch.code);
+  }
+
+  for (const [reason, failure] of Object.entries(APK_FINALISE_FAILURES)) {
+    if (rawMessage.includes(reason)) {
+      return new SupabaseApkImportError(failure.message, failure.code);
+    }
+  }
+
+  if (error.code === POSTGRES_UNIQUE_VIOLATION) {
+    return new SupabaseApkImportError(
+      "A MATCH ROW FOR THIS APK IMPORT ALREADY EXISTS - " + rawMessage,
+      "conflict"
+    );
+  }
+
+  return new SupabaseApkImportError(
+    rawMessage
+      ? "COULD NOT FINALISE APK IMPORT - " + rawMessage
+      : "COULD NOT FINALISE APK IMPORT",
+    "write_failed"
+  );
 }
 
 export class SupabaseApkImportRepository {
@@ -394,17 +553,7 @@ export class SupabaseApkImportRepository {
     };
 
     if (error) {
-      const code = error.message.includes("same_day_pending")
-        ? "same_day_pending"
-        : error.message.includes("demo")
-          ? "not_allowed"
-          : error.message.includes("not_found")
-            ? "not_found"
-            : error.message.includes("not_pending")
-              ? "not_allowed"
-              : "write_failed";
-
-      throw new SupabaseApkImportError("COULD NOT FINALISE APK IMPORT", code);
+      throw describeApkFinaliseError(error);
     }
 
     return parseFinalisationResult(data);
