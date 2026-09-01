@@ -3167,3 +3167,20 @@ test("Dashboard Top Performer spotlight CSS is scoped and responsive", () => {
   assert.match(css, /\.top-performer-card:hover[\s\S]*?transform:\s*translateY\(-4px\)/);
   assert.match(css, /@media \(max-width:\s*760px\)[\s\S]*?\.top-performer-grid\s*{[\s\S]*?grid-template-columns:\s*1fr/);
 });
+
+test("lower dashboard background reuses the existing arena image without dead 404 assets", () => {
+  const dashboardPage = readFileSync("app/page.tsx", "utf8");
+  const hero = heroSectionSource();
+  const css = cssSource();
+
+  assert.match(dashboardPage, /<section className="lower-dashboard-bg">/);
+  assert.match(hero, /src="\/backgrounds\/prague-gully-arena\.png"/);
+  assert.match(css, /\.lower-dashboard-bg\s*{[\s\S]*?url\("\/backgrounds\/prague-gully-arena\.png"\)/);
+  assert.doesNotMatch(css, /prague-gully-bottom\.png/);
+  assert.match(css, /\.lower-dashboard-bg\s*{[\s\S]*?background-position:[\s\S]*?50% 72%/);
+  assert.match(css, /\.lower-dashboard-bg\s*{[\s\S]*?background-size:[\s\S]*?max\(1500px,\s*125vw\) auto/);
+  assert.match(css, /\.lower-dashboard-bg::after\s*{[\s\S]*?linear-gradient\(180deg/);
+  assert.match(css, /\.dashboard-layout\s*{[\s\S]*?display:\s*grid/);
+  assert.match(css, /@media \(min-width:\s*1024px\)[\s\S]*?\.dashboard-layout\s*{[\s\S]*?grid-template-columns:\s*minmax\(285px,\s*315px\) minmax\(0,\s*1fr\)/);
+  assert.match(css, /@media \(max-width:\s*1279px\)[\s\S]*?\.mobile-navigation\s*{[\s\S]*?display:\s*block/);
+});
