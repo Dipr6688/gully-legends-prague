@@ -5206,6 +5206,229 @@ textarea {
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+@media (min-width: 1024px) {
+  .hero-controls-grid {
+    box-sizing: border-box;
+    width: 100%;
+    padding-left: clamp(200px, 20vw, 320px);
+    grid-template-columns: minmax(195px, 245px) minmax(0, 1fr) minmax(360px, 560px);
+  }
+
+  .hero-controls-grid .weekend-weather-card {
+    grid-column: 1;
+    align-self: end;
+    justify-self: start;
+  }
+
+  .hero-controls-grid > :last-child {
+    grid-column: 3;
+    justify-self: end;
+  }
+}
+
+@media (min-width: 1440px) {
+  .hero-controls-grid {
+    padding-left: clamp(260px, 21vw, 360px);
+    grid-template-columns: minmax(205px, 250px) minmax(0, 1fr) minmax(420px, 560px);
+  }
+}
+
+.weekend-weather-card {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(247, 199, 52, 0.44);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(247, 199, 52, 0.14), transparent 10rem),
+    radial-gradient(circle at 90% 8%, rgba(70, 223, 255, 0.12), transparent 9rem),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.06), transparent 38%),
+    rgba(4, 7, 12, 0.92);
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+  padding: 12px;
+  box-shadow:
+    0 16px 30px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.weekend-weather-card::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background-image:
+    repeating-linear-gradient(
+      -24deg,
+      rgba(255, 255, 255, 0.05) 0,
+      rgba(255, 255, 255, 0.05) 1px,
+      transparent 1px,
+      transparent 10px
+    );
+  opacity: 0.14;
+}
+
+.weekend-weather-header,
+.weekend-weather-days,
+.weekend-weather-day,
+.weekend-weather-values {
+  position: relative;
+  min-width: 0;
+}
+
+.weekend-weather-header {
+  display: grid;
+  gap: 2px;
+}
+
+.weekend-weather-header span,
+.weekend-weather-day-title span,
+.weekend-weather-day-title b,
+.weekend-weather-day-title em,
+.weekend-weather-values span,
+.weekend-weather-summary,
+.weekend-weather-fallback {
+  font-family: var(--font-barlow-condensed), "Arial Narrow", sans-serif;
+  font-weight: 950;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.weekend-weather-header span {
+  color: #f7c734;
+  font-size: 0.76rem;
+}
+
+.weekend-weather-header strong {
+  color: #fff5d8;
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.weekend-weather-days {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.weekend-weather-day {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.32);
+  padding: 9px;
+}
+
+.weekend-weather-day-title {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.weekend-weather-day-title span {
+  color: #9bebff;
+  font-size: 0.66rem;
+}
+
+.weekend-weather-day-title b,
+.weekend-weather-day-title em {
+  border-radius: 999px;
+  padding: 2px 5px;
+  font-size: 0.58rem;
+  line-height: 1.1;
+}
+
+.weekend-weather-day-title b {
+  background: rgba(247, 199, 52, 0.18);
+  color: #f7c734;
+}
+
+.weekend-weather-day-title em {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #d8d2c0;
+  font-style: normal;
+}
+
+.weekend-weather-condition {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.weekend-weather-condition span {
+  font-size: 1.28rem;
+  line-height: 1;
+}
+
+.weekend-weather-condition strong {
+  color: #fff5d8;
+  font-size: 0.82rem;
+  font-weight: 950;
+  line-height: 1.05;
+}
+
+.weekend-weather-values {
+  display: grid;
+  gap: 2px;
+}
+
+.weekend-weather-values span {
+  color: #d8d2c0;
+  font-size: 0.66rem;
+  line-height: 1.05;
+}
+
+.weekend-weather-values span:first-child {
+  color: #f8f1d6;
+  font-size: 0.95rem;
+}
+
+.weekend-weather-summary,
+.weekend-weather-fallback {
+  position: relative;
+  margin: 0;
+  color: #f7c734;
+  font-size: 0.76rem;
+  line-height: 1.1;
+}
+
+@media (max-width: 430px) {
+  .weekend-weather-card {
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .weekend-weather-days {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .weekend-weather-day {
+    gap: 5px;
+    padding: 8px;
+  }
+
+  .weekend-weather-values {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 8px;
+  }
+
+  .weekend-weather-values span {
+    font-size: 0.62rem;
+  }
+
+  .weekend-weather-values span:first-child {
+    font-size: 0.86rem;
+  }
+}
+
 .next-match-ticket-topline,
 .next-match-title-row,
 .next-match-teams,

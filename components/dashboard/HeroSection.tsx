@@ -7,7 +7,11 @@ import { activePlayers } from "@/lib/data/players";
 import type { DashboardSummary } from "@/lib/dashboard-summary";
 import { getDashboardSummary } from "@/lib/dashboard-summary";
 import { useDashboardSummary } from "@/components/dashboard/useDashboardSummary";
-import { NextMatchTicket } from "@/components/dashboard/NextMatchTicket";
+import { WeekendWeather } from "@/components/dashboard/WeekendWeather";
+import {
+  applyWeekendMatchDayMarkers,
+  type WeekendWeatherViewModel
+} from "@/lib/weekend-weather";
 import type { MatchRecord } from "@/lib/types/match";
 import type { Player } from "@/lib/types/player";
 
@@ -75,22 +79,27 @@ function ActionStats({ summary }: { summary: DashboardSummary }) {
 
 function HeroControls({
   players,
-  matches
+  matches,
+  weather
 }: {
   players?: Player[];
   matches?: MatchRecord[];
+  weather: WeekendWeatherViewModel;
 }) {
   const localDashboard = useDashboardSummary(activePlayers);
   const resolvedPlayers = players ?? activePlayers;
   const resolvedMatches = matches ?? localDashboard.matches;
+  const markedWeather = applyWeekendMatchDayMarkers(
+    weather,
+    resolvedMatches as MatchRecord[]
+  );
   const summary = matches
     ? getDashboardSummary({ matches: resolvedMatches, players: resolvedPlayers })
     : localDashboard.summary;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(250px,300px)_minmax(230px,270px)_minmax(0,1fr)] lg:items-end">
-      <div className="hidden lg:block" />
-      <NextMatchTicket matches={resolvedMatches as MatchRecord[]} />
+    <div className="hero-controls-grid grid gap-4 lg:items-end">
+      <WeekendWeather weather={markedWeather} />
       <ActionStats summary={summary} />
     </div>
   );
@@ -98,10 +107,12 @@ function HeroControls({
 
 export function HeroSection({
   players,
-  matches
+  matches,
+  weather
 }: {
   players?: Player[];
   matches?: MatchRecord[];
+  weather: WeekendWeatherViewModel;
 }) {
   return (
     <section
@@ -124,13 +135,13 @@ export function HeroSection({
 
         <div className="absolute inset-0 hidden lg:block">
           <div className="absolute inset-x-0 bottom-[clamp(20px,4vw,64px)] mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-8">
-            <HeroControls players={players} matches={matches} />
+            <HeroControls players={players} matches={matches} weather={weather} />
           </div>
         </div>
       </div>
 
       <div className="relative z-10 grid gap-4 bg-[#05080d] px-4 py-4 sm:px-6 lg:hidden">
-        <HeroControls players={players} matches={matches} />
+        <HeroControls players={players} matches={matches} weather={weather} />
       </div>
     </section>
   );

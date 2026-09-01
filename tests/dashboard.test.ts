@@ -74,6 +74,16 @@ import {
   getVisiblePlayers
 } from "../lib/player-browser";
 import { calculateDisplayedRating } from "../lib/progression";
+import {
+  WEEKEND_WEATHER_DAILY_FIELDS,
+  WEEKEND_WEATHER_LOCATION,
+  WEEKEND_WEATHER_REVALIDATE_SECONDS,
+  applyWeekendMatchDayMarkers,
+  buildWeekendWeatherViewModel,
+  getCricketWeatherSummary,
+  getUpcomingWeekendDates,
+  getWeatherCondition
+} from "../lib/weekend-weather";
 import type {
   FinalisedPlayerMatchRecord,
   MatchRecord,
@@ -1382,7 +1392,7 @@ test("Next Match ticket removes close control and uses shared repository data", 
   const css = cssSource();
 
   assert.match(hero, /useDashboardSummary\(activePlayers\)/);
-  assert.match(hero, /<NextMatchTicket matches=\{resolvedMatches/);
+  assert.doesNotMatch(hero, /<NextMatchTicket matches=\{resolvedMatches/);
   assert.match(ticket, /getNextMatchState\(matches\)/);
   assert.match(ticket, /NO MATCH SCHEDULED/);
   assert.match(ticket, /LINE-UP PENDING/);
@@ -3183,4 +3193,182 @@ test("lower dashboard background reuses the existing arena image without dead 40
   assert.match(css, /\.dashboard-layout\s*{[\s\S]*?display:\s*grid/);
   assert.match(css, /@media \(min-width:\s*1024px\)[\s\S]*?\.dashboard-layout\s*{[\s\S]*?grid-template-columns:\s*minmax\(285px,\s*315px\) minmax\(0,\s*1fr\)/);
   assert.match(css, /@media \(max-width:\s*1279px\)[\s\S]*?\.mobile-navigation\s*{[\s\S]*?display:\s*block/);
+});
+
+test("Weekend Weather uses the fixed CZU forecast contract", () => {
+  const serverSource = readFileSync("lib/weekend-weather-server.ts", "utf8");
+
+  assert.deepEqual(WEEKEND_WEATHER_LOCATION, {
+    latitude: 50.129976,
+    longitude: 14.373707,
+    timezone: "Europe/Prague",
+    venue: "\u010cZU Gully Arena",
+    area: "Prague-Suchdol"
+  });
+  assert.deepEqual(WEEKEND_WEATHER_DAILY_FIELDS, [
+    "weather_code",
+    "temperature_2m_max",
+    "temperature_2m_min",
+    "precipitation_probability_max",
+    "wind_speed_10m_max"
+  ]);
+  assert.equal(WEEKEND_WEATHER_REVALIDATE_SECONDS, 7200);
+  assert.match(serverSource, /https:\/\/api\.open-meteo\.com\/v1\/forecast/);
+  assert.match(serverSource, /next:\s*\{\s*revalidate:\s*WEEKEND_WEATHER_REVALIDATE_SECONDS\s*\}/);
+});
+
+test("Weekend Weather selects Saturday and Sunday using Prague calendar dates", () => {
+  assert.deepEqual(getUpcomingWeekendDates(new Date("2026-09-04T12:00:00.000Z")), {
+    today: "2026-09-04",
+    saturday: "2026-09-05",
+    sunday: "2026-09-06"
+  });
+  assert.deepEqual(getUpcomingWeekendDates(new Date("2026-09-05T12:00:00.000Z")), {
+    today: "2026-09-05",
+    saturday: "2026-09-05",
+    sunday: "2026-09-06"
+  });
+  assert.deepEqual(getUpcomingWeekendDates(new Date("2026-09-06T12:00:00.000Z")), {
+    today: "2026-09-06",
+    saturday: "2026-09-05",
+    sunday: "2026-09-06"
+  });
+});
+
+test("Weekend Weather maps WMO codes and cricket rain summaries", () => {
+  assert.equal(getWeatherCondition(0).label, "Clear");
+  assert.equal(getWeatherCondition(2).label, "Partly cloudy");
+  assert.equal(getWeatherCondition(3).label, "Cloudy");
+  assert.equal(getWeatherCondition(61).label, "Rain/showers");
+  assert.equal(getWeatherCondition(71).label, "Snow");
+  assert.equal(getWeatherCondition(95).label, "Thunderstorm");
+
+  assert.equal(getCricketWeatherSummary(20), "LOOKING GOOD FOR CRICKET \u2600\ufe0f");
+  assert.equal(getCricketWeatherSummary(21), "KEEP AN EYE ON THE SKY \ud83c\udf24\ufe0f");
+  assert.equal(getCricketWeatherSummary(50), "KEEP AN EYE ON THE SKY \ud83c\udf24\ufe0f");
+  assert.equal(getCricketWeatherSummary(51), "RAIN COULD JOIN THE GAME \ud83c\udf26\ufe0f");
+  assert.equal(getCricketWeatherSummary(70), "RAIN COULD JOIN THE GAME \ud83c\udf26\ufe0f");
+  assert.equal(getCricketWeatherSummary(71), "COVERS MIGHT BE NEEDED \ud83c\udf27\ufe0f");
+});
+
+test("Weekend Weather validates provider data and handles partial forecast horizon", () => {
+  const weekend = {
+    today: "2026-09-04",
+    saturday: "2026-09-05",
+    sunday: "2026-09-06"
+  };
+  const available = buildWeekendWeatherViewModel({
+    weekend,
+    response: {
+      daily: {
+        time: ["2026-09-05", "2026-09-06"],
+        weather_code: [0, 61],
+        temperature_2m_max: [23.4, 18.8],
+        temperature_2m_min: [12.6, 11.8],
+        precipitation_probability_max: [20, 55],
+        wind_speed_10m_max: [11.2, 17.4]
+      }
+    }
+  });
+
+  assert.equal(available.status, "available");
+  assert.equal(available.days.length, 2);
+  assert.equal(available.days[0].weekday, "SAT");
+  assert.equal(available.days[0].maxTemperatureC, 23);
+  assert.equal(available.days[1].precipitationProbability, 55);
+  assert.equal(available.summary, "RAIN COULD JOIN THE GAME \ud83c\udf26\ufe0f");
+
+  const partial = buildWeekendWeatherViewModel({
+    weekend,
+    response: {
+      daily: {
+        time: ["2026-09-06"],
+        weather_code: [2],
+        temperature_2m_max: [19],
+        temperature_2m_min: [12],
+        precipitation_probability_max: [10],
+        wind_speed_10m_max: [9]
+      }
+    }
+  });
+
+  assert.equal(partial.status, "partial");
+  assert.equal(partial.days.length, 1);
+  assert.equal(partial.message, "FORECAST AVAILABLE CLOSER TO THE WEEKEND");
+
+  const invalid = buildWeekendWeatherViewModel({
+    weekend,
+    response: { daily: { time: ["2026-09-05"] } }
+  });
+
+  assert.equal(invalid.status, "unavailable");
+  assert.equal(invalid.message, "Forecast temporarily unavailable.");
+});
+
+test("Weekend Weather marks scheduled official weekend fixtures only", () => {
+  const weekend = {
+    today: "2026-09-04",
+    saturday: "2026-09-05",
+    sunday: "2026-09-06"
+  };
+  const weather = buildWeekendWeatherViewModel({
+    weekend,
+    response: {
+      daily: {
+        time: ["2026-09-05", "2026-09-06"],
+        weather_code: [0, 0],
+        temperature_2m_max: [23, 24],
+        temperature_2m_min: [12, 13],
+        precipitation_probability_max: [5, 10],
+        wind_speed_10m_max: [8, 9]
+      }
+    }
+  });
+
+  const marked = applyWeekendMatchDayMarkers(weather, [
+    matchRecord({ id: "sat", matchDate: "2026-09-05", status: "draft" }),
+    {
+      ...matchRecord({ id: "sun-demo", matchDate: "2026-09-06", status: "draft" }),
+      isDemo: true
+    },
+    matchRecord({ id: "deleted", matchDate: "2026-09-06", status: "draft", deletedAt: "2026-09-06T08:00:00.000Z" }),
+    matchRecord({ id: "weekday", matchDate: "2026-09-07", status: "draft" })
+  ]);
+
+  assert.equal(marked.status, "available");
+  assert.equal(marked.days[0].isMatchDay, true);
+  assert.equal(marked.days[1].isMatchDay, false);
+});
+
+test("Weekend Weather homepage integration stays server-side compact and non-persistent", () => {
+  const dashboardPage = readFileSync("app/page.tsx", "utf8");
+  const hero = heroSectionSource();
+  const component = readFileSync("components/dashboard/WeekendWeather.tsx", "utf8");
+  const weatherSource = readFileSync("lib/weekend-weather.ts", "utf8");
+  const serverSource = readFileSync("lib/weekend-weather-server.ts", "utf8");
+  const css = cssSource();
+
+  assert.match(dashboardPage, /getWeekendWeatherViewModel/);
+  assert.match(dashboardPage, /<HeroSection players=\{players\} matches=\{matches\} weather=\{weekendWeather\}/);
+  assert.match(hero, /<WeekendWeather weather=\{markedWeather\} \/>/);
+  assert.doesNotMatch(hero, /<NextMatchTicket/);
+  assert.match(hero, /applyWeekendMatchDayMarkers/);
+  assert.match(hero, /hero-controls-grid/);
+  assert.match(component, /WEEKEND WEATHER/);
+  assert.doesNotMatch(component, /weather\.location\.venue|weather\.location\.area/);
+  assert.match(component, /MATCH DAY/);
+  assert.match(component, /RAIN \{day\.precipitationProbability\}%/);
+  assert.match(component, /WIND \{day\.maxWindKmh\} KM\/H/);
+  assert.match(css, /\.hero-controls-grid\s*{[\s\S]*?padding-left:\s*clamp\(200px,\s*20vw,\s*320px\)/);
+  assert.match(css, /\.hero-controls-grid\s*{[\s\S]*?grid-template-columns:\s*minmax\(195px,\s*245px\) minmax\(0,\s*1fr\) minmax\(360px,\s*560px\)/);
+  assert.match(css, /\.hero-controls-grid \.weekend-weather-card\s*{[\s\S]*?grid-column:\s*1/);
+  assert.match(css, /\.hero-controls-grid > :last-child\s*{[\s\S]*?grid-column:\s*3/);
+  assert.match(css, /\.weekend-weather-card\s*{[\s\S]*?clip-path:/);
+  assert.match(css, /\.weekend-weather-days\s*{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(css, /@media \(max-width:\s*430px\)[\s\S]*?\.weekend-weather-days\s*{[\s\S]*?grid-template-columns:\s*1fr/);
+  assert.doesNotMatch(component + weatherSource + serverSource, /navigator\.geolocation|localStorage|document\.cookie|supabase/i);
+  assert.doesNotMatch(
+    readFileSync("supabase/migrations/20260807093000_phase_2a_core_schema.sql", "utf8"),
+    /weather/i
+  );
 });

@@ -7,6 +7,7 @@ import { TopPerformersPanel } from "@/components/dashboard/TopPerformersPanel";
 import { activePlayers } from "@/lib/data/players";
 import { isSupabaseDataSource } from "@/lib/data-source";
 import { loadPublicSupabaseReadData } from "@/lib/supabase/public-read-data";
+import { getWeekendWeatherViewModel } from "@/lib/weekend-weather-server";
 import Image from "next/image";
 
 export const dynamic = "force-dynamic";
@@ -35,10 +36,11 @@ export default async function DashboardPage() {
   const players = data?.careerPlayers ?? activePlayers;
   const matches = data?.matches;
   const crownedAwards = data?.crownedAwards;
+  const weekendWeather = await getWeekendWeatherViewModel();
 
   return (
     <>
-      <HeroSection players={players} matches={matches} />
+      <HeroSection players={players} matches={matches} weather={weekendWeather} />
       <section className="lower-dashboard-bg">
         <div className="relative mx-auto max-w-[1680px] px-4 py-7 lg:px-6">
           <div className="dashboard-layout">
