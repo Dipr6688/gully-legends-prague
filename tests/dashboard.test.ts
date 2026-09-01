@@ -566,6 +566,41 @@ test("navbar renders pathname-driven active aria state instead of hardcoded Dash
   assert.doesNotMatch(header, /index === 0/);
 });
 
+test("mobile navigation is controlled and closes on outside taps links Escape and route changes", () => {
+  const header = readFileSync("components/navigation/SiteHeader.tsx", "utf8");
+  const navigationLinks = readFileSync(
+    "components/navigation/NavigationLinks.tsx",
+    "utf8"
+  );
+  const css = cssSource();
+
+  assert.match(header, /MobileNavigationMenu/);
+  assert.doesNotMatch(header, /<details className="mobile-navigation"/);
+  assert.doesNotMatch(header, /<summary className="mobile-navigation-trigger"/);
+  assert.match(navigationLinks, /export function MobileNavigationMenu/);
+  assert.match(navigationLinks, /useState\(false\)/);
+  assert.match(navigationLinks, /useCallback\(\(\) => setIsOpen\(false\), \[\]\)/);
+  assert.match(navigationLinks, /containerRef/);
+  assert.match(navigationLinks, /triggerRef/);
+  assert.match(navigationLinks, /previousPathnameRef/);
+  assert.match(navigationLinks, /aria-expanded=\{isOpen\}/);
+  assert.match(navigationLinks, /aria-controls=\{menuId\}/);
+  assert.match(navigationLinks, /setIsOpen\(\(current\) => !current\)/);
+  assert.match(navigationLinks, /document\.addEventListener\("pointerdown", handlePointerDown\)/);
+  assert.match(navigationLinks, /document\.removeEventListener\("pointerdown", handlePointerDown\)/);
+  assert.match(navigationLinks, /containerRef\.current\?\.contains\(target\)/);
+  assert.match(navigationLinks, /triggerRef\.current\?\.contains\(target\)/);
+  assert.match(navigationLinks, /closeMenu\(\)/);
+  assert.match(navigationLinks, /event\.key === "Escape"/);
+  assert.match(navigationLinks, /triggerRef\.current\?\.focus\(\)/);
+  assert.match(navigationLinks, /onClick=\{onNavigate\}/);
+  assert.match(navigationLinks, /window\.setTimeout\(closeMenu, 0\)/);
+  assert.match(navigationLinks, /window\.clearTimeout\(closeTimer\)/);
+  assert.match(css, /\.mobile-navigation\.is-open \.mobile-navigation-panel/);
+  assert.match(css, /\.desktop-navigation\s*{[\s\S]*?display:\s*flex/);
+  assert.match(navigationLinks, /export function DesktopNavigation/);
+});
+
 test("Dashboard Top Performers is a focused Legend Spotlight section", () => {
   const source = topPerformersSource();
 

@@ -2553,10 +2553,6 @@ textarea {
   color: #f5eed3;
 }
 
-.mobile-navigation-trigger::-webkit-details-marker {
-  display: none;
-}
-
 .mobile-navigation-panel {
   position: absolute;
   right: clamp(16px, 3vw, 28px);
@@ -10934,7 +10930,8 @@ textarea {
     z-index: 2;
   }
 
-  .mobile-navigation[open] .mobile-navigation-panel {
+  .mobile-navigation.is-open .mobile-navigation-panel,
+  .mobile-navigation[data-open="true"] .mobile-navigation-panel {
     position: fixed;
     top: 66px;
     right: 12px;

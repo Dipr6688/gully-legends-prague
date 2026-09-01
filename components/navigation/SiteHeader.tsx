@@ -1,10 +1,10 @@
-import { Crown, Menu, ShieldCheck } from "lucide-react";
+import { Crown, ShieldCheck } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { logoutAdmin } from "@/app/admin/actions";
 import {
   DesktopNavigation,
-  MobileNavigationPanel
+  MobileNavigationMenu
 } from "@/components/navigation/NavigationLinks";
 import { isCurrentUserAdmin } from "@/lib/admin/auth";
 
@@ -47,21 +47,6 @@ function HeaderActions({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
-function MobileMenu({ isAdmin }: { isAdmin: boolean }) {
-  return (
-    <details className="mobile-navigation">
-      <summary className="mobile-navigation-trigger">
-        <Menu className="h-5 w-5" aria-hidden="true" />
-        <span className="sr-only">Open navigation</span>
-      </summary>
-      <MobileNavigationPanel
-        adminHref={isAdmin ? "/admin" : "/admin/login"}
-        isAdmin={isAdmin}
-      />
-    </details>
-  );
-}
-
 export async function SiteHeader() {
   const isAdmin = await isCurrentUserAdmin();
 
@@ -71,7 +56,7 @@ export async function SiteHeader() {
         <Brand />
         <DesktopNavigation />
         <HeaderActions isAdmin={isAdmin} />
-        <MobileMenu isAdmin={isAdmin} />
+        <MobileNavigationMenu isAdmin={isAdmin} />
       </div>
     </header>
   );
