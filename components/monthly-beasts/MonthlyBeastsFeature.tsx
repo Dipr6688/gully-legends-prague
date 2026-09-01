@@ -25,7 +25,7 @@ import {
   crownSupabaseMonthlyBeasts,
   reopenSupabaseMonthlyBeasts
 } from "@/lib/admin-monthly-beasts-client";
-import { activePlayers } from "@/lib/data/players";
+import { getPlayerById } from "@/lib/data/players";
 import { parseLocalMatchDate } from "@/lib/leaderboard";
 import {
   addMonthsToMonthKey,
@@ -54,6 +54,7 @@ import type { MatchRecord } from "@/lib/types/match";
 import type { Player } from "@/lib/types/player";
 
 const categories = Object.keys(MONTHLY_BEAST_CATEGORIES) as MonthlyBeastCategory[];
+const MAX_VISIBLE_PAST_BEAST_AVATARS = 3;
 
 const accentColors = {
   orange: "#ff8f1f",
@@ -83,13 +84,71 @@ function useCrownedAwards() {
 }
 
 function getPlayer(playerId: string) {
-  return activePlayers.find((player) => player.id === playerId) ?? null;
+  return getPlayerById(playerId) ?? null;
 }
 
 function joinPlayerNames(winners: Array<{ playerId: string }>) {
   return winners
     .map((winner) => getPlayer(winner.playerId)?.name ?? winner.playerId)
     .join(" & ");
+}
+
+function getFallbackInitials(playerId: string) {
+  return playerId
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function PastBeastWinnerAvatars({
+  winners,
+  categoryTitle
+}: {
+  winners: Array<{ playerId: string }>;
+  categoryTitle: string;
+}) {
+  if (winners.length === 0) return null;
+
+  const visibleWinners = winners.slice(0, MAX_VISIBLE_PAST_BEAST_AVATARS);
+  const extraCount = Math.max(0, winners.length - visibleWinners.length);
+
+  return (
+    <div className="past-beast-winner-avatars" aria-label={`${categoryTitle} winner avatars`}>
+      {visibleWinners.map((winner) => {
+        const player = getPlayer(winner.playerId);
+        const imageSrc = player?.avatar || player?.cardImage;
+
+        return imageSrc ? (
+          <span key={winner.playerId} className="past-beast-winner-avatar">
+            <Image
+              src={imageSrc}
+              alt=""
+              fill
+              sizes="(max-width: 560px) 50px, (max-width: 1023px) 72px, 92px"
+              className="past-beast-winner-avatar-image"
+              quality={90}
+            />
+          </span>
+        ) : (
+          <span
+            key={winner.playerId}
+            className="past-beast-winner-avatar past-beast-winner-avatar-fallback"
+            aria-hidden="true"
+          >
+            {getFallbackInitials(winner.playerId)}
+          </span>
+        );
+      })}
+      {extraCount > 0 ? (
+        <span className="past-beast-winner-avatar past-beast-winner-avatar-more">
+          +{extraCount}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 function getSelectedMonth(monthParam: string | null) {
@@ -575,20 +634,41 @@ function PastBeastsArchive({ crownedAwards }: { crownedAwards: CrownedMonthlyBea
                   const winners = getWinnersForCategory(award, category);
 
                   return (
-                    <section key={category}>
-                      <Image src={meta.icon} alt="" width={42} height={42} />
-                      <span>{meta.title}</span>
+                    <section
+                      key={category}
+                      className={
+                        winners.length > 0
+                          ? "monthly-beasts-archive-row"
+                          : "monthly-beasts-archive-row monthly-beasts-archive-row-empty"
+                      }
+                    >
+                      <Image
+                        src={meta.icon}
+                        alt=""
+                        width={42}
+                        height={42}
+                        className="monthly-beasts-archive-category-icon"
+                      />
+                      <div className="monthly-beasts-archive-copy">
+                        <span>{meta.title}</span>
+                        {winners.length > 0 ? (
+                          <>
+                            <strong>{joinPlayerNames(winners)}</strong>
+                            <small>
+                              {winners[0].categoryXp} {meta.xpLabel}
+                              {winners.length > 1 ? " EACH" : ""}
+                            </small>
+                          </>
+                        ) : (
+                          <strong>Race not started</strong>
+                        )}
+                      </div>
                       {winners.length > 0 ? (
-                        <>
-                          <strong>{joinPlayerNames(winners)}</strong>
-                          <small>
-                            {winners[0].categoryXp} {meta.xpLabel}
-                            {winners.length > 1 ? " EACH" : ""}
-                          </small>
-                        </>
-                      ) : (
-                        <strong>Race not started</strong>
-                      )}
+                        <PastBeastWinnerAvatars
+                          winners={winners}
+                          categoryTitle={meta.title}
+                        />
+                      ) : null}
                     </section>
                   );
                 })}

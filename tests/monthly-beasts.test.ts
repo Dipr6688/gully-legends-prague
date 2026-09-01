@@ -853,6 +853,58 @@ test("Monthly Beasts UI replaces placeholder copy and links to Formula Room", ()
   assert.match(packageJson, /monthly-beasts\.test\.js/);
 });
 
+test("Past Beasts archive renders compact canonical player avatars from winner ids", () => {
+  const feature = monthlyFeatureSource();
+  const css = cssSource();
+
+  assert.match(feature, /function PastBeastWinnerAvatars/);
+  assert.match(feature, /MAX_VISIBLE_PAST_BEAST_AVATARS = 3/);
+  assert.match(feature, /getPlayerById\(playerId\)/);
+  assert.match(feature, /player\?\.avatar \|\| player\?\.cardImage/);
+  assert.match(feature, /<PastBeastWinnerAvatars/);
+  assert.match(feature, /winners=\{winners\}/);
+  assert.match(feature, /categoryTitle=\{meta\.title\}/);
+  assert.match(feature, /past-beast-winner-avatars/);
+  assert.match(feature, /past-beast-winner-avatar-more/);
+  assert.match(
+    feature,
+    /sizes="\(max-width: 560px\) 50px, \(max-width: 1023px\) 72px, 92px"/
+  );
+  assert.match(feature, /quality=\{90\}/);
+  assert.match(feature, /getFallbackInitials\(winner\.playerId\)/);
+  assert.match(feature, /joinPlayerNames\(winners\)/);
+  assert.match(feature, /winners\[0\]\.categoryXp/);
+  assert.doesNotMatch(feature, /\/player-cards\/[a-z0-9-]+\.png/);
+  assert.doesNotMatch(feature, /displayName|winnerName|playerName.*===/);
+
+  assert.match(
+    css,
+    /\.monthly-beasts-archive-card section\s*{[\s\S]*?grid-template-columns:\s*42px minmax\(0,\s*1fr\) auto/
+  );
+  assert.match(css, /\.monthly-beasts-archive-card section\s*{[\s\S]*?padding-right:\s*22px/);
+  assert.match(
+    feature,
+    /className="monthly-beasts-archive-category-icon"[\s\S]*?<div className="monthly-beasts-archive-copy">[\s\S]*?<PastBeastWinnerAvatars/
+  );
+  assert.match(css, /\.monthly-beasts-archive-category-icon\s*{[\s\S]*?grid-row:\s*span 3/);
+  assert.match(css, /\.past-beast-winner-avatars\s*{[\s\S]*?justify-self:\s*end/);
+  assert.match(css, /\.past-beast-winner-avatar\s*{[\s\S]*?width:\s*50px/);
+  assert.match(css, /\.past-beast-winner-avatar\s*{[\s\S]*?height:\s*50px/);
+  assert.match(
+    css,
+    /@media \(min-width:\s*821px\)[\s\S]*?\.past-beast-winner-avatar\s*{[\s\S]*?width:\s*72px/
+  );
+  assert.match(
+    css,
+    /@media \(min-width:\s*1024px\)[\s\S]*?\.past-beast-winner-avatar\s*{[\s\S]*?width:\s*92px/
+  );
+  assert.match(css, /\.past-beast-winner-avatar-image\s*{[\s\S]*?object-fit:\s*cover/);
+  assert.match(
+    css,
+    /@media \(max-width:\s*560px\)[\s\S]*?\.monthly-beasts-archive-card section\s*{[\s\S]*?padding-right:\s*8px/
+  );
+});
+
 test("Monthly Beast Supabase writes use server calculation and protected RPCs", () => {
   const feature = monthlyFeatureSource();
   const monthlyPage = readFileSync("app/monthly-beasts/page.tsx", "utf8");

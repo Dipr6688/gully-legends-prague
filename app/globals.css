@@ -4814,15 +4814,105 @@ textarea {
 }
 
 .monthly-beasts-archive-card section {
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: 42px minmax(0, 1fr) auto;
   align-items: center;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+  column-gap: 12px;
+  padding-right: 22px;
   padding-top: 10px;
 }
 
-.monthly-beasts-archive-card img {
+.monthly-beasts-archive-card section.monthly-beasts-archive-row-empty {
+  grid-template-columns: 42px minmax(0, 1fr);
+  padding-right: 0;
+}
+
+.monthly-beasts-archive-category-icon {
   grid-row: span 3;
   object-fit: contain;
+}
+
+.monthly-beasts-archive-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.past-beast-winner-avatars {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: end;
+  min-width: 50px;
+}
+
+.past-beast-winner-avatar {
+  position: relative;
+  display: grid;
+  flex: 0 0 50px;
+  width: 50px;
+  height: 50px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(247, 199, 52, 0.62);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 35% 18%, rgba(255, 255, 255, 0.24), transparent 32%),
+    rgba(5, 8, 13, 0.92);
+  color: #fff5d8;
+  font-size: 0.72rem;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+  box-shadow:
+    0 0 0 2px rgba(5, 8, 13, 0.82),
+    0 0 16px rgba(247, 199, 52, 0.2);
+}
+
+.past-beast-winner-avatar + .past-beast-winner-avatar {
+  margin-left: -15px;
+}
+
+.past-beast-winner-avatar-image {
+  object-fit: cover;
+  object-position: top center;
+}
+
+.past-beast-winner-avatar-more {
+  background: #f7c734;
+  color: #07100e;
+}
+
+@media (min-width: 821px) {
+  .past-beast-winner-avatars {
+    min-width: 72px;
+  }
+
+  .past-beast-winner-avatar {
+    flex-basis: 72px;
+    width: 72px;
+    height: 72px;
+  }
+
+  .past-beast-winner-avatar + .past-beast-winner-avatar {
+    margin-left: -22px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .past-beast-winner-avatars {
+    min-width: 92px;
+  }
+
+  .past-beast-winner-avatar {
+    flex-basis: 92px;
+    width: 92px;
+    height: 92px;
+  }
+
+  .past-beast-winner-avatar + .past-beast-winner-avatar {
+    margin-left: -30px;
+  }
 }
 
 .monthly-beasts-archive-card strong,
@@ -5046,6 +5136,11 @@ textarea {
 
   .monthly-beasts-month-selector span {
     min-width: 0;
+  }
+
+  .monthly-beasts-archive-card section {
+    column-gap: 9px;
+    padding-right: 8px;
   }
 
   .monthly-beast-standing-row {
