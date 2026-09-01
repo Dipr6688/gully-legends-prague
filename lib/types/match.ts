@@ -66,6 +66,16 @@ export type QuickScoringEvent = {
   timestamp: string;
 };
 
+export type MatchRosterTransition = {
+  inningsIndex: 0 | 1;
+  eventIndex: number;
+  teamAPlayerIds: string[];
+  teamBPlayerIds: string[];
+  sharedPlayerId: string | null;
+  fieldingHelperIds: string[];
+  appliedAt: string | null;
+};
+
 export type QuickScoringMetadata = {
   version: 1 | 2;
   setupLocked?: boolean;
@@ -248,7 +258,9 @@ export type MatchRecord = {
   battingFirstTeamId: TeamId | null;
   chasingTeamId: TeamId | null;
   sharedPlayerId?: string | null;
+  everSharedPlayerIds?: string[];
   fieldingHelperIds?: string[];
+  rosterTransitions?: MatchRosterTransition[];
   teams: {
     teamA: TeamMatchData;
     teamB: TeamMatchData;

@@ -1,5 +1,6 @@
 import type {
   BattingMode,
+  MatchRosterTransition,
   MatchRecord,
   QuickScoringEvent,
   TeamId
@@ -30,6 +31,7 @@ export type AppSyncMatchPayload = {
   teamBPlayerIds: string[];
   sharedPlayerId?: string | null;
   fieldingHelperIds?: string[];
+  rosterTransitions?: MatchRosterTransition[];
   inningsAEvents: QuickScoringEvent[];
   inningsBEvents: QuickScoringEvent[];
   selectedPlayerOfMatchId?: string | null;

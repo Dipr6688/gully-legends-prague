@@ -6,7 +6,7 @@ import {
   getChasingTeamId,
   validateMatchRecordInput,
   type MatchValidationInput
-} from "@/lib/match-records";
+} from "./match-records";
 
 export function validateMatchInput(input: MatchValidationInput) {
   const totals = calculateTeamTotals(input.performances, input);

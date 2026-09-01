@@ -61,6 +61,7 @@ export function getPlayerOfMatchRecommendation({
   allBowlingOvers,
   result,
   sharedPlayerId,
+  everSharedPlayerIds,
   matchDate,
   xpRuleVersion
 }: {
@@ -68,9 +69,14 @@ export function getPlayerOfMatchRecommendation({
   allBowlingOvers: BowlingOver[];
   result: MatchResult;
   sharedPlayerId: string | null;
+  everSharedPlayerIds?: string[];
   matchDate?: string;
   xpRuleVersion?: XPRuleVersion;
 }): PlayerOfMatchRecommendation {
+  const sharedPlayerIds = new Set([
+    ...(everSharedPlayerIds ?? []),
+    ...(sharedPlayerId ? [sharedPlayerId] : [])
+  ]);
   const groupedByPlayerId = new Map<string, PlayerMatchPerformance[]>();
 
   for (const performance of performances) {
@@ -91,8 +97,7 @@ export function getPlayerOfMatchRecommendation({
       const playerOvers = allBowlingOvers.filter(
         (over) => over.bowlerId === playerId
       );
-      const isSharedPlayer =
-        sharedPlayerId === playerId && playerPerformances.length > 1;
+      const isSharedPlayer = sharedPlayerIds.has(playerId);
       const context: XPMatchContext = {
         result,
         overs: playerOvers,
@@ -173,6 +178,7 @@ function aggregateFinalisedRecordsByPlayer({
   allBowlingOvers,
   result,
   sharedPlayerId,
+  everSharedPlayerIds,
   playerOfMatchId,
   matchDate
 }: {
@@ -180,9 +186,14 @@ function aggregateFinalisedRecordsByPlayer({
   allBowlingOvers: BowlingOver[];
   result: MatchResult;
   sharedPlayerId: string | null;
+  everSharedPlayerIds?: string[];
   playerOfMatchId: string | null;
   matchDate: string;
 }): FinalisedPlayerMatchRecord[] {
+  const sharedPlayerIds = new Set([
+    ...(everSharedPlayerIds ?? []),
+    ...(sharedPlayerId ? [sharedPlayerId] : [])
+  ]);
   const groupedByPlayerId = new Map<string, FinalisedPlayerMatchRecord[]>();
 
   for (const record of records) {
@@ -215,8 +226,7 @@ function aggregateFinalisedRecordsByPlayer({
       xpBreakdown: baseRecord.xpBreakdown
     };
     const playerOvers = allBowlingOvers.filter((over) => over.bowlerId === playerId);
-    const isSharedPlayer =
-      sharedPlayerId === playerId && playerRecords.length > 1;
+    const isSharedPlayer = sharedPlayerIds.has(playerId);
 
     return {
       ...aggregateRecord,
@@ -299,6 +309,7 @@ export function applyPlayerOfMatchCorrectionToFinalisedMatch({
     allBowlingOvers,
     result: match.result,
     sharedPlayerId: match.sharedPlayerId ?? null,
+    everSharedPlayerIds: match.everSharedPlayerIds,
     playerOfMatchId: nextPlayerOfMatchId,
     matchDate: match.matchDate
   });

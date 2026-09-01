@@ -28,6 +28,14 @@ export type QuickScoringInningsInput = {
   fieldingPlayerIds?: string[];
   events: QuickScoringEvent[];
   battingMode?: BattingMode | null;
+  eventEligibility?: (
+    event: QuickScoringEvent,
+    eventIndex: number
+  ) => {
+    battingPlayerIds: string[];
+    bowlingPlayerIds: string[];
+    fieldingPlayerIds: string[];
+  };
 };
 
 export type QuickScoringDerivedInnings = {
@@ -271,7 +279,8 @@ export function deriveQuickScoringInnings({
   bowlingPlayerIds,
   fieldingPlayerIds,
   events,
-  battingMode: inputBattingMode
+  battingMode: inputBattingMode,
+  eventEligibility
 }: QuickScoringInningsInput): QuickScoringDerivedInnings {
   const battingMode = normalizeBattingMode(inputBattingMode);
   const records = new Map<string, MutablePerformance>();
@@ -290,19 +299,30 @@ export function deriveQuickScoringInnings({
   let nonStrikerId: string | null = null;
   let currentBowlerId: string | null = null;
   let previousOverBowlerId: string | null = null;
+  let finalEligibleBattingPlayerIds = battingPlayerIds;
 
   for (const playerId of battingPlayerIds) {
     records.set(getPerformanceKey(playerId, battingTeamId), createPerformance(playerId, battingTeamId));
   }
 
-  for (const event of [...events].sort((left, right) => left.sequence - right.sequence)) {
+  for (const [eventIndex, event] of [...events]
+    .sort((left, right) => left.sequence - right.sequence)
+    .entries()) {
+    const eligibility = eventEligibility?.(event, eventIndex);
+    const eligibleBattingPlayerIds =
+      eligibility?.battingPlayerIds ?? battingPlayerIds;
+    const eligibleBowlingPlayerIds =
+      eligibility?.bowlingPlayerIds ?? bowlingPlayerIds ?? [];
+    const eventEligibleFieldingPlayerIds =
+      eligibility?.fieldingPlayerIds ?? eligibleFieldingPlayerIds;
+    finalEligibleBattingPlayerIds = eligibleBattingPlayerIds;
     const knownBatterIdsBeforeEvent = new Set(
-      battingOrder.length === 0 ? battingPlayerIds : battingOrder
+      battingOrder.length === 0 ? eligibleBattingPlayerIds : battingOrder
     );
     if (event.strikerId) knownBatterIdsBeforeEvent.add(event.strikerId);
     if (event.nonStrikerId) knownBatterIdsBeforeEvent.add(event.nonStrikerId);
 
-    const eligibleBatterIdsBeforeEvent = battingPlayerIds.filter((playerId) =>
+    const eligibleBatterIdsBeforeEvent = eligibleBattingPlayerIds.filter((playerId) =>
       knownBatterIdsBeforeEvent.has(playerId)
     );
     const undismissedBeforeEvent = eligibleBatterIdsBeforeEvent.filter(
@@ -328,8 +348,8 @@ export function deriveQuickScoringInnings({
     }
 
     if (
-      !battingPlayerIds.includes(event.strikerId) ||
-      (pairRequired && !battingPlayerIds.includes(event.nonStrikerId))
+      !eligibleBattingPlayerIds.includes(event.strikerId) ||
+      (pairRequired && !eligibleBattingPlayerIds.includes(event.nonStrikerId))
     ) {
       missingInformation.push(`Event ${event.sequence} has an ineligible batter.`);
       continue;
@@ -343,7 +363,12 @@ export function deriveQuickScoringInnings({
       continue;
     }
 
-    if (bowlingPlayerIds && !bowlingPlayerIds.includes(event.bowlerId)) {
+    if (eligibility && !eligibleBowlingPlayerIds.includes(event.bowlerId)) {
+      missingInformation.push(`Event ${event.sequence} has an ineligible bowler.`);
+      continue;
+    }
+
+    if (!eligibility && bowlingPlayerIds && !bowlingPlayerIds.includes(event.bowlerId)) {
       missingInformation.push(`Event ${event.sequence} has an ineligible bowler.`);
       continue;
     }
@@ -359,7 +384,7 @@ export function deriveQuickScoringInnings({
         continue;
       }
 
-      if (!battingPlayerIds.includes(event.wicket.dismissedPlayerId)) {
+      if (!eligibleBattingPlayerIds.includes(event.wicket.dismissedPlayerId)) {
         missingInformation.push(`Event ${event.sequence} has an ineligible dismissed batter.`);
         continue;
       }
@@ -462,9 +487,9 @@ export function deriveQuickScoringInnings({
       }
 
       if (
-        (fieldingPlayerIds || bowlingPlayerIds) &&
+        (eligibility || fieldingPlayerIds || bowlingPlayerIds) &&
         event.wicket.fielderId &&
-        !eligibleFieldingPlayerIds.includes(event.wicket.fielderId)
+        !eventEligibleFieldingPlayerIds.includes(event.wicket.fielderId)
       ) {
         missingInformation.push(`Event ${event.sequence} has an ineligible fielder.`);
       }
@@ -478,7 +503,7 @@ export function deriveQuickScoringInnings({
 
       if (event.wicket.newBatterId) {
         if (
-          !battingPlayerIds.includes(event.wicket.newBatterId) ||
+          !eligibleBattingPlayerIds.includes(event.wicket.newBatterId) ||
           event.wicket.newBatterId === event.wicket.dismissedPlayerId ||
           event.wicket.newBatterId === event.strikerId ||
           (pairRequired && event.wicket.newBatterId === event.nonStrikerId) ||
@@ -520,8 +545,8 @@ export function deriveQuickScoringInnings({
         pairRequired &&
         event.wicket.nextStrikerId &&
         event.wicket.nextNonStrikerId &&
-        (!battingPlayerIds.includes(event.wicket.nextStrikerId) ||
-          !battingPlayerIds.includes(event.wicket.nextNonStrikerId) ||
+        (!eligibleBattingPlayerIds.includes(event.wicket.nextStrikerId) ||
+          !eligibleBattingPlayerIds.includes(event.wicket.nextNonStrikerId) ||
           event.wicket.nextStrikerId === event.wicket.dismissedPlayerId ||
           event.wicket.nextNonStrikerId === event.wicket.dismissedPlayerId ||
           dismissedPlayerIds.has(event.wicket.nextStrikerId) ||
@@ -584,7 +609,9 @@ export function deriveQuickScoringInnings({
       battingMode === "two_batter" &&
       Boolean(strikerId) &&
       !nonStrikerId &&
-      battingPlayerIds.filter((playerId) => !dismissedPlayerIds.has(playerId))
+      finalEligibleBattingPlayerIds.filter(
+        (playerId) => !dismissedPlayerIds.has(playerId)
+      )
         .length === 1,
     activeBatterCount: [strikerId, nonStrikerId].filter(Boolean).length,
     currentOverEvents: isBetweenOvers ? [] : currentOverEvents,

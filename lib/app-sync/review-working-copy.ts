@@ -1,12 +1,18 @@
 import {
   assemblePendingImportMatch,
   type AppSyncAssemblyResult
-} from "@/lib/app-sync/assemble-pending-import";
-import type { ApkMatchImport, AppSyncMatchPayload } from "@/lib/app-sync/types";
+} from "./assemble-pending-import";
+import type { ApkMatchImport, AppSyncMatchPayload } from "./types";
+import {
+  inningsIndexForTeam,
+  normalizeReviewRosterBoundaries,
+  resolveRosterTransitions
+} from "./roster-transitions";
+import { activePlayers } from "../data/players";
 import type {
   QuickScoringDismissalType,
   QuickScoringEvent
-} from "@/lib/types/match";
+} from "../types/match";
 
 export type ApkReviewEventRow = {
   inningsKey: "inningsAEvents" | "inningsBEvents";
@@ -116,11 +122,36 @@ export function deleteApkReviewEvent(
   inningsKey: "inningsAEvents" | "inningsBEvents",
   eventId: string
 ): AppSyncMatchPayload {
+  const knownPlayerIds = new Set(activePlayers.map((player) => player.id));
+  const canShiftRosterBoundaries =
+    resolveRosterTransitions(payload, knownPlayerIds).errors.length === 0;
+  const normalized = canShiftRosterBoundaries
+    ? normalizeReviewRosterBoundaries(payload, knownPlayerIds)
+    : payload;
+  const deletedIndex = normalized[inningsKey].findIndex(
+    (event) => event.id === eventId
+  );
+  const inningsIndex = inningsIndexForTeam(
+    normalized,
+    inningsKey === "inningsAEvents" ? "teamA" : "teamB"
+  );
+
   return {
-    ...payload,
+    ...normalized,
     [inningsKey]: resequenceQuickEvents(
-      payload[inningsKey].filter((event) => event.id !== eventId)
-    )
+      normalized[inningsKey].filter((event) => event.id !== eventId)
+    ),
+    rosterTransitions: canShiftRosterBoundaries
+      ? normalized.rosterTransitions?.map((transition) => ({
+          ...transition,
+          eventIndex:
+            deletedIndex >= 0 &&
+            transition.inningsIndex === inningsIndex &&
+            transition.eventIndex > deletedIndex
+              ? transition.eventIndex - 1
+              : transition.eventIndex
+        }))
+      : normalized.rosterTransitions
   };
 }
 
@@ -129,7 +160,13 @@ export function insertApkReviewEventAfter(
   inningsKey: "inningsAEvents" | "inningsBEvents",
   eventId: string
 ): AppSyncMatchPayload {
-  const events = payload[inningsKey];
+  const knownPlayerIds = new Set(activePlayers.map((player) => player.id));
+  const canShiftRosterBoundaries =
+    resolveRosterTransitions(payload, knownPlayerIds).errors.length === 0;
+  const normalized = canShiftRosterBoundaries
+    ? normalizeReviewRosterBoundaries(payload, knownPlayerIds)
+    : payload;
+  const events = normalized[inningsKey];
   const index = events.findIndex((event) => event.id === eventId);
   const anchor = index >= 0 ? events[index] : events[events.length - 1];
   const inserted: QuickScoringEvent = anchor
@@ -163,10 +200,26 @@ export function insertApkReviewEventAfter(
     index >= 0
       ? [...events.slice(0, index + 1), inserted, ...events.slice(index + 1)]
       : [...events, inserted];
+  const insertionIndex = index >= 0 ? index + 1 : events.length;
+  const inningsIndex = inningsIndexForTeam(
+    normalized,
+    inningsKey === "inningsAEvents" ? "teamA" : "teamB"
+  );
 
   return {
-    ...payload,
-    [inningsKey]: resequenceQuickEvents(nextEvents)
+    ...normalized,
+    [inningsKey]: resequenceQuickEvents(nextEvents),
+    rosterTransitions: canShiftRosterBoundaries
+      ? normalized.rosterTransitions?.map((transition) => ({
+          ...transition,
+          eventIndex:
+            events.length > 0 &&
+            transition.inningsIndex === inningsIndex &&
+            transition.eventIndex >= insertionIndex
+              ? transition.eventIndex + 1
+              : transition.eventIndex
+        }))
+      : normalized.rosterTransitions
   };
 }
 

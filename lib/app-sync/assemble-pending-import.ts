@@ -1,6 +1,7 @@
 import {
   buildTeamInnings,
   buildTeamMatchData,
+  calculateMatchResult,
   calculateBowlerWickets,
   calculatePlayerCatches,
   calculatePlayerHatTricks,
@@ -9,26 +10,32 @@ import {
   getChasingTeamId,
   getDismissedBatterIds,
   getEligibleFieldingPlayerIds,
+  getInningsState,
   getPerformanceKey,
   normalizeStoredRuns,
   sanitizeRuns,
   type MatchValidationInput
-} from "@/lib/match-records";
-import { getPlayerOfMatchRecommendation } from "@/lib/player-of-match";
+} from "../match-records";
+import { getPlayerOfMatchRecommendation } from "../player-of-match";
 import {
   calculatePlayerMatchXP,
   calculateSharedPlayerMatchXP
-} from "@/lib/progression";
-import { deriveQuickScoringInnings } from "@/lib/quick-scoring";
-import { validateMatchInput } from "@/lib/match-validation-core";
-import { activePlayers } from "@/lib/data/players";
+} from "../progression";
+import { deriveQuickScoringInnings } from "../quick-scoring";
+import {
+  inningsIndexForTeam,
+  isRosterTransitionShape,
+  resolveRosterTransitions
+} from "./roster-transitions";
+import { validateMatchInput } from "../match-validation-core";
+import { activePlayers } from "../data/players";
 import {
   getPragueMatchDateFromTimestamp,
   isValidIsoCalendarDate
-} from "@/lib/app-sync/prague-date";
+} from "./prague-date";
 import type {
   AppSyncMatchPayload
-} from "@/lib/app-sync/types";
+} from "./types";
 import type {
   BowlingOver,
   FinalisedPlayerMatchRecord,
@@ -40,7 +47,7 @@ import type {
   QuickScoringDismissalType,
   QuickScoringExtraType,
   TeamId
-} from "@/lib/types/match";
+} from "../types/match";
 
 export type AssembledPendingImport = {
   ok: true;
@@ -148,6 +155,9 @@ export function isAppSyncMatchPayload(value: unknown): value is AppSyncMatchPayl
       typeof value.sharedPlayerId === "string") &&
     (value.fieldingHelperIds === undefined ||
       isStringArray(value.fieldingHelperIds)) &&
+    (value.rosterTransitions === undefined ||
+      (Array.isArray(value.rosterTransitions) &&
+        value.rosterTransitions.every(isRosterTransitionShape))) &&
     Array.isArray(value.inningsAEvents) &&
     value.inningsAEvents.every(isQuickScoringEvent) &&
     Array.isArray(value.inningsBEvents) &&
@@ -253,7 +263,8 @@ function aggregateFinalisedPlayerRecords({
   performances,
   allBowlingOvers,
   result,
-  sharedPlayerId,
+  everSharedPlayerIds,
+  finalTeamByPlayerId,
   appliedAt,
   finalStatus,
   playerOfMatchId,
@@ -262,13 +273,15 @@ function aggregateFinalisedPlayerRecords({
   performances: PlayerMatchPerformance[];
   allBowlingOvers: BowlingOver[];
   result: MatchResult;
-  sharedPlayerId: string | null;
+  everSharedPlayerIds: string[];
+  finalTeamByPlayerId: Map<string, TeamId>;
   appliedAt: string;
   finalStatus: MatchStatus;
   playerOfMatchId: string | null;
   matchDate: string;
 }): FinalisedPlayerMatchRecord[] {
   const groupedByPlayerId = new Map<string, PlayerMatchPerformance[]>();
+  const everShared = new Set(everSharedPlayerIds);
 
   for (const performance of performances) {
     groupedByPlayerId.set(performance.playerId, [
@@ -282,9 +295,11 @@ function aggregateFinalisedPlayerRecords({
 
   return [...groupedByPlayerId.entries()].map(([playerId, playerPerformances]) => {
     const playerOvers = allBowlingOvers.filter((over) => over.bowlerId === playerId);
-    const isSharedPlayerRecord =
-      sharedPlayerId === playerId && playerPerformances.length > 1;
-    const basePerformance = playerPerformances[0];
+    const isSharedPlayerRecord = everShared.has(playerId);
+    const finalTeamId = finalTeamByPlayerId.get(playerId);
+    const basePerformance =
+      playerPerformances.find((performance) => performance.teamId === finalTeamId) ??
+      playerPerformances[0];
     const aggregatePerformance: PlayerMatchPerformance = {
       ...basePerformance,
       teamId: basePerformance.teamId,
@@ -406,6 +421,9 @@ export function assemblePendingImportMatch({
     }
   }
 
+  const rosterResolution = resolveRosterTransitions(payload, knownPlayerIds);
+  errors.push(...rosterResolution.errors);
+
   const sharedPlayerId = payload.sharedPlayerId ?? null;
   const teamAPlayerIds = Array.from(
     new Set(
@@ -429,29 +447,69 @@ export function assemblePendingImportMatch({
     )
   );
   const battingMode = payload.battingMode;
+  const derivationTeamAPlayerIds = rosterResolution.hasTransitions
+    ? rosterResolution.teamAPlayerIds
+    : teamAPlayerIds;
+  const derivationTeamBPlayerIds = rosterResolution.hasTransitions
+    ? rosterResolution.teamBPlayerIds
+    : teamBPlayerIds;
+  const derivationHelperIds = rosterResolution.hasTransitions
+    ? rosterResolution.fieldingHelperIds
+    : fieldingHelperIds;
+  const eventEligibility = (battingTeamId: TeamId) => {
+    const inningsIndex = inningsIndexForTeam(payload, battingTeamId);
+    const bowlingTeamId = getChasingTeamId(battingTeamId);
+
+    return (_event: QuickScoringEvent, eventIndex: number) => {
+      const snapshot = rosterResolution.getSnapshot(inningsIndex, eventIndex);
+      const battingPlayerIds = rosterResolution.getTeamPlayerIds(
+        snapshot,
+        battingTeamId
+      );
+      const bowlingPlayerIds = rosterResolution.getTeamPlayerIds(
+        snapshot,
+        bowlingTeamId
+      );
+
+      return {
+        battingPlayerIds,
+        bowlingPlayerIds,
+        fieldingPlayerIds: getEligibleFieldingPlayerIds({
+          bowlingPlayerIds,
+          fieldingHelperIds: snapshot.fieldingHelperIds
+        })
+      };
+    };
+  };
   const derivedA = deriveQuickScoringInnings({
     battingTeamId: "teamA",
     bowlingTeamId: "teamB",
-    battingPlayerIds: teamAPlayerIds,
-    bowlingPlayerIds: teamBPlayerIds,
+    battingPlayerIds: derivationTeamAPlayerIds,
+    bowlingPlayerIds: derivationTeamBPlayerIds,
     fieldingPlayerIds: getEligibleFieldingPlayerIds({
-      bowlingPlayerIds: teamBPlayerIds,
-      fieldingHelperIds
+      bowlingPlayerIds: derivationTeamBPlayerIds,
+      fieldingHelperIds: derivationHelperIds
     }),
     events: payload.inningsAEvents,
-    battingMode
+    battingMode,
+    eventEligibility: rosterResolution.hasTransitions
+      ? eventEligibility("teamA")
+      : undefined
   });
   const derivedB = deriveQuickScoringInnings({
     battingTeamId: "teamB",
     bowlingTeamId: "teamA",
-    battingPlayerIds: teamBPlayerIds,
-    bowlingPlayerIds: teamAPlayerIds,
+    battingPlayerIds: derivationTeamBPlayerIds,
+    bowlingPlayerIds: derivationTeamAPlayerIds,
     fieldingPlayerIds: getEligibleFieldingPlayerIds({
-      bowlingPlayerIds: teamAPlayerIds,
-      fieldingHelperIds
+      bowlingPlayerIds: derivationTeamAPlayerIds,
+      fieldingHelperIds: derivationHelperIds
     }),
     events: payload.inningsBEvents,
-    battingMode
+    battingMode,
+    eventEligibility: rosterResolution.hasTransitions
+      ? eventEligibility("teamB")
+      : undefined
   });
 
   errors.push(...derivedA.missingInformation, ...derivedB.missingInformation);
@@ -469,20 +527,20 @@ export function assemblePendingImportMatch({
   const teamABowlingOvers = derivedB.bowlingOvers;
   const teamBBowlingOvers = derivedA.bowlingOvers;
   const teamAPerformances = buildPerformanceList({
-    teamPlayerIds: teamAPlayerIds,
+    teamPlayerIds: derivationTeamAPlayerIds,
     teamId: "teamA",
     performances: performanceMap,
     ownBowlingOvers: teamABowlingOvers,
     opposingBowlingOvers: teamBBowlingOvers,
-    fieldingHelperIds
+    fieldingHelperIds: derivationHelperIds
   });
   const teamBPerformances = buildPerformanceList({
-    teamPlayerIds: teamBPlayerIds,
+    teamPlayerIds: derivationTeamBPlayerIds,
     teamId: "teamB",
     performances: performanceMap,
     ownBowlingOvers: teamBBowlingOvers,
     opposingBowlingOvers: teamABowlingOvers,
-    fieldingHelperIds
+    fieldingHelperIds: derivationHelperIds
   });
   const performances = [...teamAPerformances, ...teamBPerformances];
 
@@ -527,9 +585,11 @@ export function assemblePendingImportMatch({
         message: null
       };
 
-  const availablePlayerIds = Array.from(
-    new Set([...teamAPlayerIds, ...teamBPlayerIds, ...fieldingHelperIds])
-  );
+  const availablePlayerIds = rosterResolution.hasTransitions
+    ? rosterResolution.participantIds
+    : Array.from(
+        new Set([...teamAPlayerIds, ...teamBPlayerIds, ...fieldingHelperIds])
+      );
   const validationInput: MatchValidationInput = {
     matchDate: derivedMatchDate ?? "",
     matchNumber,
@@ -557,9 +617,110 @@ export function assemblePendingImportMatch({
       teamB: teamBBowlingOvers
     }
   };
-  const validation = validateMatchInput(validationInput);
+  let validation = validateMatchInput(validationInput);
 
-  if (!validation.ok) {
+  if (rosterResolution.hasTransitions) {
+    const transitionTeams = {
+      teamA: buildTeamMatchData({
+        teamId: "teamA",
+        teamName: payload.teamAName ?? "Team A",
+        playerIds: derivationTeamAPlayerIds,
+        performances,
+        bowlingOvers: teamABowlingOvers
+      }),
+      teamB: buildTeamMatchData({
+        teamId: "teamB",
+        teamName: payload.teamBName ?? "Team B",
+        playerIds: derivationTeamBPlayerIds,
+        performances,
+        bowlingOvers: teamBBowlingOvers
+      })
+    };
+    const transitionInnings = (teamId: TeamId) => {
+      const derived = teamId === "teamA" ? derivedA : derivedB;
+      const inningsIndex = inningsIndexForTeam(payload, teamId);
+      const eventCount =
+        teamId === "teamA"
+          ? payload.inningsAEvents.length
+          : payload.inningsBEvents.length;
+      const endSnapshot = rosterResolution.getSnapshot(inningsIndex, eventCount);
+      const battingPlayerCount = rosterResolution.getTeamPlayerIds(
+        endSnapshot,
+        teamId
+      ).length;
+
+      return {
+        battingTeamId: teamId,
+        bowlingTeamId: getChasingTeamId(teamId),
+        runs: derived.runs,
+        wicketsLost: derived.wicketsLost,
+        extras: derived.extras,
+        playerCount: battingPlayerCount,
+        completedOvers: derived.completedOvers,
+        battingPerformances: derived.battingPerformances,
+        bowlingOvers: teamId === "teamA" ? teamBBowlingOvers : teamABowlingOvers
+      };
+    };
+    const firstInnings = transitionInnings(payload.battingFirstTeamId);
+    const chasingTeamId = getChasingTeamId(payload.battingFirstTeamId);
+    const secondInnings = transitionInnings(chasingTeamId);
+    const firstState = getInningsState({
+      battingTeamId: firstInnings.battingTeamId,
+      bowlingTeamId: firstInnings.bowlingTeamId,
+      battingPlayerCount: firstInnings.playerCount,
+      bowlingOvers: firstInnings.bowlingOvers,
+      scheduledOvers: payload.scheduledOversPerInnings,
+      runs: firstInnings.runs
+    });
+    const secondState = getInningsState({
+      battingTeamId: secondInnings.battingTeamId,
+      bowlingTeamId: secondInnings.bowlingTeamId,
+      battingPlayerCount: secondInnings.playerCount,
+      bowlingOvers: secondInnings.bowlingOvers,
+      scheduledOvers: payload.scheduledOversPerInnings,
+      runs: secondInnings.runs,
+      target: firstInnings.runs + 1
+    });
+
+    if (!Number.isInteger(payload.scheduledOversPerInnings) || payload.scheduledOversPerInnings <= 0) {
+      errors.push("Scheduled overs per innings must be a positive integer.");
+    }
+    if (derivedA.legalBalls > payload.scheduledOversPerInnings * 6) {
+      errors.push("Team A innings contains play beyond the scheduled overs.");
+    }
+    if (derivedB.legalBalls > payload.scheduledOversPerInnings * 6) {
+      errors.push("Team B innings contains play beyond the scheduled overs.");
+    }
+    if (!firstState.isComplete) errors.push("The first innings is not complete.");
+    if (!secondState.isComplete) errors.push("The second innings is not complete.");
+
+    validation = {
+      ok: errors.length === 0,
+      errors: [],
+      totals: {
+        teamATotal: derivedA.runs,
+        teamBTotal: derivedB.runs
+      },
+      completedOvers: {
+        teamA: transitionTeams.teamA.completedBowlingOvers,
+        teamB: transitionTeams.teamB.completedBowlingOvers
+      },
+      result: calculateMatchResult(
+        "finalised",
+        payload.battingFirstTeamId,
+        firstInnings,
+        secondInnings
+      ),
+      teams: transitionTeams,
+      scheduledOversPerInnings: payload.scheduledOversPerInnings,
+      battingFirstTeamId: payload.battingFirstTeamId,
+      chasingTeamId,
+      innings: {
+        first: firstInnings,
+        second: secondInnings
+      }
+    };
+  } else if (!validation.ok) {
     errors.push(...validation.errors);
   }
 
@@ -612,11 +773,44 @@ export function assemblePendingImportMatch({
         chasingTeamId === "teamA" ? teamBBowlingOvers : teamABowlingOvers,
       extras: chasingTeamId === "teamA" ? derivedA.extras : derivedB.extras
     });
+  const finalTeamByPlayerId = new Map<string, TeamId>();
+
+  for (const playerId of rosterResolution.participantIds) {
+    if (payload.teamAPlayerIds.includes(playerId)) {
+      finalTeamByPlayerId.set(playerId, "teamA");
+      continue;
+    }
+    if (payload.teamBPlayerIds.includes(playerId)) {
+      finalTeamByPlayerId.set(playerId, "teamB");
+      continue;
+    }
+
+    const latestExclusiveSnapshot = [...rosterResolution.snapshots]
+      .reverse()
+      .find(
+        (snapshot) =>
+          snapshot.teamAPlayerIds.includes(playerId) ||
+          snapshot.teamBPlayerIds.includes(playerId)
+      );
+    const firstPerformance = performances.find(
+      (performance) => performance.playerId === playerId
+    );
+
+    finalTeamByPlayerId.set(
+      playerId,
+      latestExclusiveSnapshot?.teamAPlayerIds.includes(playerId)
+        ? "teamA"
+        : latestExclusiveSnapshot?.teamBPlayerIds.includes(playerId)
+          ? "teamB"
+          : firstPerformance?.teamId ?? "teamA"
+    );
+  }
   const finalisedPlayerRecords = aggregateFinalisedPlayerRecords({
     performances,
     allBowlingOvers: [...teamABowlingOvers, ...teamBBowlingOvers],
     result: validation.result,
-    sharedPlayerId,
+    everSharedPlayerIds: rosterResolution.everSharedPlayerIds,
+    finalTeamByPlayerId,
     appliedAt,
     finalStatus: "finalised",
     playerOfMatchId,
@@ -637,7 +831,9 @@ export function assemblePendingImportMatch({
     battingFirstTeamId: payload.battingFirstTeamId,
     chasingTeamId,
     sharedPlayerId,
+    everSharedPlayerIds: rosterResolution.everSharedPlayerIds,
     fieldingHelperIds,
+    rosterTransitions: payload.rosterTransitions,
     teams,
     innings: {
       first: firstInnings,
@@ -654,6 +850,7 @@ export function assemblePendingImportMatch({
     allBowlingOvers: [...teamABowlingOvers, ...teamBBowlingOvers],
     result: validation.result,
     sharedPlayerId,
+    everSharedPlayerIds: rosterResolution.everSharedPlayerIds,
     matchDate: derivedMatchDate ?? ""
   });
   const validationResult = {

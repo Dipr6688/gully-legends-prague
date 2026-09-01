@@ -5,10 +5,10 @@ import {
   type AppliedPlayerMatchProgression,
   type CareerProgressionState,
   type PlayerCareerStats
-} from "@/lib/career-store";
-import type { SupabaseCareerStatsRow, SupabaseMatchStatApplicationRow } from "@/lib/supabase/read-repositories";
-import type { MatchRecord } from "@/lib/types/match";
-import { withAuthoritativeXPBreakdowns } from "@/lib/progression";
+} from "../career-store";
+import type { SupabaseCareerStatsRow, SupabaseMatchStatApplicationRow } from "./read-repositories";
+import type { MatchRecord } from "../types/match";
+import { withAuthoritativeXPBreakdowns } from "../progression";
 
 export type FinalisationCareerSnapshot = PlayerCareerStats & {
   updatedAt: string;

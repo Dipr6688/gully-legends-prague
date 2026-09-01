@@ -887,24 +887,37 @@ export function withAuthoritativeXPBreakdowns(match: MatchRecord): MatchRecord {
     ...match.teams.teamA.playerPerformances,
     ...match.teams.teamB.playerPerformances
   ];
+  const everSharedPlayerIds = new Set([
+    ...(match.everSharedPlayerIds ?? []),
+    ...(match.sharedPlayerId ? [match.sharedPlayerId] : [])
+  ]);
   const calculateForPerformance = (
     performance: PlayerMatchPerformance
-  ): PlayerMatchXPBreakdown =>
-    calculatePlayerMatchXP(performance, {
+  ): PlayerMatchXPBreakdown => {
+    const context = {
       result: match.result,
       overs: allBowlingOvers.filter(
         (over) => over.bowlerId === performance.playerId
       ),
       matchDate: match.matchDate
-    });
+    };
+
+    return everSharedPlayerIds.has(performance.playerId)
+      ? calculateSharedPlayerMatchXP(
+          originalTeamPerformances.filter(
+            (candidate) => candidate.playerId === performance.playerId
+          ),
+          context
+        )
+      : calculatePlayerMatchXP(performance, context);
+  };
   const calculateFinalRecord = (
     record: FinalisedPlayerMatchRecord
   ): FinalisedPlayerMatchRecord => {
     const playerContexts = originalTeamPerformances.filter(
       (performance) => performance.playerId === record.playerId
     );
-    const isSharedPlayer =
-      match.sharedPlayerId === record.playerId && playerContexts.length > 1;
+    const isSharedPlayer = everSharedPlayerIds.has(record.playerId);
     const playerOvers = allBowlingOvers.filter(
       (over) => over.bowlerId === record.playerId
     );
