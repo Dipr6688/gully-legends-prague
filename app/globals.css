@@ -5063,14 +5063,14 @@ textarea {
   background-image:
     linear-gradient(
       180deg,
-      rgba(5, 8, 13, 0.98) 0%,
-      rgba(5, 8, 13, 0.9) 16%,
-      rgba(5, 8, 13, 0.94) 52%,
-      rgba(5, 8, 13, 0.98) 100%
+      rgba(5, 8, 13, 0.95) 0%,
+      rgba(5, 8, 13, 0.82) 16%,
+      rgba(5, 8, 13, 0.88) 52%,
+      rgba(5, 8, 13, 0.95) 100%
     ),
-    radial-gradient(ellipse at 16% 8%, rgba(247, 199, 52, 0.13), transparent 28rem),
-    radial-gradient(ellipse at 86% 14%, rgba(70, 223, 255, 0.1), transparent 26rem),
-    linear-gradient(135deg, rgba(21, 38, 34, 0.82), rgba(5, 8, 13, 0.97)),
+    radial-gradient(ellipse at 16% 8%, rgba(247, 199, 52, 0.15), transparent 28rem),
+    radial-gradient(ellipse at 86% 14%, rgba(70, 223, 255, 0.12), transparent 26rem),
+    linear-gradient(135deg, rgba(21, 38, 34, 0.72), rgba(5, 8, 13, 0.91)),
     url("/backgrounds/prague-gully-arena.png");
   background-position:
     center top,
