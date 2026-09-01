@@ -1,6 +1,6 @@
 {
-  "metadataVersion": 7,
-  "lastUpdated": "2026-08-27",
+  "metadataVersion": 8,
+  "lastUpdated": "2026-09-01",
   "project": {
     "name": "Gully Legends Prague",
     "purpose": "Gaming/comic styled cricket website and companion APK workflow for the Gully Legends Prague cricket group.",
@@ -10,41 +10,43 @@
     "styling": "Tailwind CSS plus custom CSS in app/globals.css",
     "backend": "Supabase Auth, Postgres RLS, RPCs, and Storage",
     "canonicalRosterCount": 21,
-    "status": "Stable on website main; APK v1.3.0 released/tagged in its own repository."
+    "status": "Stable on website main; APK v1.4.0 released/tagged in its own repository."
   },
   "repositories": {
     "website": {
       "path": "C:/cricket_website/gully-legends-prague",
       "remote": "https://github.com/Dipr6688/gully-legends-prague.git",
       "productionBranch": "main",
-      "currentBranch": "main",
-      "productionHead": "651d5d1 Add server-backed Balance Teams",
-      "originMainHead": "651d5d1 Add server-backed Balance Teams",
+      "currentBranchAtRefresh": "chore/update-project-metadata-v1.4",
+      "productionHead": "e9db399 Add Best Batting Average to Hall of Legends",
+      "originMainHead": "e9db399 Add Best Batting Average to Hall of Legends",
       "tagsPresent": []
     },
     "apk": {
       "path": "C:/cricket_website/apk-integration/GullyLegendsArena-source",
       "remote": "https://github.com/Dipr6688/gully-legends-arena-apk.git",
       "currentBranch": "main",
-      "mainHead": "dd75200 Release Gully Legends Arena v1.3.0",
-      "tagsPresent": ["v1.3.0", "v1.2.0"],
-      "releaseBranch": "release/v1.3.0 exists at dd75200"
+      "mainHead": "ee0a317 Expose late players during live scoring",
+      "tagsPresent": ["v1.4.0", "v1.3.0", "v1.2.0"],
+      "releaseTag": "v1.4.0"
     },
     "externalApkHandoff": "C:/cricket_website/GULLY_LEGENDS_APK_INTEGRATION_HANDOFF_CURRENT.md"
   },
   "currentValidation": {
     "website": {
-      "lastVerified": "2026-08-27",
-      "test": "619/619 passing",
-      "lint": "passed in recent Balance Teams release validation",
-      "typecheck": "passed in recent Balance Teams release validation",
-      "build": "passed in recent Balance Teams release validation"
+      "lastVerified": "2026-09-01",
+      "test": "675/675 passing",
+      "lint": "passed",
+      "typecheck": "passed",
+      "build": "passed",
+      "diffCheck": "passed"
     },
     "apk": {
-      "version": "1.3.0",
-      "versionCode": 6,
+      "version": "1.4.0",
+      "versionCode": 7,
       "parityTest": "passed",
       "contractSmokeTest": "passed",
+      "latePlayersTest": "passed",
       "java": "17.0.20.1",
       "gradle": "8.7",
       "gradleTest": "passed",
@@ -57,18 +59,18 @@
   "apkRelease": {
     "appName": "Gully Legends Arena",
     "applicationId": "com.gullylegends.arena",
-    "versionName": "1.3.0",
-    "versionCode": 6,
+    "versionName": "1.4.0",
+    "versionCode": 7,
     "minSdk": 24,
     "targetSdk": 34,
-    "releaseCommit": "dd75200 Release Gully Legends Arena v1.3.0",
-    "releaseTag": "v1.3.0",
+    "releaseCommit": "ee0a317 Expose late players during live scoring",
+    "releaseTag": "v1.4.0",
     "releaseApkPath": "C:/cricket_website/apk-integration/GullyLegendsArena-source/app/build/outputs/apk/release/app-release.apk",
-    "releaseApkSizeBytes": 1036529,
+    "releaseApkSizeBytes": 1040165,
     "signingScheme": "APK Signature Scheme v2",
     "signerCount": 1,
     "signerSha256": "2fb53fff5b42b31f63716f8d9da78f87058bcca96f6b9ee678e6f9503431d2e2",
-    "upgradeCompatibility": "Same applicationId, same production signer, versionCode 6 greater than v1.2.0 versionCode 5; should install over v1.2.0 without uninstall.",
+    "upgradeCompatibility": "Same applicationId, same production signer, versionCode 7 greater than v1.3.0 versionCode 6; should install over v1.3.0 without uninstall.",
     "localStorageKeysPreserved": ["gla_roster", "gla_matches", "gla_active", "gla_settings"]
   },
   "authorityModel": {
@@ -94,6 +96,57 @@
       "official finalisation"
     ]
   },
+  "xpSystemV2": {
+    "effectiveByMatchDate": {
+      "before2026-09-01": "v1",
+      "from2026-09-01": "v2"
+    },
+    "general": {
+      "played": 20,
+      "win": 5,
+      "playerOfMatch": 15
+    },
+    "batting": {
+      "runs0To60": "+1 XP per 2 runs",
+      "runsAbove60": "+1 XP per 4 runs",
+      "regularBattingCareerCap": 50,
+      "fiftyBonus": 15,
+      "hundredAdditionalBonus": 25,
+      "dismissedDuckPenalty": -8
+    },
+    "bowling": {
+      "wicket": 10,
+      "hatTrickAdditional": 25,
+      "completedSixLegalBallOverQuality": [
+        { "runs": "0", "points": 10 },
+        { "runs": "1-3", "points": 6 },
+        { "runs": "4-6", "points": 3 },
+        { "runs": "7-9", "points": 1 },
+        { "runs": "10-12", "points": 0 },
+        { "runs": "13-15", "points": -2 },
+        { "runs": "16-18", "points": -4 },
+        { "runs": "19-21", "points": -6 },
+        { "runs": "22-24", "points": -8 },
+        { "runs": "25-29", "points": -11 },
+        { "runs": "30+", "points": -15 }
+      ],
+      "positiveOverQualityCareerCap": 30,
+      "negativeOverQualityCareerFloor": -20
+    },
+    "fielding": {
+      "catch": 6,
+      "runOut": 8,
+      "stumping": 8,
+      "fieldingCareerCap": 40
+    },
+    "overallCareerMatchXP": {
+      "minimum": -15,
+      "maximum": 160
+    },
+    "monthlyBeasts": "V2 uses raw category performance points before career category/overall caps and excludes Played, Win and POM.",
+    "pomRecommendation": "V2 recommendation uses uncapped pre-POM performance. Admin remains authoritative.",
+    "historicalRule": "Historical V1 XP and crowns were not recalculated."
+  },
   "balanceTeams": {
     "versionIntroduced": "APK v1.3.0 / website 651d5d1",
     "websiteEndpoint": "/api/app-sync/team-balance",
@@ -114,31 +167,32 @@
       "considers batting strength",
       "considers bowling strength",
       "considers fielding strength",
-      "protects stronger batting/bowling distribution",
-      "equal exclusive-team sizes",
-      "does not worsen teams for variety"
+      "protects stronger batting/bowling distribution at a high level",
+      "equal exclusive-team sizes"
     ],
     "privacyRules": [
       "Do not expose individual ratings",
       "Do not expose hidden weights",
       "Do not expose private pair/separation rules",
+      "Do not expose private hard constraints",
       "Do not expose candidate scores",
       "Do not copy private balancing configuration into APK/public docs/UI/API responses/logs"
-    ],
-    "acceptance": [
-      "10 selected -> 5/5",
-      "12 selected -> 6/6",
-      "odd attendance + Shared -> equal exclusive teams + Shared",
-      "no selected player lost",
-      "no selected player duplicated",
-      "unknown/duplicate IDs rejected",
-      "even attendance + Shared rejected",
-      "odd attendance without Shared handled safely",
-      "Balance Again varies only among optimal/equivalent candidates",
-      "APK contains no private balance configuration"
     ]
   },
-  "apkV12FeaturesRetained": [
+  "apkV14Features": [
+    "XP v2 preview/POM parity",
+    "matchDate-driven V1/V2 selection",
+    "ADD LATE PLAYERS during active innings, including mid-over and first over",
+    "score/overs/wickets/events preserved across roster updates",
+    "flexible Shared Player selection",
+    "Shared Player may be newcomer or existing player",
+    "even current unique roster means no current Shared Player",
+    "odd current unique roster means exactly one current Shared Player",
+    "append-only rosterTransitions",
+    "late arrivals receive no retroactive stats",
+    "existing scoring/Undo/Wide/No-ball/Run Out/Stumping behavior unchanged"
+  ],
+  "apkV12AndV13FeaturesRetained": [
     "full Run Out handling",
     "completed runs on Run Out",
     "striker/non-striker dismissal selection",
@@ -156,6 +210,7 @@
     "consecutive-over bowler prevention",
     "explicit Match Date",
     "APK POM recommendation",
+    "server-backed Balance Teams",
     "offline-first recording",
     "Pending Review sync"
   ],
@@ -163,7 +218,22 @@
     "loginBody": ["adminId", "password"],
     "explicitMatchDate": "APK sends matchDate as YYYY-MM-DD; website uses it for current APK payloads and falls back safely for legacy payloads.",
     "pomRecommendation": "APK sends pomRecommendationPlayerId as recommendation only; website Admin remains authoritative.",
+    "rosterTransitions": "Optional append-only roster transition snapshots allow active-match late players and changing Shared Player state by event boundary.",
     "demoSafety": "Demo Test Match can sync/review but cannot become official."
+  },
+  "websiteRosterTransitionSupport": {
+    "status": "Production-supported",
+    "rules": [
+      "validates deliveries against event-time roster snapshot",
+      "preserves final Team A/B/Shared fields",
+      "aggregates participants across transitions",
+      "supports multiple different Shared Players over one match",
+      "any player Shared at any time receives no normal Win bonus",
+      "preserves one career match and one XP application",
+      "legacy APK payloads without rosterTransitions remain supported",
+      "no database migration required"
+    ],
+    "liveScoringAuthority": "Website is not needed during live APK scoring; APK handles the live game and website handles Pending Review/finalisation afterward."
   },
   "pendingReview": {
     "table": "public.apk_match_imports",
@@ -182,6 +252,7 @@
     "Scorecards",
     "APK Pending Review",
     "Hall of Legends",
+    "Best Batting Average / Current Run Banker",
     "Monthly Beasts",
     "Formula Room",
     "Gallery",
@@ -189,9 +260,52 @@
     "Post-Match Celebration",
     "Historical Match Celebration Replay",
     "Share Match Card",
+    "Automatic Match Stories",
+    "Match Diary",
     "Demo Test Match",
     "Reset Demo Data"
   ],
+  "hallOfLegends": {
+    "categories": [
+      "Most Runs",
+      "Most Wickets",
+      "Most Catches",
+      "Best Strike Rate",
+      "Best Economy",
+      "Six Machine",
+      "Boundary Bandit",
+      "Duck Collector",
+      "Highest XP",
+      "Best Batting Average"
+    ],
+    "removedOnlyFromHall": "Highest Level",
+    "levelsRemainIn": ["progression", "player profiles", "Formula Room"],
+    "bestBattingAverage": {
+      "formula": "official career runs / official dismissals",
+      "qualification": "minimum 5 batting innings and minimum 1 dismissal",
+      "display": "two decimal places",
+      "supportingTitle": "CURRENT RUN BANKER",
+      "podium": "existing #1 center, #2 left, #3 right podium retained",
+      "pointInTimeStandingsAtImplementation": [
+        { "player": "Naeem", "average": "53.50 AVG" },
+        { "player": "Dheeraj", "average": "37.56 AVG" },
+        { "player": "Dipanjan", "average": "25.00 AVG" }
+      ]
+    }
+  },
+  "matchStoriesAndDiary": {
+    "status": "Production-completed",
+    "features": [
+      "automatic persisted Match Stories after official finalisation",
+      "chronological Match Diary",
+      "Matches / Match Diary switch",
+      "Admin historical backfill",
+      "historical stories already generated",
+      "no manual story editor",
+      "no XP/ranking impact",
+      "non-blocking finalisation behavior"
+    ]
+  },
   "postMatchCelebration": {
     "summaryType": "PostMatchCelebrationSummary",
     "source": "lib/post-match-celebration.ts",
@@ -257,6 +371,22 @@
       "Do not use service-role credentials in application code"
     ]
   },
+  "architectureSafety": [
+    "Supabase/website Admin finalisation is authoritative",
+    "APK sync stops at Pending Review",
+    "normal official finalisation remains atomic",
+    "Demo isolation is preserved",
+    "offlineMatchId is permanent",
+    "syncVersion behavior is preserved",
+    "Shared Player keeps one-match/one-XP semantics",
+    "Fielding Helpers are preserved",
+    "same-bowler restriction is preserved",
+    "matchDate semantics are preserved",
+    "no active LBW",
+    "current Wide/No-ball semantics are preserved",
+    "Match Story finalisation behavior is non-blocking",
+    "rosterTransitions are backward compatible"
+  ],
   "incidentNotes": {
     "accidentalTestMatch": "Internal-only note: an accidental non-demo test match was finalised during acceptance testing, identified precisely, rolled back with a guarded targeted rollback, match/application effects removed, career stats rebuilt from legitimate official matches, four legitimate 22-Aug matches remained intact, and no August Monthly Beast crown cleanup was required. Do not publish destructive SQL in README."
   },
@@ -266,6 +396,21 @@
     "empty-innings add-first-event correction if still absent",
     "APK polling/status feedback if still absent",
     "post-finalisation POM correction RPC activation after manual review/application"
+  ],
+  "completedItemsNoLongerDeferred": [
+    "APK Match Date",
+    "APK POM recommendation",
+    "Use Previous Teams",
+    "Run Out parity",
+    "Balance Teams",
+    "APK v1.4.0 XP v2 parity",
+    "APK Add Late Players / rosterTransitions",
+    "APK finalisation confirmation",
+    "Match Stories / Match Diary",
+    "Hall Best Batting Average / Current Run Banker",
+    "Match Records Broken / Personal Best celebration support",
+    "Share Match Card export/share",
+    "Gully Face-Off"
   ],
   "doNotForget": [
     "Supabase/website Admin finalisation is authoritative",

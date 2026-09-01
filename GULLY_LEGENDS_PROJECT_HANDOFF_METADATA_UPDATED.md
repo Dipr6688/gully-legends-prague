@@ -2,9 +2,9 @@
 
 Purpose: upload this file at the start of a new ChatGPT/Codex conversation so the assistant can understand the project without needing the full old chat history.
 
-Last updated: 2026-08-27
+Last updated: 2026-09-01
 
-Current overall status: stable on website `main`. Production website is live at `https://www.gullylegends.eu`. APK v1.3.0 has its own GitHub repository, is tagged, production-signed, and includes server-backed Balance Teams.
+Current overall status: stable on website `main`. Production website is live at `https://www.gullylegends.eu`. APK v1.4.0 has its own GitHub repository, is tagged, production-signed, and includes XP v2 parity plus active-match late-player roster transitions.
 
 Privacy rule: Automatic Balance Teams uses private server-side information. Do not expose player BAT/BOWL/FIELD ratings, hidden weights, private pair/separation rules, candidate scores, or balancing internals in APK assets, public API responses, UI text, README, public docs, screenshots, logs, labels, or accessibility text.
 
@@ -26,7 +26,7 @@ main
 Website production HEAD:
 
 ```text
-651d5d1 Add server-backed Balance Teams
+e9db399 Add Best Batting Average to Hall of Legends
 ```
 
 Website `origin/main` currently points at the same commit.
@@ -47,12 +47,13 @@ main
 APK production/release HEAD:
 
 ```text
-dd75200 Release Gully Legends Arena v1.3.0
+ee0a317 Expose late players during live scoring
 ```
 
 APK tags present:
 
 ```text
+v1.4.0
 v1.3.0
 v1.2.0
 ```
@@ -101,20 +102,20 @@ Implemented public/admin features:
 - Share Match Card export/share
 - Demo Test Match and Reset Demo Data
 
-## 4. APK v1.3.0 Release Facts
+## 4. APK v1.4.0 Release Facts
 
 APK release:
 
 ```text
-Gully Legends Arena v1.3.0
+Gully Legends Arena v1.4.0
 ```
 
 Android configuration:
 
 ```text
 applicationId: com.gullylegends.arena
-versionCode: 6
-versionName: 1.3.0
+versionCode: 7
+versionName: 1.4.0
 minSdk: 24
 targetSdk: 34
 ```
@@ -128,7 +129,7 @@ C:\cricket_website\apk-integration\GullyLegendsArena-source\app\build\outputs\ap
 Verified release APK size:
 
 ```text
-1,036,529 bytes
+1,040,165 bytes
 ```
 
 Signing:
@@ -137,14 +138,14 @@ Signing:
 - APK Signature Scheme v2: true
 - number of signers: 1
 - signer SHA-256: `2fb53fff5b42b31f63716f8d9da78f87058bcca96f6b9ee678e6f9503431d2e2`
-- signer matches previous v1.2.0 production APK
+- signer matches previous production APK releases
 
 Upgrade compatibility:
 
 - same `applicationId`
 - same production signer
-- versionCode `6 > 5`
-- Android should install v1.3.0 over v1.2.0 without uninstall
+- versionCode `7 > 6`
+- Android should install v1.4.0 over v1.3.0 without uninstall
 
 Do not expose keystore password, key password, alias, private key, or secret environment variables.
 
@@ -223,7 +224,7 @@ Balance-quality acceptance verified:
 
 ## 6. v1.2 Features Retained in APK v1.3.0
 
-v1.3.0 includes all previous v1.2 match setup/scoring work:
+v1.4.0 includes all previous v1.2/v1.3 match setup/scoring work:
 
 - full Run Out handling
 - completed runs on Run Out
@@ -244,6 +245,39 @@ v1.3.0 includes all previous v1.2 match setup/scoring work:
 - APK POM recommendation
 - offline-first recording
 - Pending Review sync
+
+## 6A. APK v1.4.0 XP V2 and Late Players
+
+v1.4.0 adds:
+
+- XP v2 preview/POM parity
+- matchDate-driven V1/V2 XP selection
+- `ADD LATE PLAYERS` during active innings, including mid-over and the first over
+- score/overs/wickets/events preserved when late players are added
+- flexible Shared Player selection
+- Shared Player may be a newcomer or an existing player
+- even current unique roster means no current Shared Player
+- odd current unique roster means exactly one current Shared Player
+- append-only `rosterTransitions`
+- late arrivals receive no retroactive stats
+- existing scoring/Undo/Wide/No-ball/Run Out/Stumping behavior unchanged
+
+APK remains non-authoritative for official XP. Website/server finalisation remains authoritative.
+
+## 6B. Website Roster Transition Support
+
+Production website supports optional `rosterTransitions` from APK v1.4.0:
+
+- validates deliveries against the event-time roster snapshot
+- preserves final Team A/B/Shared fields
+- aggregates participants across transitions
+- supports multiple different Shared Players over one match
+- any player Shared at any time receives no normal Win bonus
+- preserves one career match and one XP application per player
+- legacy APK payloads without `rosterTransitions` remain supported
+- no database migration was required
+
+Website is not needed during live scoring. The APK handles the live game, while website/Admin handles Pending Review and official finalisation afterward.
 
 ## 7. APK Sync Authority Model
 
@@ -468,7 +502,18 @@ Live celebration includes winner/result hero, official Game Number/scores/result
 
 Historical replay is read-only from official scorecards. Baselines contain only prior official finalised matches, target match is excluded, same-day chronology uses official Game Number, later matches never affect earlier replay, equal records are not broken, and missing legacy event-backed data is unknown rather than fabricated.
 
-## 18. Gully Face-Off
+## 18. Match Stories and Match Diary
+
+Production includes automatic persisted Match Stories after official finalisation and a chronological Match Diary.
+
+- Matches page includes a Match Diary switch
+- Admin historical backfill exists
+- historical stories have been generated
+- no manual story editor exists
+- no XP/ranking/progression impact
+- Match Story generation is non-blocking around finalisation behavior
+
+## 19. Gully Face-Off
 
 Gully Face-Off is implemented on website `main` at `/face-off`.
 
@@ -483,27 +528,100 @@ Rules:
 - missing legacy ball-by-ball data is not fabricated
 - no private Team Balance inputs are used
 
-## 19. Current Validation
+## 20. Hall of Legends
 
-Website current validation on 2026-08-27:
+Current Hall categories:
+
+- Most Runs
+- Most Wickets
+- Most Catches
+- Best Strike Rate
+- Best Economy
+- Six Machine
+- Boundary Bandit
+- Duck Collector
+- Highest XP
+- Best Batting Average
+
+Highest Level has been removed only as a Hall category. Levels remain in progression, player profiles, and Formula Room.
+
+Best Batting Average:
+
+- formula: official career runs / official dismissals
+- qualification: minimum 5 batting innings and minimum 1 dismissal
+- display: two decimal places
+- supporting title: `CURRENT RUN BANKER`
+- existing #1/#2/#3 podium and competition ranking retained
+
+Point-in-time read-only standings at implementation time:
+
+- Naeem: `53.50 AVG`
+- Dheeraj: `37.56 AVG`
+- Dipanjan: `25.00 AVG`
+
+These standings will change with future official matches.
+
+## 21. XP System V2
+
+XP rule selection is effective by `matchDate`:
+
+- before `2026-09-01`: V1
+- `2026-09-01` onward: V2
+
+V2 general:
+
+- Played `+20`
+- Win `+5`
+- POM `+15`
+
+V2 batting:
+
+- 0-60 runs: `+1` per 2 runs
+- above 60 runs: `+1` per 4 runs
+- career regular batting cap: `50`
+- 50+ milestone: `+15`
+- 100+ milestone: additional `+25`
+- dismissed duck: `-8`
+
+V2 bowling:
+
+- wicket `+10`
+- hat-trick additional `+25`
+- completed six-legal-ball over quality: `0 => +10`, `1-3 => +6`, `4-6 => +3`, `7-9 => +1`, `10-12 => 0`, `13-15 => -2`, `16-18 => -4`, `19-21 => -6`, `22-24 => -8`, `25-29 => -11`, `30+ => -15`
+- career positive over-quality protection: `+30`
+- career negative over-quality protection: `-20`
+
+V2 fielding:
+
+- catch `+6`
+- run-out `+8`
+- stumping `+8`
+- career fielding cap: `40`
+
+Overall V2 career match XP is clamped from `-15` to `+160`.
+
+Monthly Beasts V2 uses raw category performance points before career category/overall caps and excludes Played/Win/POM from category Beast points.
+
+POM V2 recommendation uses uncapped pre-POM performance. Admin remains authoritative. Historical V1 XP and crowns were not recalculated.
+
+## 22. Current Validation
+
+Website current validation on 2026-09-01 after Best Batting Average implementation:
 
 ```text
-npm.cmd run test -> 619/619 passing
-```
-
-Recent Balance Teams release validation also included:
-
-```text
+npm.cmd run test -> 675/675 passing
 npm.cmd run lint -> passed
 npm.cmd run typecheck -> passed
 npm.cmd run build -> passed
+git diff --check -> passed
 ```
 
-APK v1.3.0 release validation:
+APK v1.4.0 release validation:
 
 ```text
 node tools\match-setup-parity-test.js -> passed
 node tools\phase2-contract-smoke-test.js -> passed
+node tools\late-players-test.js -> passed
 Gradle 8.7 with JDK 17.0.20.1 -> verified
 .\gradlew.bat test -> passed
 .\gradlew.bat lintDebug -> passed
@@ -512,7 +630,7 @@ Gradle 8.7 with JDK 17.0.20.1 -> verified
 apksigner verify -> passed
 ```
 
-## 20. Supabase and Migrations
+## 23. Supabase and Migrations
 
 Installed/working RPCs include:
 
@@ -531,7 +649,7 @@ Prepared but not active:
 supabase/migrations/20260807113000_player_of_match_correction.sql
 ```
 
-## 21. Important Do-Not-Forget Rules
+## 24. Important Do-Not-Forget Rules
 
 - Supabase/website Admin finalisation is authoritative.
 - APK upload is not finalisation.
@@ -543,6 +661,10 @@ supabase/migrations/20260807113000_player_of_match_correction.sql
 - Naeem stable ID = `naim`.
 - Same bowler cannot bowl consecutive overs.
 - No active LBW.
+- Current Wide/No-ball semantics are preserved.
+- `offlineMatchId` is permanent.
+- `syncVersion` protects APK import updates.
+- optional `rosterTransitions` are backward compatible.
 - Demo never affects official progression.
 - Do not blindly run deferred migrations.
 - Do not use blanket Supabase migration pushes while manual migration history is unreconciled.
@@ -551,7 +673,7 @@ supabase/migrations/20260807113000_player_of_match_correction.sql
 - Uninstalling APK can delete local WebView data.
 - Do not touch `docs/user-manual/screenshots/03-team-assignment.zip` unless explicitly instructed.
 
-## 22. Remaining Open Items
+## 25. Remaining Open Items
 
 Verify from code before implementing, but currently plausible open items include:
 
@@ -568,12 +690,16 @@ Completed items that should not be listed as deferred:
 - Use Previous Teams
 - Run Out parity
 - Balance Teams
+- APK v1.4.0 XP v2 parity
+- APK Add Late Players / rosterTransitions
 - APK finalisation confirmation
+- Match Stories / Match Diary
+- Hall Best Batting Average / Current Run Banker
 - Match Records Broken / Personal Best celebration support
 - Share Match Card export/share
 - Gully Face-Off
 
-## 23. Local Development Notes
+## 26. Local Development Notes
 
 Use `npm.cmd` / `npx.cmd` on Windows PowerShell.
 
@@ -596,8 +722,8 @@ Use feature branch -> validation -> explicit-file commit -> push -> Preview -> t
 
 Never use `git add .` while unrelated/untracked files exist.
 
-## 24. Suggested First Message for a New Agent
+## 27. Suggested First Message for a New Agent
 
 Upload this file and say:
 
-> I am continuing my Gully Legends Prague website and Gully Legends Arena APK project. Please read the attached handoff completely before suggesting or changing anything. The website is live at https://www.gullylegends.eu. Website main is at 651d5d1. APK main is tagged v1.3.0 at dd75200. Preserve the authority model and never expose private Balance Teams configuration. I now want to work on: [describe the change].
+> I am continuing my Gully Legends Prague website and Gully Legends Arena APK project. Please read the attached handoff completely before suggesting or changing anything. The website is live at https://www.gullylegends.eu. Website main is at e9db399. APK main is tagged v1.4.0 at ee0a317. Preserve the authority model and never expose private Balance Teams configuration. I now want to work on: [describe the change].

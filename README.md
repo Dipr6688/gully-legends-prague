@@ -17,7 +17,7 @@ Website production branch: `main`
 Current website production HEAD:
 
 ```text
-651d5d1 Add server-backed Balance Teams
+e9db399 Add Best Batting Average to Hall of Legends
 ```
 
 APK repository:
@@ -29,19 +29,19 @@ https://github.com/Dipr6688/gully-legends-arena-apk.git
 Current APK release:
 
 ```text
-Gully Legends Arena v1.3.0
+Gully Legends Arena v1.4.0
 applicationId: com.gullylegends.arena
-versionCode: 6
-versionName: 1.3.0
+versionCode: 7
+versionName: 1.4.0
 minSdk: 24
 targetSdk: 34
-tag: v1.3.0
-release commit: dd75200 Release Gully Legends Arena v1.3.0
+tag: v1.4.0
+release commit: ee0a317 Expose late players during live scoring
 ```
 
 Recent validation:
 
-- Website: `619/619` tests passing, lint passed, typecheck passed, build passed for the current Balance Teams release.
+- Website: `675/675` tests passing, lint passed, typecheck passed, build passed, and `git diff --check` passed after the Best Batting Average implementation.
 - APK: match setup parity test passed, app-sync contract smoke test passed, Gradle test passed, `lintDebug` passed, `assembleDebug` passed, `assembleRelease` passed.
 - APK signer SHA-256 verified: `2fb53fff5b42b31f63716f8d9da78f87058bcca96f6b9ee678e6f9503431d2e2`.
 
@@ -66,6 +66,9 @@ Recent validation:
 - Quick Scoring with single-batter/two-batter modes, innings breaks, undo, wides, no-balls, wickets, run-outs, stumpings, and mobile-friendly scoring controls
 - Explicit Match Date support for APK sync
 - APK Player of the Match recommendation as recommendation only
+- XP System V2 by match date
+- Website support for APK roster transitions and late players
+- Automatic Match Stories and chronological Match Diary
 - Post-Match Celebration after official finalisation
 - Historical Match Celebration Replay from official scorecards
 - Share Match Card export/share flow
@@ -137,9 +140,25 @@ Balance Teams:
 
 Private Balance Teams ratings, hidden weights, private pair/separation rules, candidate scores, and selection internals must never be exposed in APK assets, browser payloads, README text, public documentation, UI labels, logs, or public API responses.
 
-## APK v1.2 Features Retained in v1.3.0
+## APK v1.4.0
 
-v1.3.0 includes all completed v1.2 functionality:
+v1.4.0 includes all completed v1.2/v1.3 functionality plus XP v2 preview/parity and late-player roster transitions.
+
+New v1.4.0 behavior:
+
+- XP v2 preview/POM parity for APK-side estimates
+- matchDate-driven V1/V2 selection
+- `ADD LATE PLAYERS` during active innings, including mid-over and the first over
+- score, overs, wickets, and existing events remain preserved when late players are added
+- flexible Shared Player selection
+- Shared Player may be a newcomer or an existing player
+- even current unique roster means no current Shared Player
+- odd current unique roster means exactly one current Shared Player
+- append-only `rosterTransitions`
+- late arrivals receive no retroactive stats
+- existing scoring, Undo, Wide, No-ball, Run Out, and Stumping behavior remains unchanged
+
+Retained functionality:
 
 - full Run Out handling
 - completed runs on Run Out
@@ -160,6 +179,25 @@ v1.3.0 includes all completed v1.2 functionality:
 - APK POM recommendation
 - offline-first recording
 - Pending Review sync
+
+The APK remains non-authoritative for official XP. Website/server finalisation remains authoritative.
+
+## Website Roster Transition Support
+
+Production website code supports optional `rosterTransitions` from APK v1.4.0.
+
+Website behavior:
+
+- validates deliveries against the event-time roster snapshot
+- preserves final Team A, Team B, and Shared Player fields
+- aggregates participants across roster transitions
+- supports multiple different Shared Players over one match
+- treats any player who was Shared at any time as ineligible for normal Win bonus
+- preserves one career match and one XP application per player
+- supports legacy APK payloads without `rosterTransitions`
+- required no database migration
+
+Website is not needed during live APK scoring. The APK handles the live game; the website handles Pending Review and official finalisation afterward.
 
 ## Main Pages
 
@@ -243,11 +281,50 @@ Pending Review has explicit finalisation safety:
 - Demo imports show `DEMO MATCH - CANNOT BE FINALISED AS OFFICIAL`
 - server/database Demo guards remain authoritative
 
-## XP, Levels, Player Power, and Awards
+## XP System V2, Levels, Player Power, and Awards
 
 The calculation source is `lib/progression.ts`. Formula Room displays values from the same constants/utilities used by the app.
 
-Core XP rules include Played XP, Win XP, Player of the Match XP, batting runs, milestone bonuses, duck penalty, wicket XP, hat-tricks, maidens, expensive-over penalties, catches, run-outs, stumpings, fielding cap, and match XP clamp.
+XP rule selection is effective by `matchDate`:
+
+- before `2026-09-01`: V1
+- `2026-09-01` onward: V2
+
+V2 general XP:
+
+- Played `+20`
+- Win `+5`
+- Player of the Match `+15`
+
+V2 batting:
+
+- 0-60 runs: `+1` per 2 runs
+- above 60 runs: `+1` per 4 runs
+- career regular batting cap: `50`
+- 50+ milestone: `+15`
+- 100+ milestone: additional `+25`
+- dismissed duck: `-8`
+
+V2 bowling:
+
+- wicket `+10`
+- hat-trick additional `+25`
+- completed six-legal-ball over quality: `0 => +10`, `1-3 => +6`, `4-6 => +3`, `7-9 => +1`, `10-12 => 0`, `13-15 => -2`, `16-18 => -4`, `19-21 => -6`, `22-24 => -8`, `25-29 => -11`, `30+ => -15`
+- career positive over-quality protection: `+30`
+- career negative over-quality protection: `-20`
+
+V2 fielding:
+
+- catch `+6`
+- run-out `+8`
+- stumping `+8`
+- career fielding cap: `40`
+
+Overall V2 career match XP is clamped from `-15` to `+160`.
+
+Monthly Beasts V2 uses raw category performance points before career category/overall caps and excludes Played, Win, and POM points from category Beast points.
+
+POM V2 recommendation uses uncapped pre-POM performance. Admin remains authoritative. Historical V1 XP and historical crowns were not recalculated.
 
 Level progression uses:
 
@@ -283,6 +360,17 @@ Historical replay is read-only and available from official scorecards through `V
 
 Share Match Card exports a `1080x1350` PNG, supports native Web Share where available, and uses Save Image/download fallback.
 
+## Match Stories and Match Diary
+
+Production includes automatic persisted Match Stories after official finalisation and a chronological Match Diary.
+
+- Matches page includes a Match Diary switch
+- Admin historical backfill exists
+- historical stories have been generated
+- no manual story editor exists
+- Match Stories have no XP, ranking, or progression impact
+- story generation is non-blocking around finalisation behavior
+
 ## Gully Face-Off
 
 `/face-off` compares two different players without declaring an artificial overall winner.
@@ -294,6 +382,39 @@ Share Match Card exports a `1080x1350` PNG, supports native Web Share where avai
 - tracked-only advanced metrics compare valid ball-by-ball subsets only
 - legacy missing ball-by-ball data is not fabricated
 - no private Team Balance inputs are used
+
+## Hall of Legends
+
+Current Hall categories:
+
+- Most Runs
+- Most Wickets
+- Most Catches
+- Best Strike Rate
+- Best Economy
+- Six Machine
+- Boundary Bandit
+- Duck Collector
+- Highest XP
+- Best Batting Average
+
+`Highest Level` has been removed only as a Hall category. Levels remain in progression, player profiles, and Formula Room.
+
+Best Batting Average:
+
+- formula: official career runs / official dismissals
+- qualification: minimum 5 batting innings and minimum 1 dismissal
+- display: two decimal places
+- supporting title: `CURRENT RUN BANKER`
+- existing #1/#2/#3 podium layout and competition ranking are retained
+
+Point-in-time read-only standings at implementation time:
+
+- Naeem: `53.50 AVG`
+- Dheeraj: `37.56 AVG`
+- Dipanjan: `25.00 AVG`
+
+These standings will change with future official matches.
 
 ## Demo Data
 
@@ -340,7 +461,7 @@ npm.cmd run test
 npm.cmd run build
 ```
 
-For this documentation refresh, `npm.cmd run test` passed `619/619`; post-edit lint and typecheck were also run.
+For this metadata refresh baseline, `npm.cmd run test` passed `675/675`; lint, typecheck, build, and `git diff --check` also passed.
 
 ## Agent Handoff
 
