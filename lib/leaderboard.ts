@@ -25,7 +25,7 @@ export type LeaderboardCategory =
   | "boundaries"
   | "ducks"
   | "xp"
-  | "level";
+  | "battingAverage";
 export type LeaderboardPeriod = "all-time" | "current-month";
 export {
   getFilteredFinalisedMatches,
@@ -66,6 +66,9 @@ export type LeaderboardSupportingStats = {
   economy: number | null;
   ducks: number;
   trackedBowlingMatches: number;
+  battingInnings: number;
+  battingDismissals: number;
+  battingAverageRuns: number;
 };
 
 export type PlayerLeaderboardEntry = {
@@ -189,16 +192,16 @@ export const LEADERBOARD_CATEGORIES = {
     quickStatus: "CURRENT XP WARRIOR",
     ratingKey: "batting"
   },
-  level: {
-    label: "HIGHEST LEVEL",
-    shortLabel: "LEVEL",
-    crownTitle: "LEVEL LEGENDS",
+  battingAverage: {
+    label: "BEST BATTING AVERAGE",
+    shortLabel: "AVERAGE",
+    crownTitle: "CURRENT RUN BANKER",
     accent: "gold",
-    icon: "/ui/leaderboard/highest-level.png",
-    unit: "LEVEL",
-    emptyTitle: "ALL PLAYERS TIED",
-    emptyCopy: "Every warrior currently stands together at Level 0.",
-    quickStatus: "CURRENT LEVEL LEGEND",
+    icon: "/ui/leaderboard/most-runs.png",
+    unit: "AVG",
+    emptyTitle: "RUN BANK CLOSED",
+    emptyCopy: "Players qualify after 5 batting innings and at least 1 dismissal.",
+    quickStatus: "CURRENT RUN BANKER",
     ratingKey: "batting"
   }
 } as const satisfies Record<
@@ -227,6 +230,8 @@ type PeriodTotals = {
   highScore: number | null;
   bestBowling: string | null;
   ducks: number;
+  battingInnings: number;
+  battingDismissals: number;
 };
 
 function numericRuns(value: number | "") {
@@ -298,8 +303,46 @@ function createEmptyPeriodTotals(): PeriodTotals {
     xp: 0,
     highScore: null,
     bestBowling: null,
-    ducks: 0
+    ducks: 0,
+    battingInnings: 0,
+    battingDismissals: 0
   };
+}
+
+function isOfficialLeaderboardMatch(match: MatchRecord) {
+  const metadata = match as MatchRecord & {
+    isDemo?: boolean;
+    isDemoTestMatch?: boolean;
+    deletedAt?: string | null;
+  };
+
+  return !metadata.isDemo && !metadata.isDemoTestMatch && !metadata.deletedAt;
+}
+
+function getFilteredOfficialLeaderboardMatches({
+  matches,
+  period,
+  now = new Date()
+}: {
+  matches: MatchRecord[];
+  period: LeaderboardPeriod;
+  now?: Date;
+}) {
+  return getFilteredFinalisedMatches({ matches, period, now }).filter(
+    isOfficialLeaderboardMatch
+  );
+}
+
+export function calculateBattingAverage({
+  runs,
+  dismissals
+}: {
+  runs: number;
+  dismissals: number;
+}) {
+  if (dismissals <= 0) return 0;
+
+  return runs / dismissals;
 }
 
 export function getPeriodTotalsByPlayer(matches: MatchRecord[]) {
@@ -323,6 +366,10 @@ export function getPeriodTotalsByPlayer(matches: MatchRecord[]) {
         catches: current.catches + performance.catches,
         runOuts: current.runOuts + performance.runOuts,
         xp: current.xp + getStoredAwardedXP(performance),
+        battingInnings: current.battingInnings + (performance.didBat ? 1 : 0),
+        battingDismissals:
+          current.battingDismissals +
+          (performance.didBat && performance.wasOut === true ? 1 : 0),
         ducks:
           current.ducks +
           (performance.didBat && performance.wasOut && runs === 0 ? 1 : 0),
@@ -355,13 +402,19 @@ function getPrimaryValue({
   if (category === "sixes") return advancedStats.sixes;
   if (category === "boundaries") return advancedStats.boundaries;
   if (category === "ducks") return advancedStats.ducks;
+  if (category === "battingAverage") {
+    return calculateBattingAverage({
+      runs: periodTotals.runs,
+      dismissals: periodTotals.battingDismissals
+    });
+  }
 
   if (period === "all-time") {
     if (category === "runs") return player.stats.runs;
     if (category === "wickets") return player.stats.wickets;
     if (category === "catches") return player.stats.catches;
     if (category === "xp") return player.xp;
-    return player.level;
+    return 0;
   }
 
   if (category === "runs") return periodTotals.runs;
@@ -369,14 +422,14 @@ function getPrimaryValue({
   if (category === "catches") return periodTotals.catches;
   if (category === "xp") return periodTotals.xp;
 
-  return player.level;
+  return 0;
 }
 
 export function formatLeaderboardValue(
   category: LeaderboardCategory,
   value: number
 ): string {
-  if (category === "level") return `LEVEL ${value}`;
+  if (category === "battingAverage") return `${value.toFixed(2)} AVG`;
   if (category === "strikeRate") return `${formatStrikeRate(value)} SR`;
   if (category === "economy") return `${formatEconomy(value)} ECO`;
   if (category === "sixes") return `${value} ${value === 1 ? "SIX" : "SIXES"}`;
@@ -455,13 +508,14 @@ function getEmptyAdvancedStats(playerId: string): AdvancedCareerStats {
 function isEntryRankable({
   advancedStats,
   category,
+  periodTotals,
   primaryValue
 }: {
   advancedStats: AdvancedCareerStats;
   category: LeaderboardCategory;
+  periodTotals: PeriodTotals;
   primaryValue: number;
 }) {
-  if (category === "level") return true;
   if (category === "strikeRate") {
     return (
       advancedStats.ballsFaced >=
@@ -476,6 +530,9 @@ function isEntryRankable({
   }
   if (category === "sixes") return advancedStats.sixes > 0;
   if (category === "boundaries") return advancedStats.boundaries > 0;
+  if (category === "battingAverage") {
+    return periodTotals.battingInnings >= 5 && periodTotals.battingDismissals >= 1;
+  }
 
   return primaryValue > 0;
 }
@@ -493,18 +550,18 @@ export function getLeaderboardEntries({
   period: LeaderboardPeriod;
   now?: Date;
 }): PlayerLeaderboardEntry[] {
-  const filteredMatches = getFilteredFinalisedMatches({ matches, period, now });
+  const filteredMatches = getFilteredOfficialLeaderboardMatches({ matches, period, now });
   const allTimeMatchTotals = getPeriodTotalsByPlayer(
-    getFilteredFinalisedMatches({ matches, period: "all-time", now })
+    getFilteredOfficialLeaderboardMatches({ matches, period: "all-time", now })
   );
   const periodTotalsByPlayer = getPeriodTotalsByPlayer(filteredMatches);
   const advancedStatsByPlayer = deriveAdvancedCareerStatsByPlayer({
-    matches,
+    matches: matches.filter(isOfficialLeaderboardMatch),
     period,
     now
   });
   const allTimeAdvancedStatsByPlayer = deriveAdvancedCareerStatsByPlayer({
-    matches,
+    matches: matches.filter(isOfficialLeaderboardMatch),
     period: "all-time",
     now
   });
@@ -523,7 +580,12 @@ export function getLeaderboardEntries({
       periodTotals
     });
     const levelProgress = getLevelProgress(player.xp);
-    const rankable = isEntryRankable({ advancedStats, category, primaryValue });
+    const rankable = isEntryRankable({
+      advancedStats,
+      category,
+      periodTotals,
+      primaryValue
+    });
     const supporting: LeaderboardSupportingStats = {
       matches: period === "all-time" ? player.stats.matches : periodTotals.matches,
       trackedBattingInnings: advancedStats.trackedBattingInnings,
@@ -549,7 +611,10 @@ export function getLeaderboardEntries({
       economy: advancedStats.economy,
       ducks:
         period === "all-time" ? allTimeAdvancedStats.ducks : advancedStats.ducks,
-      trackedBowlingMatches: advancedStats.trackedBowlingMatches
+      trackedBowlingMatches: advancedStats.trackedBowlingMatches,
+      battingInnings: periodTotals.battingInnings,
+      battingDismissals: periodTotals.battingDismissals,
+      battingAverageRuns: periodTotals.runs
     };
 
     return {
@@ -598,17 +663,6 @@ export function getLeaderboardSummary({
     ? rankedEntries.filter((entry) => hasSameCompetitionPosition(entry, leadingEntry))
     : [];
 
-  if (category === "level" && leaders.length === entries.length) {
-    return {
-      category,
-      status: "all-tied",
-      leaders,
-      value: bestValue,
-      displayValue: formatLeaderboardValue(category, bestValue),
-      supportingText: `ALL PLAYERS TIED AT ${formatLeaderboardValue(category, bestValue)}`
-    };
-  }
-
   if (leaders.length === 0) {
     return {
       category,
@@ -626,9 +680,11 @@ export function getLeaderboardSummary({
     leaders,
     value: bestValue,
     displayValue:
-      leaders.length > 1 && category !== "level"
+      leaders.length > 1
         ? category === "strikeRate" || category === "economy"
           ? `${formatLeaderboardValue(category, bestValue)} EACH`
+          : category === "battingAverage"
+            ? formatLeaderboardValue(category, bestValue)
           : `${bestValue} EACH`
         : formatLeaderboardValue(category, bestValue),
     supportingText:
@@ -669,7 +725,7 @@ export function groupLeaderboardPodiumEntries(
 
 export function hasAnyFinalisedLeaderboardData(players: Player[], matches: MatchRecord[]) {
   return (
-    getFilteredFinalisedMatches({ matches, period: "all-time" }).length > 0 ||
+    getFilteredOfficialLeaderboardMatches({ matches, period: "all-time" }).length > 0 ||
     players.some((player) => player.stats.matches > 0)
   );
 }

@@ -126,6 +126,9 @@ test("Formula Room documents shared advanced boundary calculations without dupli
     formulaRoom,
     /If catches and run-outs are both equal,\s+players share the rank/
   );
+  assert.match(formulaRoom, /Best Batting Average/);
+  assert.match(formulaRoom, /Runs scored \/ Times dismissed/);
+  assert.match(formulaRoom, /Minimum 5 batting innings and at\s+least 1 dismissal/);
   assert.match(formulaRoom, /Tracked Runs \/ Tracked Balls Faced x 100/);
   assert.match(formulaRoom, /Tracked Runs Conceded x 6 \/ Tracked Legal Balls/);
   assert.match(

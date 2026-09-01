@@ -990,6 +990,13 @@ function MatchMathsPanel() {
             </dd>
           </div>
           <div>
+            <dt>Best Batting Average</dt>
+            <dd>
+              Runs scored / Times dismissed. Minimum 5 batting innings and at
+              least 1 dismissal.
+            </dd>
+          </div>
+          <div>
             <dt>Economy</dt>
             <dd>Tracked Runs Conceded x 6 / Tracked Legal Balls</dd>
           </div>

@@ -1497,8 +1497,8 @@ textarea {
   filter: drop-shadow(0 0 12px rgba(70, 223, 255, 0.64));
 }
 
-.leader-quick-card[data-category="level"] .leader-quick-icon,
-.leaderboard-tabs button[data-category="level"] img {
+.leader-quick-card[data-category="battingAverage"] .leader-quick-icon,
+.leaderboard-tabs button[data-category="battingAverage"] img {
   filter: drop-shadow(0 0 13px rgba(247, 199, 52, 0.6));
 }
 

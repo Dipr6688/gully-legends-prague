@@ -52,7 +52,7 @@ const LEADER_QUICK_ICON_SCALE = {
   boundaries: 0.92,
   ducks: 0.92,
   xp: 0.92,
-  level: 0.92
+  battingAverage: 0.92
 } as const satisfies Record<LeaderboardCategory, number>;
 
 const DUCK_COLLECTOR_QUOTES = [
@@ -131,6 +131,9 @@ function getSupportLine(entry: PlayerLeaderboardEntry) {
   }
   if (entry.category === "ducks") return "ZERO RUNS. MAXIMUM MEMORIES.";
   if (entry.category === "xp") return `LEVEL ${entry.supporting.level}`;
+  if (entry.category === "battingAverage") {
+    return `${entry.supporting.battingAverageRuns} RUNS - ${entry.supporting.battingDismissals} DISMISSALS`;
+  }
 
   return `${entry.supporting.totalXP} XP`;
 }
@@ -603,6 +606,12 @@ function LeaderboardRankRow({ entry }: { entry: PlayerLeaderboardEntry }) {
                       ["INNINGS", entry.supporting.matches],
                       ["NOTE", "GOLDEN ZERO CLUB"]
                     ]
+                  : entry.category === "battingAverage"
+                    ? [
+                        ["INNINGS", entry.supporting.battingInnings],
+                        ["DISMISSALS", entry.supporting.battingDismissals],
+                        ["RUNS", entry.supporting.battingAverageRuns]
+                      ]
                   : entry.category === "sixes"
                     ? [
                         ["SIXES", entry.supporting.sixes],
@@ -657,12 +666,10 @@ function LeaderboardRankRow({ entry }: { entry: PlayerLeaderboardEntry }) {
 
 function LeaderboardRankList({
   category,
-  entries,
-  period
+  entries
 }: {
   category: LeaderboardCategory;
   entries: PlayerLeaderboardEntry[];
-  period: LeaderboardPeriod;
 }) {
   const meta = LEADERBOARD_CATEGORIES[category];
 
@@ -679,8 +686,8 @@ function LeaderboardRankList({
       <div className="leaderboard-section-heading">
         <p>FULL RANKINGS</p>
         <h2>{meta.label}</h2>
-        {period === "current-month" && category === "level" ? (
-          <span>Level reflects total career progression.</span>
+        {category === "battingAverage" ? (
+          <span>Runs scored / times dismissed. Minimum 5 batting innings and 1 dismissal.</span>
         ) : null}
       </div>
       <div className="leaderboard-rank-list">
@@ -773,7 +780,7 @@ export function CareerLeaderboard({
       {hasFinalisedData ? (
         <>
           <LeaderboardPodium category={category} entries={entries} summary={summary} />
-          <LeaderboardRankList category={category} entries={entries} period={period} />
+          <LeaderboardRankList category={category} entries={entries} />
         </>
       ) : (
         <LeaderboardEmptyState category={category} global />

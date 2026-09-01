@@ -53,7 +53,7 @@ const leaderboardCategories: LeaderboardCategory[] = [
   "boundaries",
   "ducks",
   "xp",
-  "level"
+  "battingAverage"
 ];
 
 const monthlyBeastCategories: MonthlyBeastCategory[] = [

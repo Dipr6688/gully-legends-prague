@@ -5,6 +5,7 @@ import test from "node:test";
 import { activePlayers } from "../lib/data/players";
 import {
   LEADERBOARD_CATEGORIES,
+  calculateBattingAverage,
   getLeaderboardEntries,
   getLeaderboardPodium,
   getLeaderboardSummary,
@@ -24,6 +25,7 @@ import type { Player } from "../lib/types/player";
 
 const leaderboardSource = () =>
   readFileSync("components/leaderboard/CareerLeaderboard.tsx", "utf8");
+const leaderboardLibSource = () => readFileSync("lib/leaderboard.ts", "utf8");
 const leaderboardPageSource = () => readFileSync("app/leaderboard/page.tsx", "utf8");
 const matchFormSource = () =>
   readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
@@ -78,7 +80,10 @@ function performance({
   wickets = 0,
   catches = 0,
   runOuts = 0,
-  awardedXP = 0
+  awardedXP = 0,
+  played = true,
+  didBat = true,
+  wasOut = false
 }: {
   playerId: string;
   teamId?: TeamId;
@@ -87,15 +92,18 @@ function performance({
   catches?: number;
   runOuts?: number;
   awardedXP?: number;
+  played?: boolean;
+  didBat?: boolean;
+  wasOut?: boolean;
 }) {
   return {
     playerId,
     teamId,
-    played: true,
+    played,
     playerOfMatch: false,
-    didBat: true,
+    didBat,
     runs,
-    wasOut: false,
+    wasOut,
     wickets,
     hatTricks: 0,
     catches,
@@ -282,7 +290,7 @@ test("Leaderboard renders required interactive sections and player links", () =>
   assert.match(css, /\.leader-quick-card\[data-category="runs"\]/);
   assert.match(css, /\.leader-quick-card\[data-category="wickets"\]/);
   assert.match(css, /\.leader-quick-card\[data-category="catches"\]/);
-  assert.match(css, /\.leader-quick-card\[data-category="level"\]/);
+  assert.match(css, /\.leader-quick-card\[data-category="battingAverage"\]/);
   assert.match(css, /\.duck-collector-tease/);
   assert.match(css, /\.duck-collector-tease::after/);
   assert.match(css, /\.podium-slot-layout-three\s*{[\s\S]*?grid-template-areas:\s*"second first third"/);
@@ -314,7 +322,7 @@ test("Leaderboard categories and quick-card summaries cover all Hall crowns", ()
     "boundaries",
     "ducks",
     "xp",
-    "level"
+    "battingAverage"
   ]);
   assert.equal(LEADERBOARD_CATEGORIES.runs.label, "MOST RUNS");
   assert.equal(LEADERBOARD_CATEGORIES.runs.icon, "/ui/leaderboard/most-runs.png");
@@ -358,11 +366,13 @@ test("Leaderboard categories and quick-card summaries cover all Hall crowns", ()
     LEADERBOARD_CATEGORIES.xp.icon,
     "/ui/leaderboard/highest-xp.png"
   );
-  assert.equal(LEADERBOARD_CATEGORIES.level.label, "HIGHEST LEVEL");
+  assert.equal(LEADERBOARD_CATEGORIES.battingAverage.label, "BEST BATTING AVERAGE");
+  assert.equal(LEADERBOARD_CATEGORIES.battingAverage.crownTitle, "CURRENT RUN BANKER");
   assert.equal(
-    LEADERBOARD_CATEGORIES.level.icon,
-    "/ui/leaderboard/highest-level.png"
+    LEADERBOARD_CATEGORIES.battingAverage.icon,
+    "/ui/leaderboard/most-runs.png"
   );
+  assert.equal(LEADERBOARD_CATEGORIES.battingAverage.quickStatus, "CURRENT RUN BANKER");
 
   for (const category of [
     "runs",
@@ -374,7 +384,7 @@ test("Leaderboard categories and quick-card summaries cover all Hall crowns", ()
     "boundaries",
     "ducks",
     "xp",
-    "level"
+    "battingAverage"
   ] as const) {
     assert.equal(
       existsSync(
@@ -518,6 +528,233 @@ test("Competition ranking keeps ties and skips the next rank", () => {
   );
   assert.equal(summary.status, "joint-leaders");
   assert.equal(summary.displayValue, "3 EACH");
+});
+
+test("Best Batting Average uses runs divided by dismissals", () => {
+  assert.equal(calculateBattingAverage({ runs: 200, dismissals: 5 }), 40);
+  assert.equal(calculateBattingAverage({ runs: 200, dismissals: 4 }), 50);
+  assert.equal(calculateBattingAverage({ runs: 200, dismissals: 0 }), 0);
+});
+
+test("Best Batting Average counts not-outs DNB and qualification correctly", () => {
+  const qualifiedWithNotOuts = matchRecord({
+    id: "average-qualified-not-outs",
+    matchDate: "2026-08-04",
+    records: [
+      performance({ playerId: "aninda", runs: 40, wasOut: true }),
+      performance({ playerId: "aninda", runs: 30, wasOut: false }),
+      performance({ playerId: "aninda", runs: 20, wasOut: true }),
+      performance({ playerId: "aninda", runs: 10, wasOut: false }),
+      performance({ playerId: "aninda", runs: 0, wasOut: false }),
+      performance({ playerId: "arunabha", runs: 60, wasOut: false }),
+      performance({ playerId: "arunabha", runs: 50, wasOut: false }),
+      performance({ playerId: "arunabha", runs: 40, wasOut: false }),
+      performance({ playerId: "arunabha", runs: 30, wasOut: false }),
+      performance({ playerId: "arunabha", runs: 20, wasOut: false }),
+      performance({ playerId: "atripan", runs: 10, wasOut: true }),
+      performance({ playerId: "atripan", runs: 10, wasOut: true }),
+      performance({ playerId: "atripan", runs: 10, wasOut: true }),
+      performance({ playerId: "atripan", runs: 10, wasOut: true }),
+      performance({ playerId: "biplab", didBat: false, runs: 99, wasOut: true })
+    ]
+  });
+  const entries = getLeaderboardEntries({
+    players: activePlayers,
+    matches: [qualifiedWithNotOuts],
+    category: "battingAverage",
+    period: "all-time"
+  });
+  const aninda = entries.find((entry) => entry.player.id === "aninda");
+  const arunabha = entries.find((entry) => entry.player.id === "arunabha");
+  const atripan = entries.find((entry) => entry.player.id === "atripan");
+  const biplab = entries.find((entry) => entry.player.id === "biplab");
+
+  assert.equal(aninda?.primaryValue, 50);
+  assert.equal(aninda?.displayValue, "50.00 AVG");
+  assert.equal(aninda?.supporting.battingInnings, 5);
+  assert.equal(aninda?.supporting.battingDismissals, 2);
+  assert.equal(aninda?.supporting.battingAverageRuns, 100);
+  assert.equal(aninda?.rankable, true);
+  assert.equal(arunabha?.rankable, false, "5 innings with 0 dismissals is not qualified");
+  assert.equal(arunabha?.supporting.battingInnings, 5);
+  assert.equal(arunabha?.supporting.battingDismissals, 0);
+  assert.equal(atripan?.rankable, false, "4 innings is not qualified");
+  assert.equal(atripan?.supporting.battingInnings, 4);
+  assert.equal(biplab?.supporting.battingInnings, 0, "DNB does not count as a batting innings");
+  assert.equal(biplab?.supporting.battingDismissals, 0, "DNB does not count as a dismissal");
+});
+
+test("Best Batting Average ranking handles better average ties and podium order", () => {
+  const averageMatch = matchRecord({
+    id: "average-rank",
+    matchDate: "2026-08-04",
+    records: [
+      ...Array.from({ length: 5 }, () =>
+        performance({ playerId: "aninda", runs: 40, wasOut: true })
+      ),
+      ...Array.from({ length: 4 }, () =>
+        performance({ playerId: "arunabha", runs: 40, wasOut: true })
+      ),
+      performance({ playerId: "arunabha", runs: 0, wasOut: false }),
+      ...Array.from({ length: 3 }, () =>
+        performance({ playerId: "biplab", runs: 50, wasOut: true })
+      ),
+      ...Array.from({ length: 2 }, () =>
+        performance({ playerId: "biplab", runs: 0, wasOut: false })
+      )
+    ]
+  });
+  const entries = getLeaderboardEntries({
+    players: activePlayers,
+    matches: [averageMatch],
+    category: "battingAverage",
+    period: "all-time"
+  });
+  const summary = getLeaderboardSummary({ category: "battingAverage", entries });
+
+  assert.deepEqual(
+    entries
+      .filter((entry) => ["aninda", "arunabha", "biplab"].includes(entry.player.id))
+      .map((entry) => [entry.player.id, entry.displayValue, entry.rank]),
+    [
+      ["biplab", "50.00 AVG", 1],
+      ["aninda", "40.00 AVG", 2],
+      ["arunabha", "40.00 AVG", 2]
+    ]
+  );
+  assert.equal(summary.status, "single-leader");
+  assert.equal(summary.displayValue, "50.00 AVG");
+  assert.equal(summary.supportingText, "CURRENT RUN BANKER");
+  assert.deepEqual(
+    groupLeaderboardPodiumEntries(entries).map((group) => group.rank),
+    [1, 2]
+  );
+  assert.match(leaderboardSource(), /podiumLayout === "three"[\s\S]*?\[2, 1, 3\]/);
+});
+
+test("Best Batting Average excludes non-official matches and preserves legacy dismissal safety", () => {
+  const official = matchRecord({
+    id: "average-official",
+    matchDate: "2026-08-04",
+    records: Array.from({ length: 5 }, () =>
+      performance({ playerId: "aninda", runs: 20, wasOut: true })
+    )
+  });
+  const demo = {
+    ...matchRecord({
+      id: "average-demo",
+      matchDate: "2026-08-04",
+      records: Array.from({ length: 5 }, () =>
+        performance({ playerId: "arunabha", runs: 100, wasOut: true })
+      )
+    }),
+    isDemo: true
+  } as MatchRecord & { isDemo: true };
+  const draft = matchRecord({
+    id: "average-draft",
+    matchDate: "2026-08-04",
+    status: "draft",
+    records: Array.from({ length: 5 }, () =>
+      performance({ playerId: "atripan", runs: 100, wasOut: true })
+    )
+  });
+  const live = matchRecord({
+    id: "average-live",
+    matchDate: "2026-08-04",
+    status: "in_progress",
+    records: Array.from({ length: 5 }, () =>
+      performance({ playerId: "biplab", runs: 100, wasOut: true })
+    )
+  });
+  const cancelled = matchRecord({
+    id: "average-cancelled",
+    matchDate: "2026-08-04",
+    status: "cancelled",
+    records: Array.from({ length: 5 }, () =>
+      performance({ playerId: "dipanjan", runs: 100, wasOut: true })
+    )
+  });
+  const deleted = {
+    ...matchRecord({
+      id: "average-deleted",
+      matchDate: "2026-08-04",
+      records: Array.from({ length: 5 }, () =>
+        performance({ playerId: "gaurav", runs: 100, wasOut: true })
+      )
+    }),
+    deletedAt: "2026-08-05T12:00:00.000Z"
+  } as MatchRecord & { deletedAt: string };
+  const legacyMissingDismissal = performance({
+    playerId: "soman",
+    runs: 30,
+    wasOut: true
+  });
+  delete (legacyMissingDismissal as Partial<typeof legacyMissingDismissal>).wasOut;
+  const legacy = matchRecord({
+    id: "average-legacy-missing-dismissal",
+    matchDate: "2026-08-04",
+    records: Array.from({ length: 5 }, () => ({ ...legacyMissingDismissal }))
+  });
+  const entries = getLeaderboardEntries({
+    players: activePlayers,
+    matches: [official, demo, draft, live, cancelled, deleted, legacy],
+    category: "battingAverage",
+    period: "all-time"
+  });
+
+  assert.equal(entries.find((entry) => entry.player.id === "aninda")?.primaryValue, 20);
+  assert.equal(entries.find((entry) => entry.player.id === "aninda")?.rankable, true);
+  for (const playerId of ["arunabha", "atripan", "biplab", "dipanjan", "gaurav"]) {
+    const entry = entries.find((candidate) => candidate.player.id === playerId);
+
+    assert.equal(entry?.supporting.battingInnings, 0, `${playerId} non-official rows excluded`);
+    assert.equal(entry?.rankable, false);
+  }
+  const soman = entries.find((entry) => entry.player.id === "soman");
+  assert.equal(soman?.supporting.battingInnings, 5);
+  assert.equal(soman?.supporting.battingDismissals, 0);
+  assert.equal(soman?.rankable, false, "missing wasOut is not invented as a dismissal");
+});
+
+test("Best Batting Average handles Shared Player batting innings independently", () => {
+  const sharedMatch = matchRecord({
+    id: "average-shared",
+    matchDate: "2026-08-04",
+    records: [
+      performance({ playerId: "aninda", teamId: "teamA", runs: 20, wasOut: true }),
+      performance({ playerId: "aninda", teamId: "teamB", runs: 30, wasOut: false }),
+      performance({ playerId: "aninda", teamId: "teamA", runs: 25, wasOut: true }),
+      performance({ playerId: "aninda", teamId: "teamB", runs: 35, wasOut: false }),
+      performance({ playerId: "aninda", teamId: "teamA", runs: 40, wasOut: true })
+    ]
+  });
+  const entries = getLeaderboardEntries({
+    players: activePlayers,
+    matches: [sharedMatch],
+    category: "battingAverage",
+    period: "all-time"
+  });
+  const aninda = entries.find((entry) => entry.player.id === "aninda");
+
+  assert.equal(aninda?.supporting.battingInnings, 5);
+  assert.equal(aninda?.supporting.battingDismissals, 3);
+  assert.equal(aninda?.supporting.battingAverageRuns, 150);
+  assert.equal(aninda?.displayValue, "50.00 AVG");
+});
+
+test("Best Batting Average UI replaces Highest Level only in Hall surfaces", () => {
+  const leaderboard = leaderboardSource();
+  const leaderboardLib = leaderboardLibSource();
+  const css = leaderboardCssSource();
+  const formulaRoom = readFileSync("components/stats/FormulaRoom.tsx", "utf8");
+
+  assert.match(leaderboardLib, /BEST BATTING AVERAGE/);
+  assert.match(leaderboardLib, /CURRENT RUN BANKER/);
+  assert.match(leaderboard, /Minimum 5 batting innings and 1 dismissal/);
+  assert.doesNotMatch(leaderboardLib, /HIGHEST LEVEL|CURRENT LEVEL LEGEND|LEVEL LEGENDS/);
+  assert.doesNotMatch(leaderboard, /category === "level"|data-category="level"/);
+  assert.match(css, /\.leader-quick-card\[data-category="battingAverage"\]/);
+  assert.match(formulaRoom, /LEVEL LADDER/);
 });
 
 test("Hall podium includes all players at competition ranks one through three", () => {
@@ -1067,7 +1304,7 @@ test("Hall podium chooses visual geometry from distinct rank positions", () => {
   assert.match(css, /@media \(max-width:\s*540px\)[\s\S]*?\.joint-rank-players,/);
 });
 
-test("Cricket stats use bowler wickets, catches, stored XP and career Level correctly", () => {
+test("Cricket stats use bowler wickets, catches and stored XP correctly", () => {
   const careerPlayers = withCareerStats({
     aninda: {
       level: 2,
@@ -1118,13 +1355,6 @@ test("Cricket stats use bowler wickets, catches, stored XP and career Level corr
     period: "current-month",
     now: new Date("2026-08-05")
   });
-  const levelEntries = getLeaderboardEntries({
-    players: careerPlayers,
-    matches,
-    category: "level",
-    period: "current-month",
-    now: new Date("2026-08-05")
-  });
 
   assert.equal(wicketEntries.find((entry) => entry.player.id === "aninda")?.primaryValue, 0);
   assert.equal(wicketEntries.find((entry) => entry.player.id === "arunabha")?.primaryValue, 1);
@@ -1132,11 +1362,9 @@ test("Cricket stats use bowler wickets, catches, stored XP and career Level corr
   assert.equal(catchEntries[0].primaryValue, 1);
   assert.equal(xpEntries[0].player.id, "aninda");
   assert.equal(xpEntries[0].primaryValue, 37);
-  assert.equal(levelEntries[0].player.id, "aninda");
-  assert.equal(levelEntries[0].primaryValue, 2);
 });
 
-test("Zero states distinguish race-not-started and all Level 0 tied", () => {
+test("Zero states distinguish race-not-started for unqualified Hall categories", () => {
   const careerPlayers = withCareerStats({});
   const catchEntries = getLeaderboardEntries({
     players: careerPlayers,
@@ -1144,10 +1372,10 @@ test("Zero states distinguish race-not-started and all Level 0 tied", () => {
     category: "catches",
     period: "all-time"
   });
-  const levelEntries = getLeaderboardEntries({
+  const battingAverageEntries = getLeaderboardEntries({
     players: careerPlayers,
     matches: [],
-    category: "level",
+    category: "battingAverage",
     period: "all-time"
   });
 
@@ -1156,8 +1384,11 @@ test("Zero states distinguish race-not-started and all Level 0 tied", () => {
     "race-not-started"
   );
   assert.equal(
-    getLeaderboardSummary({ category: "level", entries: levelEntries }).status,
-    "all-tied"
+    getLeaderboardSummary({
+      category: "battingAverage",
+      entries: battingAverageEntries
+    }).status,
+    "race-not-started"
   );
   assert.equal(hasAnyFinalisedLeaderboardData(careerPlayers, []), false);
 });
