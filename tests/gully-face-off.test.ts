@@ -6,6 +6,10 @@ import {
   findFaceOffMetric,
   getOfficialGullyFaceOffMatches
 } from "../lib/gully-face-off";
+import {
+  calculateBatterBowlerRivalry,
+  getBatterBowlerRivalryMaturity
+} from "../lib/analytics/batter-bowler-rivalry";
 import { activePlayers } from "../lib/data/players";
 import { createQuickScoringEvent } from "../lib/quick-scoring";
 import type { PlayerCareerStats } from "../lib/career-store";
@@ -248,6 +252,22 @@ function metricValue(matchup: ReturnType<typeof faceOff>, metricId: Parameters<t
   assert.ok(metric, `Missing metric ${metricId}`);
 
   return metric;
+}
+
+function rivalry({
+  matches,
+  batterId = "aninda",
+  bowlerId = "arunabha"
+}: {
+  matches: MatchRecord[];
+  batterId?: string;
+  bowlerId?: string;
+}) {
+  return calculateBatterBowlerRivalry({
+    matches,
+    batterId,
+    bowlerId
+  });
 }
 
 function career(playerId: string, totalXP: number, level: number): PlayerCareerStats {
@@ -909,6 +929,295 @@ test("Gully Face-Off official history uses approved chronology and filters", () 
   assert.deepEqual(official.map((match) => match.id), ["early", "late"]);
 });
 
+test("Bat vs Ball rivalry calculates basic batter against bowler stats", () => {
+  const duel = rivalry({
+    matches: [
+      officialMatch({
+        events: [
+          event(1, { strikerId: "aninda", bowlerId: "arunabha", batterRuns: 0 }),
+          event(2, { strikerId: "aninda", bowlerId: "arunabha", batterRuns: 4 }),
+          event(3, { strikerId: "aninda", bowlerId: "arunabha", batterRuns: 6 }),
+          event(4, {
+            strikerId: "aninda",
+            bowlerId: "arunabha",
+            batterRuns: 0,
+            wicket: {
+              type: "bowled",
+              dismissedPlayerId: "aninda",
+              fielderId: null,
+              newBatterId: null,
+              completedRuns: 0
+            }
+          }),
+          event(5, { strikerId: "biplab", bowlerId: "arunabha", batterRuns: 4 })
+        ]
+      })
+    ]
+  });
+
+  assert.equal(duel.runs, 10);
+  assert.equal(duel.balls, 4);
+  assert.equal(duel.dismissals, 1);
+  assert.equal(duel.fours, 1);
+  assert.equal(duel.sixes, 1);
+  assert.equal(duel.dotBalls, 2);
+  assert.equal(duel.strikeRateDisplay, "250.0");
+  assert.equal(duel.matchesEncountered, 1);
+  assert.equal(duel.eligibleDeliveryCount, 4);
+});
+
+test("Bat vs Ball rivalry handles wide and no-ball using existing ball-faced semantics", () => {
+  const duel = rivalry({
+    matches: [
+      officialMatch({
+        events: [
+          event(1, {
+            strikerId: "aninda",
+            bowlerId: "arunabha",
+            extraType: "wide",
+            extras: 1,
+            batterRuns: 0
+          }),
+          event(2, {
+            strikerId: "aninda",
+            bowlerId: "arunabha",
+            extraType: "no_ball",
+            extras: 1,
+            batterRuns: 2
+          })
+        ]
+      })
+    ]
+  });
+
+  assert.equal(duel.runs, 2);
+  assert.equal(duel.balls, 1);
+  assert.equal(duel.dotBalls, 0);
+  assert.equal(duel.eligibleDeliveryCount, 2);
+});
+
+test("Bat vs Ball rivalry does not credit run-outs to the bowler", () => {
+  const duel = rivalry({
+    matches: [
+      officialMatch({
+        events: [
+          event(1, {
+            strikerId: "aninda",
+            bowlerId: "arunabha",
+            wicket: {
+              type: "run_out",
+              dismissedPlayerId: "aninda",
+              fielderId: "biplab",
+              newBatterId: null,
+              completedRuns: 1
+            }
+          })
+        ]
+      })
+    ]
+  });
+
+  assert.equal(duel.dismissals, 0);
+  assert.equal(duel.balls, 1);
+});
+
+test("Bat vs Ball rivalry credits bowler wickets under existing dismissal rules", () => {
+  const duel = rivalry({
+    matches: [
+      officialMatch({
+        events: [
+          event(1, {
+            strikerId: "aninda",
+            bowlerId: "arunabha",
+            wicket: {
+              type: "caught",
+              dismissedPlayerId: "aninda",
+              fielderId: "biplab",
+              newBatterId: null,
+              completedRuns: 0
+            }
+          }),
+          event(2, {
+            strikerId: "aninda",
+            bowlerId: "arunabha",
+            wicket: {
+              type: "stumped",
+              dismissedPlayerId: "aninda",
+              fielderId: "atripan",
+              newBatterId: null,
+              completedRuns: 0
+            }
+          })
+        ]
+      })
+    ]
+  });
+
+  assert.equal(duel.dismissals, 2);
+});
+
+test("Bat vs Ball rivalry counts batter boundaries only", () => {
+  const duel = rivalry({
+    matches: [
+      officialMatch({
+        events: [
+          event(1, { strikerId: "aninda", bowlerId: "arunabha", batterRuns: 4 }),
+          event(2, { strikerId: "aninda", bowlerId: "arunabha", batterRuns: 6 }),
+          event(3, {
+            strikerId: "aninda",
+            bowlerId: "arunabha",
+            extraType: "no_ball",
+            extras: 5,
+            batterRuns: 0
+          })
+        ]
+      })
+    ]
+  });
+
+  assert.equal(duel.fours, 1);
+  assert.equal(duel.sixes, 1);
+});
+
+test("Bat vs Ball rivalry is event-based for Shared and Late Player cases", () => {
+  const sharedMatch = officialMatch({
+    events: [
+      event(1, { strikerId: "aninda", bowlerId: "arunabha", batterRuns: 4 })
+    ]
+  });
+  const lateMatch = officialMatch({
+    id: "late-player-rivalry",
+    records: [record({ playerId: "arunabha", teamId: "teamB" })],
+    events: [
+      event(1, { strikerId: "aninda", bowlerId: "arunabha", batterRuns: 6 })
+    ]
+  });
+
+  sharedMatch.sharedPlayerId = "aninda";
+  lateMatch.rosterTransitions = [
+    {
+      inningsIndex: 0,
+      eventIndex: 0,
+      teamAPlayerIds: ["aninda"],
+      teamBPlayerIds: ["arunabha"],
+      sharedPlayerId: null,
+      fieldingHelperIds: [],
+      appliedAt: "2026-08-01T10:00:00.000Z"
+    }
+  ];
+
+  const duel = rivalry({ matches: [sharedMatch, lateMatch] });
+
+  assert.equal(duel.runs, 10);
+  assert.equal(duel.matchesEncountered, 2);
+});
+
+test("Bat vs Ball rivalry ignores Fielding Helper state", () => {
+  const match = officialMatch({
+    events: [
+      event(1, { strikerId: "aninda", bowlerId: "arunabha", batterRuns: 1 })
+    ]
+  });
+
+  match.fieldingHelperIds = ["atripan", "biplab"];
+
+  assert.equal(rivalry({ matches: [match] }).runs, 1);
+});
+
+test("Bat vs Ball rivalry counts unique encounter matches across multiple matches", () => {
+  const duel = rivalry({
+    matches: [
+      officialMatch({
+        id: "duel-one",
+        events: [
+          event(1, { strikerId: "aninda", bowlerId: "arunabha", batterRuns: 1 }),
+          event(2, { strikerId: "aninda", bowlerId: "arunabha", batterRuns: 1 })
+        ]
+      }),
+      officialMatch({
+        id: "duel-two",
+        events: [
+          event(1, { strikerId: "aninda", bowlerId: "arunabha", batterRuns: 2 })
+        ]
+      })
+    ]
+  });
+
+  assert.equal(duel.matchesEncountered, 2);
+  assert.equal(duel.firstEncounterDate, "2026-08-01");
+  assert.equal(duel.lastEncounterDate, "2026-08-01");
+});
+
+test("Bat vs Ball rivalry excludes legacy summary-only, pending APK and Demo matches", () => {
+  const legacy = officialMatch({
+    id: "legacy-summary-only",
+    records: [record({ playerId: "aninda", runs: 99 })]
+  });
+  const pending = officialMatch({
+    id: "apk-pending-rivalry",
+    events: [event(1, { strikerId: "aninda", bowlerId: "arunabha", batterRuns: 6 })]
+  });
+  const demo = officialMatch({
+    id: "demo-rivalry",
+    isDemo: true,
+    events: [event(1, { strikerId: "aninda", bowlerId: "arunabha", batterRuns: 4 })]
+  });
+
+  legacy.quickScoring = undefined;
+
+  const duel = rivalry({ matches: [legacy, pending, demo] });
+
+  assert.equal(duel.runs, 0);
+  assert.equal(duel.balls, 0);
+  assert.equal(duel.matchesEncountered, 0);
+  assert.equal(duel.officialMatchCount, 1);
+  assert.equal(duel.reliableMatchCount, 0);
+});
+
+test("Bat vs Ball rivalry direction changes the result", () => {
+  const match = officialMatch({
+    events: [
+      event(1, { strikerId: "aninda", bowlerId: "arunabha", batterRuns: 6 }),
+      event(2, {
+        battingTeamId: "teamB",
+        strikerId: "arunabha",
+        nonStrikerId: "atripan",
+        bowlerId: "aninda",
+        batterRuns: 1
+      })
+    ]
+  });
+
+  assert.equal(rivalry({ matches: [match], batterId: "aninda", bowlerId: "arunabha" }).runs, 6);
+  assert.equal(rivalry({ matches: [match], batterId: "arunabha", bowlerId: "aninda" }).runs, 1);
+});
+
+test("Bat vs Ball rivalry zero encounters is safe", () => {
+  const duel = rivalry({
+    matches: [
+      officialMatch({
+        events: [
+          event(1, { strikerId: "biplab", bowlerId: "arunabha", batterRuns: 6 })
+        ]
+      })
+    ]
+  });
+
+  assert.equal(duel.runs, 0);
+  assert.equal(duel.balls, 0);
+  assert.equal(duel.strikeRate, null);
+  assert.equal(duel.strikeRateDisplay, "-");
+  assert.equal(Number.isNaN(duel.strikeRate), false);
+});
+
+test("Bat vs Ball rivalry maturity bands use valid balls faced", () => {
+  assert.equal(getBatterBowlerRivalryMaturity(0), "too-early");
+  assert.equal(getBatterBowlerRivalryMaturity(11), "too-early");
+  assert.equal(getBatterBowlerRivalryMaturity(12), "brewing");
+  assert.equal(getBatterBowlerRivalryMaturity(23), "brewing");
+  assert.equal(getBatterBowlerRivalryMaturity(24), "established");
+});
+
 test("/face-off page exists and loads public read-only data", () => {
   const pageSource = readFileSync("app/face-off/page.tsx", "utf8");
 
@@ -936,6 +1245,43 @@ test("Gully Face-Off UI uses branding selectors and an empty arena state", () =>
   assert.match(source, /<select/);
   assert.match(source, /Choose warrior/);
   assert.match(source, /Choose your contenders/);
+});
+
+test("Gully Face-Off UI adds internal Overall and Bat vs Ball modes", () => {
+  const source = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+  const navigationSource = readFileSync("lib/data/navigation.ts", "utf8");
+
+  assert.match(source, /FaceOffModeTabs/);
+  assert.match(source, /Overall Face-Off/);
+  assert.match(source, /Bat vs Ball/);
+  assert.match(source, /normalizeFaceOffMode/);
+  assert.match(source, /mode === "bat-vs-ball"/);
+  assert.doesNotMatch(navigationSource, /bat-vs-ball/i);
+});
+
+test("Bat vs Ball UI uses selected players with Batter Bowler labels and swap", () => {
+  const source = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+
+  assert.match(source, /duelRole/);
+  assert.match(source, /leftRole="Batter"/);
+  assert.match(source, /rightRole="Bowler"/);
+  assert.match(source, /Swap Batter \/ Bowler/);
+  assert.match(source, /rivalryDirection === "left-batter"/);
+  assert.match(source, /params\.set\(\s*"duel"/);
+});
+
+test("Bat vs Ball UI renders rivalry stats and reliable-data empty state", () => {
+  const source = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+
+  assert.match(source, /No Recorded Duel Yet/);
+  assert.match(source, /ball-by-ball recorded official match/);
+  assert.match(source, /Runs/);
+  assert.match(source, /Balls Faced/);
+  assert.match(source, /Dismissals/);
+  assert.match(source, /Strike Rate/);
+  assert.match(source, /Dot Balls/);
+  assert.match(source, /Matches Encountered/);
+  assert.match(source, /Run-outs are not credited as bowler dismissals/);
 });
 
 test("Gully Face-Off UI prevents same-player display and supports URL state", () => {

@@ -10383,6 +10383,48 @@ textarea {
   padding: 14px;
 }
 
+.face-off-mode-tabs {
+  display: inline-grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: min(100%, 520px);
+  justify-self: center;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.26);
+  padding: 5px;
+}
+
+.face-off-mode-tabs button {
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: 1rem;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.face-off-mode-tabs button:hover,
+.face-off-mode-tabs button:focus-visible,
+.face-off-mode-tabs button[aria-selected="true"] {
+  border-color: rgba(247, 199, 52, 0.5);
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.22), transparent 28%),
+    linear-gradient(135deg, rgba(247, 199, 52, 0.28), rgba(70, 223, 255, 0.12));
+  color: #fff5d8;
+  outline: none;
+  text-shadow: 2px 2px 0 #05080d;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 18px rgba(247, 199, 52, 0.18);
+}
+
 .face-off-selector {
   display: grid;
   min-width: 0;
@@ -10590,6 +10632,22 @@ textarea {
   text-transform: uppercase;
 }
 
+.face-off-player-copy em {
+  justify-self: start;
+  border: 1px solid rgba(255, 232, 106, 0.62);
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, rgba(247, 199, 52, 0.22), rgba(70, 223, 255, 0.08));
+  padding: 5px 10px;
+  color: #ffd91a;
+  font-size: 0.76rem;
+  font-style: normal;
+  font-weight: 1000;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 1px 1px 0 #05080d;
+}
+
 .face-off-hero-player[data-side="right"] .face-off-player-copy p {
   color: #ff9a3c;
 }
@@ -10676,6 +10734,215 @@ textarea {
 .face-off-domain-note p {
   margin: 0;
   max-width: none;
+}
+
+.bat-ball-toolbar,
+.bat-ball-empty,
+.bat-ball-rivalry-panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.065), transparent 42%),
+    rgba(3, 8, 12, 0.84);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 42px rgba(0, 0, 0, 0.3);
+}
+
+.bat-ball-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+}
+
+.bat-ball-toolbar div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.bat-ball-toolbar p,
+.bat-ball-rivalry-header p {
+  margin: 0;
+  color: #46dfff;
+  font-size: 0.78rem;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.bat-ball-toolbar strong {
+  color: #fff5d8;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: clamp(1.65rem, 3.6vw, 3rem);
+  font-style: italic;
+  line-height: 0.95;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 #05080d;
+}
+
+.bat-ball-toolbar span,
+.bat-ball-footnote,
+.bat-ball-empty p,
+.bat-ball-empty span {
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 800;
+}
+
+.bat-ball-toolbar button {
+  flex: 0 0 auto;
+  min-height: 46px;
+  border: 1px solid rgba(255, 143, 31, 0.56);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(255, 255, 255, 0.28), transparent 22%),
+    linear-gradient(135deg, rgba(255, 143, 31, 0.3), rgba(247, 199, 52, 0.18));
+  padding: 0 16px;
+  color: #fff5d8;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: 1.02rem;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  text-shadow: 2px 2px 0 #05080d;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 18px rgba(255, 143, 31, 0.18);
+}
+
+.bat-ball-toolbar button:focus-visible {
+  outline: 3px solid rgba(70, 223, 255, 0.42);
+  outline-offset: 3px;
+}
+
+.bat-ball-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: clamp(22px, 5vw, 42px);
+  text-align: center;
+}
+
+.bat-ball-empty h2 {
+  margin: 0;
+  color: #ffd91a;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: clamp(2.2rem, 6vw, 4.4rem);
+  font-style: italic;
+  line-height: 0.9;
+  text-transform: uppercase;
+  text-shadow: 3px 3px 0 #05080d;
+}
+
+.bat-ball-rivalry-panel {
+  display: grid;
+  gap: 14px;
+  padding: clamp(14px, 2.4vw, 22px);
+}
+
+.bat-ball-rivalry-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.bat-ball-rivalry-header h2 {
+  margin: 3px 0 0;
+  color: #fff5d8;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: clamp(2.1rem, 4.8vw, 4.2rem);
+  font-style: italic;
+  line-height: 0.88;
+  text-transform: uppercase;
+  text-shadow: 3px 3px 0 #05080d;
+}
+
+.bat-ball-rivalry-header strong {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 232, 106, 0.72);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 18% 10%, rgba(255, 255, 255, 0.34), transparent 22%),
+    linear-gradient(135deg, rgba(247, 199, 52, 0.34), rgba(70, 223, 255, 0.1));
+  padding: 9px 13px;
+  color: #fff3a3;
+  font-size: 0.82rem;
+  font-weight: 1000;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-shadow: 1px 1px 0 #05080d;
+  text-transform: uppercase;
+  box-shadow: 0 0 18px rgba(247, 199, 52, 0.2);
+}
+
+.bat-ball-primary-stats,
+.bat-ball-secondary-stats {
+  display: grid;
+  gap: 10px;
+}
+
+.bat-ball-primary-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.bat-ball-secondary-stats {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.bat-ball-stat-card {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 4px;
+  min-height: 84px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(70, 223, 255, 0.12), transparent 70%),
+    rgba(0, 0, 0, 0.26);
+  padding: 12px;
+  text-align: center;
+}
+
+.bat-ball-stat-card[data-tone="primary"] {
+  min-height: 118px;
+  border-color: rgba(247, 199, 52, 0.24);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(247, 199, 52, 0.2), transparent 72%),
+    rgba(0, 0, 0, 0.28);
+}
+
+.bat-ball-stat-card strong {
+  color: #fff5d8;
+  font-family: var(--font-bangers), Impact, sans-serif;
+  font-size: clamp(1.7rem, 4vw, 3.45rem);
+  font-style: italic;
+  letter-spacing: 0;
+  line-height: 0.88;
+  text-shadow: 3px 3px 0 #05080d;
+}
+
+.bat-ball-stat-card[data-tone="primary"] strong {
+  color: #ffd91a;
+}
+
+.bat-ball-stat-card span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.75rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bat-ball-footnote {
+  margin: 0;
+  border-left: 3px solid rgba(70, 223, 255, 0.42);
+  padding-left: 12px;
+  text-transform: uppercase;
 }
 
 .face-off-battle-grid {
@@ -10988,6 +11255,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .face-off-mode-tabs {
+    width: 100%;
+  }
+
   .face-off-control-vs {
     min-height: 34px;
   }
@@ -11038,6 +11309,11 @@ textarea {
     letter-spacing: 0.07em;
   }
 
+  .face-off-player-copy em {
+    padding: 3px 7px;
+    font-size: 0.62rem;
+  }
+
   .face-off-player-copy h2 {
     font-size: clamp(1.42rem, 8.5vw, 2.15rem);
   }
@@ -11063,6 +11339,30 @@ textarea {
 
   .face-off-domain-note p {
     grid-column: 1 / -1;
+  }
+
+  .bat-ball-toolbar,
+  .bat-ball-rivalry-header {
+    display: grid;
+  }
+
+  .bat-ball-toolbar button {
+    width: 100%;
+  }
+
+  .bat-ball-primary-stats,
+  .bat-ball-secondary-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bat-ball-stat-card,
+  .bat-ball-stat-card[data-tone="primary"] {
+    min-height: 86px;
+    padding: 10px;
+  }
+
+  .bat-ball-rivalry-header strong {
+    justify-self: start;
   }
 
   .face-off-section-heading {
