@@ -25,6 +25,10 @@ import {
 import { formatPercentage } from "@/lib/progression";
 import { useMatchRepository } from "@/components/matches/useMatchRepository";
 import { useCareerPlayers } from "@/components/players/useCareerPlayers";
+import {
+  getDynamicAvatarFrameClassName,
+  type DynamicAvatarFrameMode
+} from "@/components/ui/DynamicAvatarFrame";
 import type { MatchRecord } from "@/lib/types/match";
 import type { Player } from "@/lib/types/player";
 
@@ -151,6 +155,13 @@ function getRankTone(rank: number) {
   if (rank === 2) return "silver";
   if (rank === 3) return "bronze";
   return "dark";
+}
+
+function getHallPodiumFrameMode(rank: number): DynamicAvatarFrameMode | null {
+  if (rank === 1) return "hallGold";
+  if (rank === 2) return "hallSilver";
+  if (rank === 3) return "hallBronze";
+  return null;
 }
 
 function getMedalText(rank: number) {
@@ -373,6 +384,7 @@ function LeaderboardPodiumCard({
   placement: "first" | "second" | "third" | "balanced" | "single";
 }) {
   const rankTone = getRankTone(entry.rank);
+  const frameMode = getHallPodiumFrameMode(entry.rank);
 
   return (
     <Link
@@ -389,6 +401,12 @@ function LeaderboardPodiumCard({
           <Medal aria-hidden="true" />
           <b>{entry.rank}</b>
         </span>
+        {frameMode ? (
+          <span
+            className={getDynamicAvatarFrameClassName(frameMode, "hall-card-edge-glow")}
+            aria-hidden="true"
+          />
+        ) : null}
         <Image
           src={entry.player.cardImage}
           alt={`${entry.player.name} player card`}
@@ -417,6 +435,7 @@ function JointRankCard({
   rank: number;
 }) {
   const firstEntry = entries[0];
+  const frameMode = getHallPodiumFrameMode(rank);
 
   if (!firstEntry) return null;
 
@@ -432,9 +451,19 @@ function JointRankCard({
           <Link
             key={entry.player.id}
             href={`/players/${entry.player.slug}`}
-            className="joint-rank-player"
+            className={
+              frameMode
+                ? "joint-rank-player joint-rank-player-has-glow"
+                : "joint-rank-player"
+            }
             aria-label={`Open ${entry.player.name} profile, joint rank ${rank}`}
           >
+            {frameMode ? (
+              <span
+                className={getDynamicAvatarFrameClassName(frameMode, "hall-card-edge-glow")}
+                aria-hidden="true"
+              />
+            ) : null}
             <Image
               src={entry.player.cardImage}
               alt={`${entry.player.name} player card`}

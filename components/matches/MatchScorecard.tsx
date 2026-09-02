@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { DynamicAvatarFrame } from "@/components/ui/DynamicAvatarFrame";
 import { useMatchRepository } from "@/components/matches/useMatchRepository";
 import { MockMatchEntryForm } from "@/components/matches/MockMatchEntryForm";
 import { PostMatchCelebration } from "@/components/matches/PostMatchCelebration";
@@ -150,7 +151,7 @@ export function MatchScorecard({
         <p className="scorecard-section-kicker">Player of the Match</p>
         {playerOfMatch ? (
           <div className="scorecard-potm-content">
-            <div className="player-of-match-card-artwork">
+            <DynamicAvatarFrame mode="pomStatic" className="player-of-match-card-artwork">
               <Image
                 src={playerOfMatch.artwork}
                 alt={`${playerOfMatch.name} - ${playerOfMatch.cardTitle}`}
@@ -158,7 +159,7 @@ export function MatchScorecard({
                 sizes="180px"
                 className="player-of-match-card-image"
               />
-            </div>
+            </DynamicAvatarFrame>
             <div>
               <h2>{playerOfMatch.name}</h2>
               <p>{playerOfMatch.role}</p>

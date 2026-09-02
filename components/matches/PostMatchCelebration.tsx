@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { Share2, X } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/Button";
+import { DynamicAvatarFrame } from "@/components/ui/DynamicAvatarFrame";
 import { MatchShareCardDialog } from "@/components/matches/MatchShareCard";
 import { activePlayers, getPlayerById } from "@/lib/data/players";
 import {
@@ -341,7 +342,10 @@ export function PostMatchCelebration({
                 </div>
               </div>
               <div className="post-match-pom-content">
-                <div className="post-match-pom-artwork">
+                <DynamicAvatarFrame
+                  mode={isHistorical ? "pomStatic" : "pom"}
+                  className="post-match-pom-artwork"
+                >
                   <Image
                     src={pomPlayer.cardImage}
                     alt={`${pomPlayer.name} - ${pomPlayer.cardTitle}`}
@@ -349,7 +353,7 @@ export function PostMatchCelebration({
                     sizes="160px"
                     className="object-contain object-center"
                   />
-                </div>
+                </DynamicAvatarFrame>
                 <div>
                   <span>{pomPlayer.cardTitle}</span>
                   {pomContributions.length > 0 ? (

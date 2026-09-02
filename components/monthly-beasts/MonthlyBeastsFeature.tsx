@@ -20,6 +20,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/Button";
+import {
+  getDynamicAvatarFrameClassName,
+  type DynamicAvatarFrameMode
+} from "@/components/ui/DynamicAvatarFrame";
 import { useMatchRepository } from "@/components/matches/useMatchRepository";
 import {
   crownSupabaseMonthlyBeasts,
@@ -61,6 +65,12 @@ const accentColors = {
   purple: "#c557ff",
   green: "#9cff24"
 } as const;
+
+const monthlyBeastFrameModes = {
+  batting: "battingBeast",
+  bowling: "bowlingBeast",
+  fielding: "fieldingBeast"
+} as const satisfies Record<MonthlyBeastCategory, DynamicAvatarFrameMode>;
 
 function useCrownedAwards() {
   const [crownedAwards, setCrownedAwards] = useState<CrownedMonthlyBeasts[]>([]);
@@ -215,7 +225,13 @@ function MonthSelector({
   );
 }
 
-function LeaderPortraits({ leaders }: { leaders: Array<{ playerId: string }> }) {
+function LeaderPortraits({
+  category,
+  leaders
+}: {
+  category: MonthlyBeastCategory;
+  leaders: Array<{ playerId: string }>;
+}) {
   const leaderPlayers = leaders
     .map((leader) => getPlayer(leader.playerId))
     .filter((player): player is Player => Boolean(player));
@@ -230,6 +246,13 @@ function LeaderPortraits({ leaders }: { leaders: Array<{ playerId: string }> }) 
           href={`/players/${player.slug}`}
           className="monthly-beast-portrait"
         >
+          <span
+            className={getDynamicAvatarFrameClassName(
+              monthlyBeastFrameModes[category],
+              "hall-card-edge-glow monthly-beast-card-edge-glow"
+            )}
+            aria-hidden="true"
+          />
           <Image
             src={player.cardImage}
             alt={`${player.name} player card`}
@@ -297,7 +320,9 @@ function CategoryPanel({
       </div>
 
       <div className="monthly-beast-leader-stage">
-        {hasLeaders ? <LeaderPortraits leaders={activeLeaders} /> : null}
+        {hasLeaders ? (
+          <LeaderPortraits category={category} leaders={activeLeaders} />
+        ) : null}
         <div className="monthly-beast-leader-copy">
           <span>{headline}</span>
           {hasLeaders ? (

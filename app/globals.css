@@ -1093,9 +1093,70 @@ body {
   }
 }
 
+@keyframes dynamic-avatar-soft-pulse {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.015);
+  }
+}
+
+@keyframes dynamic-avatar-ring-turn {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes dynamic-avatar-card-edge-glow {
+  0% {
+    opacity: calc(var(--dynamic-avatar-glow-opacity) * 0.62);
+    transform: scale(0.992);
+  }
+  100% {
+    opacity: var(--dynamic-avatar-glow-opacity);
+    transform: scale(1.012);
+  }
+}
+
+@keyframes dynamic-avatar-pom-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  28% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 0.66;
+    transform: scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .post-match-hero-icon {
     animation: post-match-winner-icon-glow 2600ms ease-in-out infinite;
+  }
+
+  .hall-card-edge-glow {
+    animation: dynamic-avatar-card-edge-glow var(--dynamic-avatar-aura-duration) ease-in-out infinite alternate;
+  }
+
+  .dynamic-avatar-frame-pom::before {
+    animation: dynamic-avatar-pom-burst 1450ms ease-out 1 both;
+  }
+
+  .dynamic-avatar-frame-pom::after {
+    animation:
+      dynamic-avatar-pom-burst 1450ms ease-out 1 both,
+      dynamic-avatar-ring-turn 3800ms linear 1;
   }
 }
 
@@ -1265,6 +1326,212 @@ body {
   .post-match-confetti span {
     display: none;
   }
+
+  .dynamic-avatar-frame::before,
+  .dynamic-avatar-frame::after {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+.dynamic-avatar-frame {
+  --dynamic-avatar-accent: 247 199 52;
+  --dynamic-avatar-secondary: 70 223 255;
+  --dynamic-avatar-aura-duration: 4200ms;
+  --dynamic-avatar-glow-opacity: 0.72;
+  --dynamic-avatar-glow-edge-opacity: 0.56;
+  --dynamic-avatar-glow-secondary-opacity: 0.24;
+  --dynamic-avatar-glow-wide-opacity: 0.16;
+  --hall-art-frame-inset-x: 2.35%;
+  --hall-art-frame-inset-top: 1.35%;
+  --hall-art-frame-inset-bottom: 0.8%;
+  --hall-art-frame-radius: 6.2% / 4%;
+  position: relative;
+  isolation: isolate;
+}
+
+.dynamic-avatar-frame-pom,
+.dynamic-avatar-frame-pom-static {
+  --dynamic-avatar-accent: 247 199 52;
+  --dynamic-avatar-secondary: 70 223 255;
+}
+
+.dynamic-avatar-frame-hall-gold {
+  --dynamic-avatar-accent: 247 199 52;
+  --dynamic-avatar-secondary: 255 238 148;
+  --dynamic-avatar-aura-duration: 4200ms;
+  --dynamic-avatar-glow-opacity: 0.9;
+  --dynamic-avatar-glow-edge-opacity: 0.7;
+  --dynamic-avatar-glow-secondary-opacity: 0.34;
+  --dynamic-avatar-glow-wide-opacity: 0.24;
+}
+
+.dynamic-avatar-frame-hall-silver {
+  --dynamic-avatar-accent: 232 238 247;
+  --dynamic-avatar-secondary: 255 255 255;
+  --dynamic-avatar-aura-duration: 4500ms;
+  --dynamic-avatar-glow-opacity: 0.72;
+  --dynamic-avatar-glow-edge-opacity: 0.54;
+  --dynamic-avatar-glow-secondary-opacity: 0.26;
+  --dynamic-avatar-glow-wide-opacity: 0.18;
+}
+
+.dynamic-avatar-frame-hall-bronze {
+  --dynamic-avatar-accent: 205 127 50;
+  --dynamic-avatar-secondary: 244 184 116;
+  --dynamic-avatar-aura-duration: 4800ms;
+  --dynamic-avatar-glow-opacity: 0.66;
+  --dynamic-avatar-glow-edge-opacity: 0.5;
+  --dynamic-avatar-glow-secondary-opacity: 0.24;
+  --dynamic-avatar-glow-wide-opacity: 0.16;
+}
+
+.dynamic-avatar-frame-batting-beast {
+  --dynamic-avatar-accent: 255 143 31;
+  --dynamic-avatar-secondary: 247 199 52;
+  --dynamic-avatar-aura-duration: 4100ms;
+  --dynamic-avatar-glow-opacity: 0.84;
+  --dynamic-avatar-glow-edge-opacity: 0.64;
+  --dynamic-avatar-glow-secondary-opacity: 0.32;
+  --dynamic-avatar-glow-wide-opacity: 0.22;
+}
+
+.dynamic-avatar-frame-bowling-beast {
+  --dynamic-avatar-accent: 244 33 53;
+  --dynamic-avatar-secondary: 197 87 255;
+  --dynamic-avatar-aura-duration: 4400ms;
+  --dynamic-avatar-glow-opacity: 0.8;
+  --dynamic-avatar-glow-edge-opacity: 0.62;
+  --dynamic-avatar-glow-secondary-opacity: 0.34;
+  --dynamic-avatar-glow-wide-opacity: 0.22;
+}
+
+.dynamic-avatar-frame-fielding-beast {
+  --dynamic-avatar-accent: 70 223 255;
+  --dynamic-avatar-secondary: 156 255 36;
+  --dynamic-avatar-aura-duration: 4600ms;
+  --dynamic-avatar-glow-opacity: 0.78;
+  --dynamic-avatar-glow-edge-opacity: 0.58;
+  --dynamic-avatar-glow-secondary-opacity: 0.34;
+  --dynamic-avatar-glow-wide-opacity: 0.2;
+}
+
+.dynamic-avatar-frame-pom::before,
+.dynamic-avatar-frame-pom-static::before,
+.dynamic-avatar-frame-pom::after,
+.dynamic-avatar-frame-pom-static::after {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  border-radius: inherit;
+  content: "";
+}
+
+.dynamic-avatar-frame-pom::before,
+.dynamic-avatar-frame-pom-static::before {
+  border: 2px solid rgba(var(--dynamic-avatar-accent) / 0.72);
+  box-shadow:
+    inset 0 0 18px rgba(var(--dynamic-avatar-accent) / 0.22),
+    0 0 18px rgba(var(--dynamic-avatar-accent) / 0.34),
+    0 0 26px rgba(var(--dynamic-avatar-secondary) / 0.16);
+}
+
+.hall-card-edge-glow {
+  position: absolute;
+  top: var(--hall-art-frame-inset-top);
+  right: var(--hall-art-frame-inset-x);
+  bottom: var(--hall-art-frame-inset-bottom);
+  left: var(--hall-art-frame-inset-x);
+  z-index: 0;
+  border-radius: var(--hall-art-frame-radius);
+  background: transparent;
+  box-shadow:
+    0 0 13px 5px rgba(var(--dynamic-avatar-accent) / var(--dynamic-avatar-glow-edge-opacity)),
+    0 0 30px 9px rgba(var(--dynamic-avatar-secondary) / var(--dynamic-avatar-glow-secondary-opacity)),
+    0 0 46px 13px rgba(var(--dynamic-avatar-accent) / var(--dynamic-avatar-glow-wide-opacity));
+  filter: blur(0.2px);
+  opacity: calc(var(--dynamic-avatar-glow-opacity) * 0.72);
+  pointer-events: none;
+  transform: scale(0.992);
+}
+
+.podium-player-image,
+.rank-player-image,
+.monthly-beast-portrait-image {
+  z-index: 1;
+}
+
+.joint-rank-player-has-glow {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.dynamic-avatar-frame-pom::after {
+  inset: -1px;
+  border: 1px solid transparent;
+  background:
+    conic-gradient(
+      from 0deg,
+      transparent,
+      rgba(var(--dynamic-avatar-accent) / 0.72),
+      transparent 30%,
+      rgba(var(--dynamic-avatar-secondary) / 0.44),
+      transparent 62%,
+      rgba(var(--dynamic-avatar-accent) / 0.42),
+      transparent
+    )
+    border-box;
+  mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  opacity: 0.7;
+}
+
+.dynamic-avatar-frame-pom::after {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(var(--dynamic-avatar-accent) / 0.32), transparent 34%),
+    conic-gradient(
+      from 0deg,
+      transparent,
+      rgba(var(--dynamic-avatar-accent) / 0.86),
+      transparent 18%,
+      rgba(var(--dynamic-avatar-secondary) / 0.6),
+      transparent 48%,
+      rgba(var(--dynamic-avatar-accent) / 0.58),
+      transparent
+    );
+}
+
+.dynamic-avatar-frame-pom-static::after {
+  opacity: 0;
+}
+
+.post-match-pom-artwork.dynamic-avatar-frame,
+.player-of-match-card-artwork.dynamic-avatar-frame {
+  border-radius: 14px;
+}
+
+.monthly-beast-portrait,
+.joint-rank-player-has-glow {
+  transition:
+    filter 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.monthly-beast-portrait:hover,
+.monthly-beast-portrait:focus-visible,
+.joint-rank-player-has-glow:hover,
+.joint-rank-player-has-glow:focus-visible {
+  transform: translateY(-2px) scale(1.015);
 }
 
 a {
@@ -4674,13 +4941,12 @@ textarea {
   display: block;
   width: min(46%, 160px);
   aspect-ratio: 2 / 3;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--beast-accent) 50%, rgba(255, 255, 255, 0.15));
+  overflow: visible;
+  border: 0;
   border-radius: 12px;
-  background: #05080d;
-  box-shadow:
-    0 14px 28px rgba(0, 0, 0, 0.38),
-    0 0 24px color-mix(in srgb, var(--beast-accent) 22%, transparent);
+  background: transparent;
+  box-shadow: none;
+  isolation: isolate;
 }
 
 .monthly-beast-portrait + .monthly-beast-portrait {

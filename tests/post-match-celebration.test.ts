@@ -759,6 +759,27 @@ test("Post-match celebration uses custom public artwork assets", () => {
   assert.match(css, /max-width:\s*760px/);
 });
 
+test("POM dynamic avatar effect is live-only and scorecards remain static", () => {
+  const component = readFileSync(
+    "components/matches/PostMatchCelebration.tsx",
+    "utf8"
+  );
+  const scorecard = readFileSync("components/matches/MatchScorecard.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.match(component, /DynamicAvatarFrame/);
+  assert.match(component, /mode=\{isHistorical \? "pomStatic" : "pom"\}/);
+  assert.match(scorecard, /DynamicAvatarFrame mode="pomStatic"/);
+  assert.match(css, /\.dynamic-avatar-frame-pom::before/);
+  assert.match(css, /dynamic-avatar-pom-burst 1450ms ease-out 1 both/);
+  assert.match(css, /\.dynamic-avatar-frame-pom-static::after\s*{[\s\S]*?opacity:\s*0/);
+  assert.match(
+    css,
+    /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.dynamic-avatar-frame::before,[\s\S]*?\.dynamic-avatar-frame::after[\s\S]*?animation:\s*none !important/
+  );
+  assert.doesNotMatch(component, /setInterval|requestAnimationFrame|canvas|WebGL/);
+});
+
 test("Match form opens celebration only for new successful official finalisation", () => {
   const form = readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
   const client = readFileSync("lib/admin-match-write-client.ts", "utf8");

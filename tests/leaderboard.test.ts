@@ -1304,6 +1304,48 @@ test("Hall podium chooses visual geometry from distinct rank positions", () => {
   assert.match(css, /@media \(max-width:\s*540px\)[\s\S]*?\.joint-rank-players,/);
 });
 
+test("Hall podium applies competition-rank Gold Silver and Bronze dynamic effects", () => {
+  const leaderboard = leaderboardSource();
+  const css = leaderboardCssSource();
+  const frame = readFileSync("components/ui/DynamicAvatarFrame.tsx", "utf8");
+  const hallAnchorGlowBlock =
+    css.match(/^\.hall-card-edge-glow\s*{[\s\S]*?^}/m)?.[0] ?? "";
+
+  assert.match(frame, /export type DynamicAvatarFrameMode/);
+  assert.match(frame, /hallGold:\s*"dynamic-avatar-frame-hall-gold"/);
+  assert.match(frame, /hallSilver:\s*"dynamic-avatar-frame-hall-silver"/);
+  assert.match(frame, /hallBronze:\s*"dynamic-avatar-frame-hall-bronze"/);
+  assert.match(leaderboard, /function getHallPodiumFrameMode\(rank: number\)/);
+  assert.match(leaderboard, /rank === 1\) return "hallGold"/);
+  assert.match(leaderboard, /rank === 2\) return "hallSilver"/);
+  assert.match(leaderboard, /rank === 3\) return "hallBronze"/);
+  assert.match(
+    leaderboard,
+    /<div className="podium-artwork">[\s\S]*?<span[\s\S]*?getDynamicAvatarFrameClassName\(frameMode, "hall-card-edge-glow"\)[\s\S]*?aria-hidden="true"[\s\S]*?\/>[\s\S]*?<Image[\s\S]*?className="podium-player-image"/
+  );
+  assert.match(
+    leaderboard,
+    /className=\{[\s\S]*?frameMode[\s\S]*?\? "joint-rank-player joint-rank-player-has-glow"[\s\S]*?: "joint-rank-player"[\s\S]*?\}[\s\S]*?<span[\s\S]*?getDynamicAvatarFrameClassName\(frameMode, "hall-card-edge-glow"\)[\s\S]*?aria-hidden="true"[\s\S]*?\/>[\s\S]*?<Image[\s\S]*?className="rank-player-image"/
+  );
+  assert.match(css, /\.dynamic-avatar-frame-hall-gold/);
+  assert.match(css, /\.dynamic-avatar-frame-hall-silver/);
+  assert.match(css, /\.dynamic-avatar-frame-hall-bronze/);
+  assert.match(css, /dynamic-avatar-card-edge-glow var\(--dynamic-avatar-aura-duration\) ease-in-out infinite alternate/);
+  assert.match(hallAnchorGlowBlock, /left:\s*var\(--hall-art-frame-inset-x\)/);
+  assert.match(hallAnchorGlowBlock, /border-radius:\s*var\(--hall-art-frame-radius\)/);
+  assert.match(hallAnchorGlowBlock, /box-shadow/);
+  assert.doesNotMatch(hallAnchorGlowBlock, /border:/);
+  assert.doesNotMatch(hallAnchorGlowBlock, /outline:/);
+  assert.match(hallAnchorGlowBlock, /var\(--dynamic-avatar-glow-edge-opacity\)/);
+  assert.match(css, /\.podium-player-image,[\s\S]*?\.rank-player-image\s*{[\s\S]*?z-index:\s*1/);
+  assert.doesNotMatch(
+    css,
+    /\.dynamic-avatar-frame-hall-(gold|silver|bronze)::(before|after)/
+  );
+  assert.doesNotMatch(css, /podium-artwork-glow-anchor|joint-rank-glow-anchor/);
+  assert.doesNotMatch(css, /dynamic-avatar-frame-hall-winner|dynamic-avatar-border-shimmer|dynamic-avatar-aura-breathe|drop-shadow\(0 0 10px rgba\(var\(--dynamic-avatar-accent\)/);
+});
+
 test("Cricket stats use bowler wickets, catches and stored XP correctly", () => {
   const careerPlayers = withCareerStats({
     aninda: {

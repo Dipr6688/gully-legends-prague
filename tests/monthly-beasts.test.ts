@@ -905,6 +905,34 @@ test("Past Beasts archive renders compact canonical player avatars from winner i
   );
 });
 
+test("Current Monthly Beast portraits reuse true card-edge glow while archive avatars stay static", () => {
+  const feature = monthlyFeatureSource();
+  const css = cssSource();
+
+  assert.match(feature, /monthlyBeastFrameModes\s*=\s*{/);
+  assert.match(feature, /batting:\s*"battingBeast"/);
+  assert.match(feature, /bowling:\s*"bowlingBeast"/);
+  assert.match(feature, /fielding:\s*"fieldingBeast"/);
+  assert.match(
+    feature,
+    /className="monthly-beast-portrait"[\s\S]*?getDynamicAvatarFrameClassName\(\s*monthlyBeastFrameModes\[category\],\s*"hall-card-edge-glow monthly-beast-card-edge-glow"\s*\)[\s\S]*?aria-hidden="true"[\s\S]*?<Image/
+  );
+  assert.match(feature, /leaderPlayers\.slice\(0, 2\)\.map/);
+  assert.match(feature, /<LeaderPortraits category=\{category\} leaders=\{activeLeaders\} \/>/);
+  assert.doesNotMatch(feature, /past-beast-winner-avatar[\s\S]{0,220}dynamic-avatar-frame/);
+
+  assert.match(css, /\.dynamic-avatar-frame-batting-beast/);
+  assert.match(css, /\.dynamic-avatar-frame-bowling-beast/);
+  assert.match(css, /\.dynamic-avatar-frame-fielding-beast/);
+  assert.match(css, /\.hall-card-edge-glow\s*{[\s\S]*?left:\s*var\(--hall-art-frame-inset-x\)/);
+  assert.match(css, /\.monthly-beast-portrait\s*{[\s\S]*?overflow:\s*visible/);
+  assert.match(css, /\.monthly-beast-portrait\s*{[\s\S]*?background:\s*transparent/);
+  assert.match(css, /\.monthly-beast-portrait-image\s*{[\s\S]*?object-fit:\s*contain/);
+  assert.doesNotMatch(css, /\.dynamic-avatar-frame-batting-beast::(before|after)/);
+  assert.doesNotMatch(css, /\.dynamic-avatar-frame-bowling-beast::(before|after)/);
+  assert.doesNotMatch(css, /\.dynamic-avatar-frame-fielding-beast::(before|after)/);
+});
+
 test("Monthly Beast Supabase writes use server calculation and protected RPCs", () => {
   const feature = monthlyFeatureSource();
   const monthlyPage = readFileSync("app/monthly-beasts/page.tsx", "utf8");
