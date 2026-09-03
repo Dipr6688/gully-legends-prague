@@ -1,12 +1,12 @@
 import { unstable_cache } from "next/cache";
 import {
-  WEEKEND_WEATHER_DAILY_FIELDS,
+  WEEKEND_WEATHER_HOURLY_FIELDS,
   WEEKEND_WEATHER_LOCATION,
   WEEKEND_WEATHER_REVALIDATE_SECONDS,
   buildWeekendWeatherViewModel,
   getUnavailableWeekendWeather,
   getUpcomingWeekendDates,
-  type OpenMeteoDailyResponse,
+  type OpenMeteoHourlyResponse,
   type WeekendWeatherViewModel
 } from "./weekend-weather";
 
@@ -16,7 +16,7 @@ function buildOpenMeteoForecastUrl(startDate: string, endDate: string): string {
   url.searchParams.set("latitude", String(WEEKEND_WEATHER_LOCATION.latitude));
   url.searchParams.set("longitude", String(WEEKEND_WEATHER_LOCATION.longitude));
   url.searchParams.set("timezone", WEEKEND_WEATHER_LOCATION.timezone);
-  url.searchParams.set("daily", WEEKEND_WEATHER_DAILY_FIELDS.join(","));
+  url.searchParams.set("hourly", WEEKEND_WEATHER_HOURLY_FIELDS.join(","));
   url.searchParams.set("temperature_unit", "celsius");
   url.searchParams.set("wind_speed_unit", "kmh");
   url.searchParams.set("start_date", startDate);
@@ -26,7 +26,7 @@ function buildOpenMeteoForecastUrl(startDate: string, endDate: string): string {
 }
 
 const fetchCachedOpenMeteoWeekend = unstable_cache(
-  async (startDate: string, endDate: string): Promise<OpenMeteoDailyResponse> => {
+  async (startDate: string, endDate: string): Promise<OpenMeteoHourlyResponse> => {
     const response = await fetch(buildOpenMeteoForecastUrl(startDate, endDate), {
       next: { revalidate: WEEKEND_WEATHER_REVALIDATE_SECONDS }
     } as RequestInit & { next: { revalidate: number } });
@@ -35,9 +35,9 @@ const fetchCachedOpenMeteoWeekend = unstable_cache(
       throw new Error(`Open-Meteo forecast failed with ${response.status}`);
     }
 
-    return response.json() as Promise<OpenMeteoDailyResponse>;
+    return response.json() as Promise<OpenMeteoHourlyResponse>;
   },
-  ["czu-gully-arena-weekend-weather"],
+  ["czu-gully-arena-weekend-playing-hours-weather"],
   { revalidate: WEEKEND_WEATHER_REVALIDATE_SECONDS }
 );
 

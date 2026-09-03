@@ -1,8 +1,8 @@
 import type { MatchRecord } from "./types/match";
 
 export const WEEKEND_WEATHER_LOCATION = {
-  latitude: 50.129976,
-  longitude: 14.373707,
+  latitude: 50.12969,
+  longitude: 14.38018,
   timezone: "Europe/Prague",
   venue: "\u010cZU Gully Arena",
   area: "Prague-Suchdol"
@@ -10,12 +10,14 @@ export const WEEKEND_WEATHER_LOCATION = {
 
 export const WEEKEND_WEATHER_REVALIDATE_SECONDS = 60 * 60 * 2;
 
-export const WEEKEND_WEATHER_DAILY_FIELDS = [
+export const WEEKEND_WEATHER_PLAYING_HOURS = [15, 16, 17, 18, 19] as const;
+export const WEEKEND_WEATHER_PLAYING_HOURS_LABEL = "15:00-19:00";
+
+export const WEEKEND_WEATHER_HOURLY_FIELDS = [
   "weather_code",
-  "temperature_2m_max",
-  "temperature_2m_min",
-  "precipitation_probability_max",
-  "wind_speed_10m_max"
+  "temperature_2m",
+  "precipitation_probability",
+  "wind_speed_10m"
 ] as const;
 
 export type WeekendWeatherDatePlan = {
@@ -59,14 +61,13 @@ export type WeekendWeatherViewModel =
       message: string;
     };
 
-export type OpenMeteoDailyResponse = {
-  daily?: {
+export type OpenMeteoHourlyResponse = {
+  hourly?: {
     time?: unknown;
     weather_code?: unknown;
-    temperature_2m_max?: unknown;
-    temperature_2m_min?: unknown;
-    precipitation_probability_max?: unknown;
-    wind_speed_10m_max?: unknown;
+    temperature_2m?: unknown;
+    precipitation_probability?: unknown;
+    wind_speed_10m?: unknown;
   };
 };
 
@@ -155,72 +156,147 @@ export function getCricketWeatherSummary(maxPrecipitationProbability: number): s
   return "COVERS MIGHT BE NEEDED \ud83c\udf27\ufe0f";
 }
 
-function isNumberArray(value: unknown): value is number[] {
-  return (
-    Array.isArray(value) &&
-    value.every((item) => typeof item === "number" && Number.isFinite(item))
-  );
-}
-
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isArray(value: unknown): value is unknown[] {
+  return Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function roundWeatherValue(value: number): number {
   return Math.round(value);
 }
 
+function getWeatherCodeSeverity(weatherCode: number): number {
+  if (weatherCode >= 95 && weatherCode <= 99) return 6;
+  if (
+    (weatherCode >= 71 && weatherCode <= 77) ||
+    weatherCode === 85 ||
+    weatherCode === 86
+  ) {
+    return 5;
+  }
+  if (
+    (weatherCode >= 51 && weatherCode <= 67) ||
+    (weatherCode >= 80 && weatherCode <= 82)
+  ) {
+    return 4;
+  }
+  if (weatherCode === 3 || weatherCode === 45 || weatherCode === 48) return 3;
+  if (weatherCode === 1 || weatherCode === 2) return 2;
+  if (weatherCode === 0) return 1;
+
+  return 3;
+}
+
+function getPlayingHour(timeKey: string): { date: string; hour: number } | null {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):\d{2}/.exec(timeKey);
+
+  if (!match) return null;
+
+  return {
+    date: match[1],
+    hour: Number(match[2])
+  };
+}
+
+function choosePlayingHoursWeatherCode(weatherCodes: number[]): number {
+  return weatherCodes.reduce((selected, candidate) => {
+    const selectedSeverity = getWeatherCodeSeverity(selected);
+    const candidateSeverity = getWeatherCodeSeverity(candidate);
+
+    if (candidateSeverity > selectedSeverity) return candidate;
+    if (candidateSeverity === selectedSeverity && candidate > selected) return candidate;
+
+    return selected;
+  }, weatherCodes[0]);
+}
+
 export function buildWeekendWeatherViewModel({
   response,
   weekend
 }: {
-  response: OpenMeteoDailyResponse;
+  response: OpenMeteoHourlyResponse;
   weekend: WeekendWeatherDatePlan;
 }): WeekendWeatherViewModel {
-  const daily = response.daily;
+  const hourly = response.hourly;
 
   if (
-    !daily ||
-    !isStringArray(daily.time) ||
-    !isNumberArray(daily.weather_code) ||
-    !isNumberArray(daily.temperature_2m_max) ||
-    !isNumberArray(daily.temperature_2m_min) ||
-    !isNumberArray(daily.precipitation_probability_max) ||
-    !isNumberArray(daily.wind_speed_10m_max)
+    !hourly ||
+    !isStringArray(hourly.time) ||
+    !isArray(hourly.weather_code) ||
+    !isArray(hourly.temperature_2m) ||
+    !isArray(hourly.precipitation_probability) ||
+    !isArray(hourly.wind_speed_10m)
   ) {
     return getUnavailableWeekendWeather(weekend);
   }
 
-  const times = daily.time;
-  const weatherCodes = daily.weather_code;
-  const maxTemperatures = daily.temperature_2m_max;
-  const minTemperatures = daily.temperature_2m_min;
-  const precipitationProbabilities = daily.precipitation_probability_max;
-  const maxWindSpeeds = daily.wind_speed_10m_max;
+  const times = hourly.time;
+  const weatherCodes = hourly.weather_code;
+  const temperatures = hourly.temperature_2m;
+  const precipitationProbabilities = hourly.precipitation_probability;
+  const windSpeeds = hourly.wind_speed_10m;
   const dateEntries = [
     { date: weekend.saturday, weekday: "SAT" as const },
     { date: weekend.sunday, weekday: "SUN" as const }
   ];
   const days = dateEntries.flatMap((entry) => {
-    const index = times.indexOf(entry.date);
+    const playingHourIndexes = times.flatMap((time, index) => {
+      const playingHour = getPlayingHour(time);
 
-    if (index < 0) return [];
+      if (
+        !playingHour ||
+        playingHour.date !== entry.date ||
+        !WEEKEND_WEATHER_PLAYING_HOURS.includes(
+          playingHour.hour as (typeof WEEKEND_WEATHER_PLAYING_HOURS)[number]
+        )
+      ) {
+        return [];
+      }
 
-    const weatherCode = weatherCodes[index];
-    const maxTemperatureC = maxTemperatures[index];
-    const minTemperatureC = minTemperatures[index];
-    const precipitationProbability = precipitationProbabilities[index];
-    const maxWindKmh = maxWindSpeeds[index];
+      const weatherCode = weatherCodes[index];
+      const temperature = temperatures[index];
+      const precipitationProbability = precipitationProbabilities[index];
+      const windSpeed = windSpeeds[index];
 
-    if (
-      !Number.isFinite(weatherCode) ||
-      !Number.isFinite(maxTemperatureC) ||
-      !Number.isFinite(minTemperatureC) ||
-      !Number.isFinite(precipitationProbability) ||
-      !Number.isFinite(maxWindKmh)
-    ) {
-      return [];
-    }
+      if (
+        !isFiniteNumber(weatherCode) ||
+        !isFiniteNumber(temperature) ||
+        !isFiniteNumber(precipitationProbability) ||
+        !isFiniteNumber(windSpeed)
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          weatherCode,
+          temperature,
+          precipitationProbability,
+          windSpeed
+        }
+      ];
+    });
+
+    if (playingHourIndexes.length === 0) return [];
+
+    const dayWeatherCodes = playingHourIndexes.map((hour) => hour.weatherCode);
+    const dayTemperatures = playingHourIndexes.map((hour) => hour.temperature);
+    const dayPrecipitationProbabilities = playingHourIndexes.map(
+      (hour) => hour.precipitationProbability
+    );
+    const dayWindSpeeds = playingHourIndexes.map((hour) => hour.windSpeed);
+    const weatherCode = choosePlayingHoursWeatherCode(dayWeatherCodes);
+    const maxTemperatureC = Math.max(...dayTemperatures);
+    const minTemperatureC = Math.min(...dayTemperatures);
+    const precipitationProbability = Math.max(...dayPrecipitationProbabilities);
+    const maxWindKmh = Math.max(...dayWindSpeeds);
 
     return [
       {

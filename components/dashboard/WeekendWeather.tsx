@@ -1,4 +1,7 @@
-import type { WeekendWeatherViewModel } from "@/lib/weekend-weather";
+import {
+  WEEKEND_WEATHER_PLAYING_HOURS_LABEL,
+  type WeekendWeatherViewModel
+} from "@/lib/weekend-weather";
 
 function formatWeatherDate(dateKey: string): string {
   return new Intl.DateTimeFormat("en-GB", {
@@ -39,6 +42,9 @@ export function WeekendWeather({
                   <span aria-hidden="true">{day.condition.icon}</span>
                   <strong>{day.condition.label}</strong>
                 </div>
+                <span className="weekend-weather-playing-hours">
+                  PLAYING HOURS {WEEKEND_WEATHER_PLAYING_HOURS_LABEL}
+                </span>
                 <div className="weekend-weather-values">
                   <span>
                     {day.maxTemperatureC}° / {day.minTemperatureC}°

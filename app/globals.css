@@ -5695,6 +5695,7 @@ textarea {
 .weekend-weather-day-title span,
 .weekend-weather-day-title b,
 .weekend-weather-day-title em,
+.weekend-weather-playing-hours,
 .weekend-weather-values span,
 .weekend-weather-summary,
 .weekend-weather-fallback {
@@ -5780,6 +5781,12 @@ textarea {
   font-size: 0.82rem;
   font-weight: 950;
   line-height: 1.05;
+}
+
+.weekend-weather-playing-hours {
+  color: #b6f36b;
+  font-size: 0.58rem;
+  line-height: 1;
 }
 
 .weekend-weather-values {

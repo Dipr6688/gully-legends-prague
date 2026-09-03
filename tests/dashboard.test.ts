@@ -75,8 +75,10 @@ import {
 } from "../lib/player-browser";
 import { calculateDisplayedRating } from "../lib/progression";
 import {
-  WEEKEND_WEATHER_DAILY_FIELDS,
+  WEEKEND_WEATHER_HOURLY_FIELDS,
   WEEKEND_WEATHER_LOCATION,
+  WEEKEND_WEATHER_PLAYING_HOURS,
+  WEEKEND_WEATHER_PLAYING_HOURS_LABEL,
   WEEKEND_WEATHER_REVALIDATE_SECONDS,
   applyWeekendMatchDayMarkers,
   buildWeekendWeatherViewModel,
@@ -1482,6 +1484,8 @@ test("Recent Matches uses separated artwork layout and links to the archive", ()
 
   assert.match(recent, /className="recent-matches-content mt-4"/);
   assert.match(recent, /className="recent-matches-panel p-4"/);
+  assert.match(recent, /className="arcade-heading text-xl uppercase">Recent Matches/);
+  assert.match(recent, /className="heading-accent" aria-hidden="true"/);
   assert.doesNotMatch(recent, /min-h-52|h-full/);
   assert.match(recent, /className="recent-match-list grid gap-2/);
   assert.match(recent, /className="recent-match-artwork"/);
@@ -3195,25 +3199,50 @@ test("lower dashboard background reuses the existing arena image without dead 40
   assert.match(css, /@media \(max-width:\s*1279px\)[\s\S]*?\.mobile-navigation\s*{[\s\S]*?display:\s*block/);
 });
 
+function hourlyWeatherResponse(
+  points: Array<{
+    time: string;
+    weatherCode: number;
+    temperature: number;
+    precipitationProbability: number;
+    windSpeed: number;
+  }>
+) {
+  return {
+    hourly: {
+      time: points.map((point) => point.time),
+      weather_code: points.map((point) => point.weatherCode),
+      temperature_2m: points.map((point) => point.temperature),
+      precipitation_probability: points.map(
+        (point) => point.precipitationProbability
+      ),
+      wind_speed_10m: points.map((point) => point.windSpeed)
+    }
+  };
+}
+
 test("Weekend Weather uses the fixed CZU forecast contract", () => {
   const serverSource = readFileSync("lib/weekend-weather-server.ts", "utf8");
 
   assert.deepEqual(WEEKEND_WEATHER_LOCATION, {
-    latitude: 50.129976,
-    longitude: 14.373707,
+    latitude: 50.12969,
+    longitude: 14.38018,
     timezone: "Europe/Prague",
     venue: "\u010cZU Gully Arena",
     area: "Prague-Suchdol"
   });
-  assert.deepEqual(WEEKEND_WEATHER_DAILY_FIELDS, [
+  assert.deepEqual(WEEKEND_WEATHER_PLAYING_HOURS, [15, 16, 17, 18, 19]);
+  assert.equal(WEEKEND_WEATHER_PLAYING_HOURS_LABEL, "15:00-19:00");
+  assert.deepEqual(WEEKEND_WEATHER_HOURLY_FIELDS, [
     "weather_code",
-    "temperature_2m_max",
-    "temperature_2m_min",
-    "precipitation_probability_max",
-    "wind_speed_10m_max"
+    "temperature_2m",
+    "precipitation_probability",
+    "wind_speed_10m"
   ]);
   assert.equal(WEEKEND_WEATHER_REVALIDATE_SECONDS, 7200);
   assert.match(serverSource, /https:\/\/api\.open-meteo\.com\/v1\/forecast/);
+  assert.match(serverSource, /url\.searchParams\.set\("hourly"/);
+  assert.doesNotMatch(serverSource, /url\.searchParams\.set\("daily"/);
   assert.match(serverSource, /next:\s*\{\s*revalidate:\s*WEEKEND_WEATHER_REVALIDATE_SECONDS\s*\}/);
 });
 
@@ -3259,50 +3288,230 @@ test("Weekend Weather validates provider data and handles partial forecast horiz
   };
   const available = buildWeekendWeatherViewModel({
     weekend,
-    response: {
-      daily: {
-        time: ["2026-09-05", "2026-09-06"],
-        weather_code: [0, 61],
-        temperature_2m_max: [23.4, 18.8],
-        temperature_2m_min: [12.6, 11.8],
-        precipitation_probability_max: [20, 55],
-        wind_speed_10m_max: [11.2, 17.4]
+    response: hourlyWeatherResponse([
+      {
+        time: "2026-09-05T15:00",
+        weatherCode: 0,
+        temperature: 22.4,
+        precipitationProbability: 5,
+        windSpeed: 8.2
+      },
+      {
+        time: "2026-09-05T16:00",
+        weatherCode: 2,
+        temperature: 23.4,
+        precipitationProbability: 20,
+        windSpeed: 11.2
+      },
+      {
+        time: "2026-09-06T15:00",
+        weatherCode: 2,
+        temperature: 18.8,
+        precipitationProbability: 35,
+        windSpeed: 13.1
+      },
+      {
+        time: "2026-09-06T16:00",
+        weatherCode: 61,
+        temperature: 17.6,
+        precipitationProbability: 55,
+        windSpeed: 17.4
       }
-    }
+    ])
   });
 
   assert.equal(available.status, "available");
   assert.equal(available.days.length, 2);
   assert.equal(available.days[0].weekday, "SAT");
   assert.equal(available.days[0].maxTemperatureC, 23);
+  assert.equal(available.days[0].minTemperatureC, 22);
   assert.equal(available.days[1].precipitationProbability, 55);
+  assert.equal(available.days[1].condition.label, "Rain/showers");
   assert.equal(available.summary, "RAIN COULD JOIN THE GAME \ud83c\udf26\ufe0f");
 
   const partial = buildWeekendWeatherViewModel({
     weekend,
-    response: {
-      daily: {
-        time: ["2026-09-06"],
-        weather_code: [2],
-        temperature_2m_max: [19],
-        temperature_2m_min: [12],
-        precipitation_probability_max: [10],
-        wind_speed_10m_max: [9]
+    response: hourlyWeatherResponse([
+      {
+        time: "2026-09-06T17:00",
+        weatherCode: 2,
+        temperature: 19,
+        precipitationProbability: 10,
+        windSpeed: 9
       }
-    }
+    ])
   });
 
   assert.equal(partial.status, "partial");
   assert.equal(partial.days.length, 1);
   assert.equal(partial.message, "FORECAST AVAILABLE CLOSER TO THE WEEKEND");
 
+  const partialHours = buildWeekendWeatherViewModel({
+    weekend,
+    response: {
+      hourly: {
+        time: ["2026-09-05T15:00", "2026-09-05T16:00"],
+        weather_code: [0, 2],
+        temperature_2m: [22, null],
+        precipitation_probability: [15, 30],
+        wind_speed_10m: [11, 14]
+      }
+    }
+  });
+
+  assert.equal(partialHours.status, "partial");
+  assert.equal(partialHours.days.length, 1);
+  assert.equal(partialHours.days[0].maxTemperatureC, 22);
+  assert.equal(partialHours.days[0].precipitationProbability, 15);
+
   const invalid = buildWeekendWeatherViewModel({
     weekend,
-    response: { daily: { time: ["2026-09-05"] } }
+    response: { hourly: { time: ["2026-09-05T15:00"] } }
   });
 
   assert.equal(invalid.status, "unavailable");
   assert.equal(invalid.message, "Forecast temporarily unavailable.");
+});
+
+test("Weekend Weather derives cricket guidance from 15:00-19:00 Prague playing hours only", () => {
+  const weekend = {
+    today: "2026-09-04",
+    saturday: "2026-09-05",
+    sunday: "2026-09-06"
+  };
+  const weather = buildWeekendWeatherViewModel({
+    weekend,
+    response: hourlyWeatherResponse([
+      {
+        time: "2026-09-05T06:00",
+        weatherCode: 95,
+        temperature: 9,
+        precipitationProbability: 99,
+        windSpeed: 44
+      },
+      {
+        time: "2026-09-05T15:00",
+        weatherCode: 0,
+        temperature: 24,
+        precipitationProbability: 10,
+        windSpeed: 10
+      },
+      {
+        time: "2026-09-05T16:00",
+        weatherCode: 2,
+        temperature: 24,
+        precipitationProbability: 15,
+        windSpeed: 12
+      },
+      {
+        time: "2026-09-05T17:00",
+        weatherCode: 61,
+        temperature: 23,
+        precipitationProbability: 20,
+        windSpeed: 16
+      },
+      {
+        time: "2026-09-05T18:00",
+        weatherCode: 2,
+        temperature: 22,
+        precipitationProbability: 18,
+        windSpeed: 14
+      },
+      {
+        time: "2026-09-05T19:00",
+        weatherCode: 0,
+        temperature: 21,
+        precipitationProbability: 11,
+        windSpeed: 9
+      },
+      {
+        time: "2026-09-05T23:00",
+        weatherCode: 95,
+        temperature: 11,
+        precipitationProbability: 100,
+        windSpeed: 50
+      },
+      {
+        time: "2026-09-06T15:00",
+        weatherCode: 0,
+        temperature: 25,
+        precipitationProbability: 21,
+        windSpeed: 7
+      },
+      {
+        time: "2026-09-06T19:00",
+        weatherCode: 0,
+        temperature: 22,
+        precipitationProbability: 25,
+        windSpeed: 8
+      }
+    ])
+  });
+
+  assert.equal(weather.status, "available");
+  assert.equal(weather.days[0].condition.label, "Rain/showers");
+  assert.equal(weather.days[0].minTemperatureC, 21);
+  assert.equal(weather.days[0].maxTemperatureC, 24);
+  assert.equal(weather.days[0].precipitationProbability, 20);
+  assert.equal(weather.days[0].maxWindKmh, 16);
+  assert.equal(weather.days[1].precipitationProbability, 25);
+  assert.equal(weather.summary, "KEEP AN EYE ON THE SKY \ud83c\udf24\ufe0f");
+});
+
+test("Weekend Weather keeps playing-hour days independent and unavailable without valid hourly data", () => {
+  const weekend = {
+    today: "2026-09-04",
+    saturday: "2026-09-05",
+    sunday: "2026-09-06"
+  };
+  const weather = buildWeekendWeatherViewModel({
+    weekend,
+    response: hourlyWeatherResponse([
+      {
+        time: "2026-09-05T15:00",
+        weatherCode: 0,
+        temperature: 24,
+        precipitationProbability: 20,
+        windSpeed: 7
+      },
+      {
+        time: "2026-09-06T14:00",
+        weatherCode: 61,
+        temperature: 16,
+        precipitationProbability: 90,
+        windSpeed: 30
+      }
+    ])
+  });
+
+  assert.equal(weather.status, "partial");
+  assert.equal(weather.days.length, 1);
+  assert.equal(weather.days[0].date, "2026-09-05");
+  assert.equal(weather.days[0].precipitationProbability, 20);
+  assert.equal(weather.summary, "LOOKING GOOD FOR CRICKET \u2600\ufe0f");
+
+  const unavailable = buildWeekendWeatherViewModel({
+    weekend,
+    response: hourlyWeatherResponse([
+      {
+        time: "2026-09-05T14:00",
+        weatherCode: 61,
+        temperature: 17,
+        precipitationProbability: 90,
+        windSpeed: 30
+      },
+      {
+        time: "2026-09-06T20:00",
+        weatherCode: 61,
+        temperature: 16,
+        precipitationProbability: 85,
+        windSpeed: 27
+      }
+    ])
+  });
+
+  assert.equal(unavailable.status, "unavailable");
+  assert.equal(unavailable.message, "Forecast temporarily unavailable.");
 });
 
 test("Weekend Weather marks scheduled official weekend fixtures only", () => {
@@ -3313,16 +3522,22 @@ test("Weekend Weather marks scheduled official weekend fixtures only", () => {
   };
   const weather = buildWeekendWeatherViewModel({
     weekend,
-    response: {
-      daily: {
-        time: ["2026-09-05", "2026-09-06"],
-        weather_code: [0, 0],
-        temperature_2m_max: [23, 24],
-        temperature_2m_min: [12, 13],
-        precipitation_probability_max: [5, 10],
-        wind_speed_10m_max: [8, 9]
+    response: hourlyWeatherResponse([
+      {
+        time: "2026-09-05T15:00",
+        weatherCode: 0,
+        temperature: 23,
+        precipitationProbability: 5,
+        windSpeed: 8
+      },
+      {
+        time: "2026-09-06T15:00",
+        weatherCode: 0,
+        temperature: 24,
+        precipitationProbability: 10,
+        windSpeed: 9
       }
-    }
+    ])
   });
 
   const marked = applyWeekendMatchDayMarkers(weather, [
@@ -3357,6 +3572,8 @@ test("Weekend Weather homepage integration stays server-side compact and non-per
   assert.match(component, /WEEKEND WEATHER/);
   assert.doesNotMatch(component, /weather\.location\.venue|weather\.location\.area/);
   assert.match(component, /MATCH DAY/);
+  assert.match(component, /PLAYING HOURS/);
+  assert.match(component, /WEEKEND_WEATHER_PLAYING_HOURS_LABEL/);
   assert.match(component, /RAIN \{day\.precipitationProbability\}%/);
   assert.match(component, /WIND \{day\.maxWindKmh\} KM\/H/);
   assert.match(css, /\.hero-controls-grid\s*{[\s\S]*?padding-left:\s*clamp\(200px,\s*20vw,\s*320px\)/);

@@ -64,7 +64,8 @@ export function RecentMatchesPanel({
     <Card className="recent-matches-panel p-4">
       <div className="recent-matches-header flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-black uppercase">Recent Matches</h2>
+          <h2 className="arcade-heading text-xl uppercase">Recent Matches</h2>
+          <span className="heading-accent" aria-hidden="true" />
         </div>
         <LinkButton href="/matches" variant="ghost" className="min-h-9 px-3 text-xs">
           Archive
