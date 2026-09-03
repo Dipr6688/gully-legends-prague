@@ -894,7 +894,10 @@ test("Player performance trend renders compact axes and selected match details",
   const profile = readFileSync("components/players/PlayerProfile.tsx", "utf8");
   const css = readFileSync("app/globals.css", "utf8");
 
-  assert.match(profile, /viewBox="0 0 960 260"/);
+  assert.match(profile, /TREND_DESKTOP_CHART[\s\S]*?viewBox:\s*"0 0 960 260"/);
+  assert.match(profile, /TREND_MOBILE_CHART[\s\S]*?viewBox:\s*"0 0 720 390"/);
+  assert.match(profile, /TREND_MOBILE_CHART[\s\S]*?width:\s*612/);
+  assert.match(profile, /TREND_MOBILE_CHART[\s\S]*?height:\s*300/);
   assert.match(profile, /series\.axisLabel/);
   assert.match(profile, /performance-trend-chart-title/);
   assert.match(profile, /series\.label/);
@@ -910,12 +913,23 @@ test("Player performance trend renders compact axes and selected match details",
   assert.match(profile, /metric:\s*series\.metric/);
   assert.match(profile, /Math\.max\(0, points\.length - 1\)/);
   assert.match(profile, /onClick=\{\(\) => setActivePoint\(\{ metric:\s*series\.metric, index \}\)\}/);
+  assert.match(profile, /window\.matchMedia\("\(max-width:\s*560px\)"\)/);
+  assert.match(profile, /plotShellRef/);
+  assert.match(profile, /shell\.scrollLeft = hiddenWidth/);
+  assert.match(profile, /viewBox=\{plot\.viewBox\}/);
   assert.match(css, /\.performance-trend-body\s*{[\s\S]*?grid-template-columns:\s*minmax\(0, 4fr\) minmax\(180px, 1fr\)/);
   assert.match(css, /\.performance-trend-svg\s*{[\s\S]*?height:\s*230px/);
   assert.match(css, /\.performance-trend-chart-title/);
   assert.match(css, /\.performance-trend-detail-card/);
   assert.match(css, /\.performance-trend-point circle:first-child\s*{[\s\S]*?stroke-width:\s*2\.5/);
   assert.match(css, /@media \(max-width:\s*560px\)[\s\S]*?\.performance-trend-body\s*{[\s\S]*?grid-template-columns:\s*1fr/);
+  assert.match(css, /@media \(max-width:\s*560px\)[\s\S]*?\.performance-trend-plot-shell\s*{[\s\S]*?overflow-x:\s*auto/);
+  assert.match(css, /@media \(max-width:\s*560px\)[\s\S]*?\.performance-trend-svg\s*{[\s\S]*?min-width:\s*720px/);
+  assert.match(css, /@media \(max-width:\s*560px\)[\s\S]*?\.performance-trend-svg\s*{[\s\S]*?height:\s*390px/);
+  assert.match(css, /@media \(max-width:\s*560px\)[\s\S]*?\.performance-trend-gridline text\s*{[\s\S]*?font-size:\s*17px/);
+  assert.match(css, /@media \(max-width:\s*560px\)[\s\S]*?\.performance-trend-line\s*{[\s\S]*?stroke-width:\s*4\.6/);
+  assert.match(css, /@media \(max-width:\s*560px\)[\s\S]*?\.performance-trend-point text\s*{[\s\S]*?font-size:\s*18px/);
+  assert.match(css, /@media \(max-width:\s*560px\)[\s\S]*?\.performance-trend-detail-card\s*{[\s\S]*?min-height:\s*0/);
   assert.doesNotMatch(css, /\.performance-trend-svg\s*{[\s\S]*?min-height:\s*220px/);
 });
 

@@ -284,7 +284,7 @@ function LeaderQuickCards({
             </div>
             <span>{meta.label}</span>
             <strong>{copy.headline}</strong>
-            {copy.value ? <b>{copy.value}</b> : null}
+            {copy.value ? <b className="data-number-strong">{copy.value}</b> : null}
             <small>{copy.detail}</small>
             {summary.category === "ducks" && summary.status !== "race-not-started" ? (
               <em>
@@ -392,14 +392,14 @@ function LeaderboardPodiumCard({
       className={`podium-card podium-card-${placement} podium-rank-${rankTone}`}
       aria-label={`Open ${entry.player.name} profile, rank ${entry.rank}`}
     >
-      <span className="rank-badge">#{entry.rank}</span>
+      <span className="rank-badge data-number-strong">#{entry.rank}</span>
       <div className="podium-artwork">
         <span
           className={`podium-medal podium-medal-${rankTone}`}
           aria-label={getMedalText(entry.rank)}
         >
           <Medal aria-hidden="true" />
-          <b>{entry.rank}</b>
+          <b className="data-number-strong">{entry.rank}</b>
         </span>
         {frameMode ? (
           <span
@@ -418,8 +418,8 @@ function LeaderboardPodiumCard({
       <div className="podium-copy">
         <h3>{entry.player.name}</h3>
         <p>{entry.player.role}</p>
-        <strong>{entry.displayValue}</strong>
-        <span>{getSupportLine(entry)}</span>
+        <strong className="data-number-strong">{entry.displayValue}</strong>
+        <span className="data-number">{getSupportLine(entry)}</span>
       </div>
     </Link>
   );
@@ -443,7 +443,7 @@ function JointRankCard({
     <div
       className={`joint-rank-card joint-rank-card-${placement} podium-rank-${getRankTone(rank)} joint-rank-count-${Math.min(entries.length, 4)}`}
     >
-      <span className={`rank-badge rank-badge-${getRankTone(rank)}`}>
+      <span className={`rank-badge rank-badge-${getRankTone(rank)} data-number-strong`}>
         JOINT #{rank}
       </span>
       <div className="joint-rank-players">
@@ -475,8 +475,8 @@ function JointRankCard({
         ))}
       </div>
       <h3>{entries.map((entry) => entry.player.name).join(" - ")}</h3>
-      <strong>{firstEntry.displayValue} EACH</strong>
-      <p>{getJointSupportLine(firstEntry)}</p>
+      <strong className="data-number-strong">{firstEntry.displayValue} EACH</strong>
+      <p className="data-number">{getJointSupportLine(firstEntry)}</p>
     </div>
   );
 }
@@ -577,7 +577,13 @@ function LeaderboardPodium({
 
 function CategoryStatValue({ entry }: { entry: PlayerLeaderboardEntry }) {
   return (
-    <strong className={entry.mutedZero ? "leaderboard-zero-value" : undefined}>
+    <strong
+      className={
+        entry.mutedZero
+          ? "leaderboard-zero-value data-number-strong"
+          : "data-number-strong"
+      }
+    >
       {entry.displayValue}
     </strong>
   );
@@ -585,7 +591,7 @@ function CategoryStatValue({ entry }: { entry: PlayerLeaderboardEntry }) {
 
 function RankBadge({ rank }: { rank: number }) {
   return (
-    <span className={`rank-badge rank-badge-${getRankTone(rank)}`}>
+    <span className={`rank-badge rank-badge-${getRankTone(rank)} data-number-strong`}>
       {rank > 0 ? `#${rank}` : "--"}
     </span>
   );
@@ -685,7 +691,7 @@ function LeaderboardRankRow({ entry }: { entry: PlayerLeaderboardEntry }) {
       <div className="rank-supporting-stats">
         {stats.map(([label, value]) => (
           <span key={label}>
-            {label} <b>{value}</b>
+            {label} <b className="data-number">{value}</b>
           </span>
         ))}
       </div>

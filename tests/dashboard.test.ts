@@ -2264,7 +2264,7 @@ test("Match archive cards display scheduled and actual innings overs", () => {
   assert.equal(getMatchInningsOversLabel(legacyWithoutReliableOvers, "teamA"), "-");
   assert.equal(getMatchScheduledOversLabel(legacyWithoutReliableOvers), "-");
   assert.match(archive, /getMatchScheduledOversLabel\(match\)/);
-  assert.match(archive, /<small>\(\{row\.overs\}\)<\/small>/);
+  assert.match(archive, /<small className="data-number">\(\{row\.overs\}\)<\/small>/);
 });
 
 test("Match archive filters search sorts and groups finalised matches", () => {

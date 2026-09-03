@@ -316,17 +316,17 @@ export function PostMatchCelebration({
             <strong>{resultHeadline}</strong>
             <div className="post-match-game-meta">
               {typeof match.matchNumber === "number" ? (
-                <span>Game #{match.matchNumber}</span>
+                <span className="data-number">Game #{match.matchNumber}</span>
               ) : null}
-              <span>{getMatchScheduledOversLabel(match)}</span>
+              <span className="data-number">{getMatchScheduledOversLabel(match)}</span>
               <span>CZU Gully Arena</span>
             </div>
             <div className="post-match-score-row">
               {scoreRows.map((row) => (
                 <div key={row.teamId}>
                   <span>{row.teamName}</span>
-                  <b>{row.score}</b>
-                  <em>({row.overs})</em>
+                  <b className="data-number-strong">{row.score}</b>
+                  <em className="data-number">({row.overs})</em>
                 </div>
               ))}
             </div>
@@ -357,12 +357,12 @@ export function PostMatchCelebration({
                 <div>
                   <span>{pomPlayer.cardTitle}</span>
                   {pomContributions.length > 0 ? (
-                    <strong>{pomContributions.join(" • ")}</strong>
+                    <strong className="data-number">{pomContributions.join(" • ")}</strong>
                   ) : (
                     <strong>Match-winning gully energy</strong>
                   )}
                   {shouldShowPomXP && typeof pomXPValue === "number" ? (
-                    <b>{formatSignedXP(pomXPValue)}</b>
+                    <b className="data-number-strong">{formatSignedXP(pomXPValue)}</b>
                   ) : null}
                 </div>
               </div>
@@ -389,10 +389,12 @@ export function PostMatchCelebration({
                         : "Gully Record Broken!"}
                     </p>
                     <h3>{getPlayerName(record.playerId)}</h3>
-                    <strong>{formatMetricValue(record.currentValue, record.unit)}</strong>
+                    <strong className="data-number-strong">
+                      {formatMetricValue(record.currentValue, record.unit)}
+                    </strong>
                     <span>{record.recordLabel}</span>
                     {record.previousRecord ? (
-                      <em>
+                      <em className="data-number">
                         Previous: {record.previousRecord.holderPlayerIds.map(getPlayerName).join(", ")} -{" "}
                         {formatMetricValue(record.previousRecord.value, record.unit)}
                       </em>
@@ -430,7 +432,7 @@ export function PostMatchCelebration({
                       <>
                         <h3>{group.definition.title}</h3>
                         <span>{group.definition.description}</span>
-                        <em>
+                        <em className="data-number">
                           Unlocked by: {group.playerIds.map(getPlayerName).join(" · ")}
                         </em>
                       </>
@@ -440,7 +442,9 @@ export function PostMatchCelebration({
                         <strong>{group.definition.title}</strong>
                         <span>{group.definition.description}</span>
                         {!isHistorical ? (
-                          <em>{formatAchievementUnlockMeta(singleUnlock)}</em>
+                          <em className="data-number">
+                            {formatAchievementUnlockMeta(singleUnlock)}
+                          </em>
                         ) : null}
                       </>
                     ) : null}
@@ -462,13 +466,15 @@ export function PostMatchCelebration({
                   <p>Personal Best</p>
                   <h3>{getPlayerName(group.playerId)}</h3>
                   <strong>
-                    {group.bests.length}{" "}
+                    <span>{group.bests.length}</span>{" "}
                     {group.bests.length === 1 ? "Personal Best" : "Personal Bests"}
                   </strong>
                   <ul className="post-match-personal-list">
                     {group.bests.map((best) => (
                       <li key={`${best.metric}-${best.kind}`}>
-                        <b>{formatMetricValue(best.currentValue, best.unit)}</b>
+                        <b className="data-number">
+                          {formatMetricValue(best.currentValue, best.unit)}
+                        </b>
                         <span>
                           {best.previousBest !== null
                             ? `Previous best: ${formatMetricValue(best.previousBest, best.unit)}`
@@ -489,7 +495,9 @@ export function PostMatchCelebration({
                   <p>Level Up!</p>
                   <h3>{getPlayerName(levelUp.playerId)}</h3>
                   <strong>
-                    Level {levelUp.fromLevel} → Level {levelUp.toLevel}
+                    <span className="data-number">
+                      Level {levelUp.fromLevel} → Level {levelUp.toLevel}
+                    </span>
                   </strong>
                   <span>
                     {levelUp.levelsGained > 1
@@ -541,17 +549,21 @@ export function PostMatchCelebration({
                         <b>{getPlayerName(change.playerId)}</b>
                         {hasLevelProgress ? (
                           levelUp ? (
-                            <span>
+                            <span className="data-number">
                               Level {levelUp.fromLevel} → {levelUp.toLevel}
                             </span>
                           ) : (
-                            <span>Level {change.afterLevel}</span>
+                            <span className="data-number">Level {change.afterLevel}</span>
                           )
                         ) : (
                           !isHistorical ? <span>Match XP</span> : null
                         )}
                       </div>
-                      <strong className={change.awardedXP < 0 ? "is-negative" : ""}>
+                      <strong
+                        className={`data-number-strong${
+                          change.awardedXP < 0 ? " is-negative" : ""
+                        }`}
+                      >
                         {formatSignedXP(change.awardedXP)}
                       </strong>
                       {progress !== null ? (

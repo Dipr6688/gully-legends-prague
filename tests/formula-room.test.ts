@@ -151,6 +151,14 @@ test("Formula Room documents shared advanced boundary calculations without dupli
 
 test("XP Engine presents XP v2 as current and covers every public rule", () => {
   const formulaRoom = formulaRoomSource();
+  const css = cssSource();
+  const dataNumberOverrideStart = css.indexOf(
+    ".hero-stat-tile .data-number-strong,"
+  );
+  const dataNumberOverrideBlock = css.slice(
+    dataNumberOverrideStart,
+    css.indexOf("}", dataNumberOverrideStart) + 1
+  );
 
   assert.equal(XP_V2_EFFECTIVE_DATE_LABEL, "1 September 2026");
   assert.match(formulaRoom, /XP_V2_EFFECTIVE_DATE_LABEL/);
@@ -209,6 +217,22 @@ test("XP Engine presents XP v2 as current and covers every public rule", () => {
   assert.match(formulaRoom, /Participation, win bonus and Player of the Match XP do not count toward\s+Beast crowns/);
   assert.match(formulaRoom, /Total career XP does not count either/);
   assert.match(formulaRoom, /Earlier Matches Keep Their Original Rules/);
+  assert.match(formulaRoom, /<strong className="data-number-strong">\{value\}<\/strong>/);
+  assert.match(formulaRoom, /<strong className="data-number">\s*\{value > 0 \? `\+\$\{value\}` : value\}\s*<\/strong>/);
+  assert.match(formulaRoom, /<strong className="data-number-strong">\+\{total\}<\/strong>/);
+  assert.match(formulaRoom, /<dd className="data-number">\{formatSignedXP\(XP_V2_RULES\.fiftyBonus\)\}<\/dd>/);
+  assert.match(formulaRoom, /<span className="data-number">\{formatSignedXP\(XP_V2_RULES\.hundredAdditionalBonus\)\}<\/span>/);
+  assert.match(formulaRoom, /<strong className="data-number-strong">\{XP_V2_RULES\.minimumMatchXP\}<\/strong>/);
+  assert.match(formulaRoom, /<strong className="data-number-strong">\+\{XP_V2_RULES\.maximumMatchXP\}<\/strong>/);
+  assert.match(formulaRoom, /<dd className="data-number">\+\{XP_V2_RULES\.positiveOverQualityCareerCap\}<\/dd>/);
+  assert.match(formulaRoom, /<dd className="data-number">\{XP_V2_RULES\.negativeOverQualityCareerFloor\}<\/dd>/);
+  assert.ok(dataNumberOverrideStart > -1);
+  assert.match(dataNumberOverrideBlock, /\.xp-receipt-lines strong\.data-number/);
+  assert.match(dataNumberOverrideBlock, /\.xp-receipt-total strong\.data-number-strong/);
+  assert.match(dataNumberOverrideBlock, /\.formula-reward strong\.data-number-strong/);
+  assert.match(dataNumberOverrideBlock, /\.formula-rule-list dd\.data-number/);
+  assert.match(dataNumberOverrideBlock, /\.formula-compact-table strong\.data-number/);
+  assert.match(dataNumberOverrideBlock, /\.formula-range-compact strong\.data-number-strong/);
 
   assert.doesNotMatch(formulaRoom, /XP_RULES/);
   assert.doesNotMatch(formulaRoom, /Ordinary batting XP cap/);

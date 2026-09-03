@@ -4689,7 +4689,8 @@ export function MockMatchEntryForm({
                   <strong>Joint highest match XP</strong>
                   {playerOfMatchRecommendation.leaders.map((leader) => (
                     <span key={`pom-leader-${leader.playerId}`}>
-                      {getPlayerDisplayName(activePlayers, leader.playerId)} - {leader.prePomXP} XP
+                      {getPlayerDisplayName(activePlayers, leader.playerId)} -{" "}
+                      <span className="data-number">{leader.prePomXP} XP</span>
                     </span>
                   ))}
                 </div>
@@ -4701,7 +4702,10 @@ export function MockMatchEntryForm({
                       activePlayers,
                       playerOfMatchRecommendation.recommendedPlayerId ?? ""
                     )}{" "}
-                    - {playerOfMatchRecommendation.leaders[0]?.prePomXP ?? 0} XP
+                    -{" "}
+                    <span className="data-number">
+                      {playerOfMatchRecommendation.leaders[0]?.prePomXP ?? 0} XP
+                    </span>
                   </span>
                 </div>
               )}
@@ -5262,7 +5266,7 @@ function FinalisedMatchOverview({
           <span className="text-xs font-black uppercase text-stone-400">
             {teamAName || "Team A"}
           </span>
-          <strong className="team-score-badge">
+          <strong className="team-score-badge data-number-strong">
             {formatInningsScore(teamAInningsScore.runs, teamAInningsScore.wicketsLost)}
           </strong>
         </div>
@@ -5270,15 +5274,19 @@ function FinalisedMatchOverview({
           <span className="text-xs font-black uppercase text-stone-400">
             {teamBName || "Team B"}
           </span>
-          <strong className="team-score-badge">
+          <strong className="team-score-badge data-number-strong">
             {formatInningsScore(teamBInningsScore.runs, teamBInningsScore.wicketsLost)}
           </strong>
         </div>
       </div>
       <div className="finalised-xp-summary">
         <span>XP Awarded</span>
-        <strong>{teamAName || "Team A"}: {teamAXP}</strong>
-        <strong>{teamBName || "Team B"}: {teamBXP}</strong>
+        <strong>
+          {teamAName || "Team A"}: <span className="data-number">{teamAXP}</span>
+        </strong>
+        <strong>
+          {teamBName || "Team B"}: <span className="data-number">{teamBXP}</span>
+        </strong>
       </div>
       <FinalisedMatchActions canReopen={canReopen} />
     </section>
@@ -5327,16 +5335,18 @@ function InningsAllocationPanel({
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <p className="text-xs font-black uppercase text-neon-cyan">{teamName}</p>
-          <p className="text-3xl font-black text-neon-yellow">
+          <p className="data-number-strong text-3xl font-black text-neon-yellow">
             {formatInningsScore(score.runs, score.wicketsLost)}
           </p>
-          <p className="text-xs font-black uppercase text-stone-400">
+          <p className="data-number text-xs font-black uppercase text-stone-400">
             {formatCompletedOvers(score.completedOvers)} overs - source: {score.source.replace("_", " ")}
           </p>
         </div>
         <div className="grid gap-1 rounded-md border border-white/15 bg-black/35 px-3 py-2 text-right text-xs font-black uppercase text-stone-300">
           Extras
-          <strong className="text-2xl text-neon-yellow">{score.extras}</strong>
+          <strong className="data-number-strong text-2xl text-neon-yellow">
+            {score.extras}
+          </strong>
         </div>
       </div>
       <p
@@ -5381,10 +5391,10 @@ function InningsBreakPanel({
           <span className="text-xs font-black uppercase text-stone-400">
             {firstTeamName}
           </span>
-          <strong className="block text-3xl font-black text-neon-yellow">
+          <strong className="data-number-strong block text-3xl font-black text-neon-yellow">
             {formatInningsScore(firstInnings.runs, firstInnings.wicketsLost)}
           </strong>
-          <span className="text-xs font-bold text-stone-300">
+          <span className="data-number text-xs font-bold text-stone-300">
             {formatCompletedOvers(firstInnings.completedOvers)} overs
           </span>
         </div>
@@ -5392,7 +5402,7 @@ function InningsBreakPanel({
           <span className="text-xs font-black uppercase text-stone-400">
             Target
           </span>
-          <strong className="block text-3xl font-black text-neon-cyan">
+          <strong className="data-number-strong block text-3xl font-black text-neon-cyan">
             {target}
           </strong>
         </div>
@@ -5621,26 +5631,28 @@ function QuickScoringPanel({
       <div className="quick-score-strip">
         <div>
           <span>Score</span>
-          <strong>
+          <strong className="data-number-strong">
             {derived.runs}/{derived.wicketsLost}
           </strong>
         </div>
         <div>
           <span>Overs</span>
-          <strong>
+          <strong className="data-number-strong">
             {formatQuickOvers(derived.legalBalls)} / {maxOversLabel}
           </strong>
         </div>
         <div>
           <span>Current over</span>
-          <strong>{formatQuickOverBalls(derived.legalBalls)}</strong>
+          <strong className="data-number-strong">
+            {formatQuickOverBalls(derived.legalBalls)}
+          </strong>
         </div>
       </div>
 
       {inningsIsComplete ? (
         <div className="quick-end-over-note">
           <strong>{inningsCompleteMessage ?? "Innings Complete"}</strong>
-          <span>
+          <span className="data-number">
             {derived.runs}/{derived.wicketsLost} after {formatQuickOvers(derived.legalBalls)}
           </span>
           <span>Review the innings before continuing.</span>
@@ -6696,7 +6708,7 @@ function TeamPlayerRecordsSection({
                   ) : null}
                   <p className={`player-match-xp text-xs font-bold uppercase ${isFinalised ? "is-awarded" : "text-stone-400"}`}>
                     {teamName} - {isFinalised ? "XP Awarded" : "Projected match XP"}:{" "}
-                    {playerMatchXP}
+                    <span className="data-number">{playerMatchXP} XP</span>
                   </p>
                 </div>
               </div>

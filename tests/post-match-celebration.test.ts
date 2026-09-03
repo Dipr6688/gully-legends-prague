@@ -1552,16 +1552,43 @@ test("post-match celebration UI renders achievement unlock section and badge ass
 test("historical celebration replay groups dense achievement personal best and XP sections", () => {
   const component = readFileSync("components/matches/PostMatchCelebration.tsx", "utf8");
   const css = readFileSync("app/globals.css", "utf8");
+  const xpRowNameStyleStart = css.indexOf(".post-match-xp-row > div > b {");
+  const xpRowNameStyleBlock = css.slice(
+    xpRowNameStyleStart,
+    css.indexOf("}", xpRowNameStyleStart) + 1
+  );
+  const dataNumberOverrideStart = css.indexOf(
+    ".hero-stat-tile .data-number-strong,"
+  );
+  const dataNumberOverrideBlock = css.slice(
+    dataNumberOverrideStart,
+    css.indexOf("}", dataNumberOverrideStart) + 1
+  );
 
   assert.match(component, /groupAchievementUnlocks\(\s*summary\.achievementUnlocks,\s*isHistorical\s*\)/);
   assert.match(component, /groupPersonalBestsByPlayer\(standalonePersonalBests\)/);
   assert.match(component, /Unlocked by: \{group\.playerIds\.map\(getPlayerName\)\.join\(" · "\)\}/);
-  assert.match(component, /!isHistorical \? \(\s*<em>\{formatAchievementUnlockMeta\(singleUnlock\)\}<\/em>/);
+  assert.match(
+    component,
+    /!isHistorical \? \(\s*<em className="data-number">\s*\{formatAchievementUnlockMeta\(singleUnlock\)\}\s*<\/em>/
+  );
   assert.match(component, /<ul className="post-match-personal-list">/);
+  assert.match(component, /<span>\{group\.bests\.length\}<\/span>/);
+  assert.doesNotMatch(component, /<span className="data-number">\{group\.bests\.length\}<\/span>/);
   assert.match(component, /group\.bests\.length === 1 \? "Personal Best" : "Personal Bests"/);
   assert.match(component, /!isHistorical \? <span>Match XP<\/span> : null/);
+  assert.match(component, /<b className="data-number-strong">\{formatSignedXP\(pomXPValue\)\}<\/b>/);
+  assert.match(component, /className=\{`data-number-strong\$\{/);
+  assert.match(component, /\{formatSignedXP\(change\.awardedXP\)\}/);
   assert.match(css, /\.post-match-celebration\.is-historical \.post-match-pom-card\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 0\.9fr\) minmax\(0, 1\.35fr\)/);
   assert.match(css, /\.post-match-unlock-card\.is-grouped\s*\{[\s\S]*grid-template-columns:\s*50px minmax\(0, 1fr\)/);
   assert.match(css, /\.post-match-personal-list/);
   assert.match(css, /\.post-match-celebration\.is-historical \.post-match-xp-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.ok(xpRowNameStyleStart > -1);
+  assert.match(xpRowNameStyleBlock, /font-family:\s*var\(--font-bangers\)/);
+  assert.ok(dataNumberOverrideStart > -1);
+  assert.match(dataNumberOverrideBlock, /\.post-match-pom-content \.data-number-strong/);
+  assert.match(dataNumberOverrideBlock, /\.post-match-xp-row strong\.data-number-strong/);
+  assert.match(dataNumberOverrideBlock, /font-family:\s*var\(--font-barlow-condensed\)/);
+  assert.match(dataNumberOverrideBlock, /font-style:\s*normal/);
 });

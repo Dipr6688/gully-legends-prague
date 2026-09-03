@@ -113,7 +113,7 @@ export function MatchScorecard({
           {scorecardInnings.map((scorecardInningsItem) => (
             <div key={scorecardInningsItem.innings.battingTeamId}>
               <span>{scorecardInningsItem.teamName}</span>
-              <b>{scorecardInningsItem.score}</b>
+              <b className="data-number-strong">{scorecardInningsItem.score}</b>
             </div>
           ))}
         </div>
@@ -165,9 +165,11 @@ export function MatchScorecard({
               <p>{playerOfMatch.role}</p>
               <span>{playerOfMatch.teamLabel}</span>
               {playerOfMatch.contributions.length > 0 ? (
-                <strong>{playerOfMatch.contributions.join(" • ")}</strong>
+                <strong className="data-number">
+                  {playerOfMatch.contributions.join(" • ")}
+                </strong>
               ) : null}
-              <b>{playerOfMatch.xpAwarded} XP Awarded</b>
+              <b className="data-number-strong">{playerOfMatch.xpAwarded} XP Awarded</b>
             </div>
           </div>
         ) : (
@@ -197,10 +199,10 @@ function ScorecardInningsSection({ innings }: { innings: ScorecardInnings }) {
       <div className="scorecard-innings-header">
         <div>
           <p className="scorecard-section-kicker">{innings.teamName} Innings</p>
-          <h2>{innings.score}</h2>
+          <h2 className="data-number-strong">{innings.score}</h2>
         </div>
         <div>
-          <span>{innings.overs}</span>
+          <span className="data-number">{innings.overs}</span>
           {innings.endLabel ? <strong>{innings.endLabel}</strong> : null}
         </div>
       </div>
@@ -230,19 +232,19 @@ function ScorecardInningsSection({ innings }: { innings: ScorecardInnings }) {
                     <span className="scorecard-cell-value">{row.dismissal}</span>
                   </td>
                   <td>
-                    <span className="scorecard-cell-value">{row.runs}</span>
+                    <span className="scorecard-cell-value data-number">{row.runs}</span>
                   </td>
                   <td>
-                    <span className="scorecard-cell-value">{row.balls}</span>
+                    <span className="scorecard-cell-value data-number">{row.balls}</span>
                   </td>
                   <td>
-                    <span className="scorecard-cell-value">{row.fours}</span>
+                    <span className="scorecard-cell-value data-number">{row.fours}</span>
                   </td>
                   <td>
-                    <span className="scorecard-cell-value">{row.sixes}</span>
+                    <span className="scorecard-cell-value data-number">{row.sixes}</span>
                   </td>
                   <td>
-                    <span className="scorecard-cell-value">{row.strikeRate}</span>
+                    <span className="scorecard-cell-value data-number">{row.strikeRate}</span>
                   </td>
                 </tr>
               ))}
@@ -251,11 +253,11 @@ function ScorecardInningsSection({ innings }: { innings: ScorecardInnings }) {
           <div className="scorecard-total-strip">
             <div>
               <span>Extras</span>
-              <b>{innings.extras}</b>
+              <b className="data-number">{innings.extras}</b>
             </div>
             <div>
               <span>Total</span>
-              <b>{innings.total}</b>
+              <b className="data-number-strong">{innings.total}</b>
             </div>
           </div>
         </div>
@@ -280,19 +282,21 @@ function ScorecardInningsSection({ innings }: { innings: ScorecardInnings }) {
                     <span className="scorecard-cell-value">{figure.bowler}</span>
                   </td>
                   <td>
-                    <span className="scorecard-cell-value">{figure.overs}</span>
+                    <span className="scorecard-cell-value data-number">{figure.overs}</span>
                   </td>
                   <td>
-                    <span className="scorecard-cell-value">{figure.maidens}</span>
+                    <span className="scorecard-cell-value data-number">{figure.maidens}</span>
                   </td>
                   <td>
-                    <span className="scorecard-cell-value">{figure.runsConceded}</span>
+                    <span className="scorecard-cell-value data-number">
+                      {figure.runsConceded}
+                    </span>
                   </td>
                   <td>
-                    <span className="scorecard-cell-value">{figure.wickets}</span>
+                    <span className="scorecard-cell-value data-number">{figure.wickets}</span>
                   </td>
                   <td>
-                    <span className="scorecard-cell-value">{figure.economy}</span>
+                    <span className="scorecard-cell-value data-number">{figure.economy}</span>
                   </td>
                 </tr>
               ))}

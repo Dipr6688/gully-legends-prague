@@ -19,7 +19,7 @@ export function RatingBar({
     <div className="space-y-1">
       <div className="stat-label flex items-center justify-between gap-3 text-sm font-black uppercase">
         <span className="text-stone-200">{label}</span>
-        <span className="tabular-nums text-stone-300">{value}/100</span>
+        <span className="data-number tabular-nums text-stone-300">{value}/100</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-black/55 ring-1 ring-white/10">
         <div

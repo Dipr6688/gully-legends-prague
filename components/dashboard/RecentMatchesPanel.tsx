@@ -33,11 +33,11 @@ function RecentMatchRow({ match }: { match: MatchRecord }) {
       <div className="mt-3 grid gap-1 text-xs font-black uppercase text-stone-200">
         <span>
           {match.teams.teamA.teamName}:{" "}
-          {getMatchTeamScore(match, "teamA")}
+          <span className="data-number">{getMatchTeamScore(match, "teamA")}</span>
         </span>
         <span>
           {match.teams.teamB.teamName}:{" "}
-          {getMatchTeamScore(match, "teamB")}
+          <span className="data-number">{getMatchTeamScore(match, "teamB")}</span>
         </span>
       </div>
       <p className="mt-3 text-xs font-black uppercase text-neon-cyan">

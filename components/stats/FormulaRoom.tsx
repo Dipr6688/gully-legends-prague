@@ -292,7 +292,7 @@ function RewardCard({
   return (
     <div className={`formula-reward formula-reward-${accent}`}>
       <span>{title}</span>
-      <strong>{value}</strong>
+      <strong className="data-number-strong">{value}</strong>
       <p>{text}</p>
     </div>
   );
@@ -330,12 +330,14 @@ function XPReceipt({
           {rows.map(([label, value]) => (
             <div key={label}>
               <span>{label}</span>
-              <strong>{value > 0 ? `+${value}` : value}</strong>
+              <strong className="data-number">
+                {value > 0 ? `+${value}` : value}
+              </strong>
             </div>
           ))}
           <div className="xp-receipt-total">
             <span>XP AWARDED</span>
-            <strong>+{total}</strong>
+            <strong className="data-number-strong">+{total}</strong>
           </div>
         </div>
       ) : null}
@@ -451,10 +453,10 @@ function XPEnginePanel() {
             <span>+ completed groups of 4 after 60</span>
           </div>
           <dl className="formula-rule-list">
-            <div><dt>50+ milestone</dt><dd>{formatSignedXP(XP_V2_RULES.fiftyBonus)}</dd></div>
-            <div><dt>100+ milestone</dt><dd>Another {formatSignedXP(XP_V2_RULES.hundredAdditionalBonus)}</dd></div>
-            <div><dt>Dismissed for zero</dt><dd>{formatSignedXP(XP_V2_RULES.duckPenalty)}</dd></div>
-            <div><dt>Career regular-run safeguard</dt><dd>{XP_V2_RULES.regularBattingCareerCap} XP</dd></div>
+            <div><dt>50+ milestone</dt><dd className="data-number">{formatSignedXP(XP_V2_RULES.fiftyBonus)}</dd></div>
+            <div><dt>100+ milestone</dt><dd>Another <span className="data-number">{formatSignedXP(XP_V2_RULES.hundredAdditionalBonus)}</span></dd></div>
+            <div><dt>Dismissed for zero</dt><dd className="data-number">{formatSignedXP(XP_V2_RULES.duckPenalty)}</dd></div>
+            <div><dt>Career regular-run safeguard</dt><dd className="data-number">{XP_V2_RULES.regularBattingCareerCap} XP</dd></div>
           </dl>
           <p>
             A century earns both milestone bonuses: +15 for passing 50 and another
@@ -482,10 +484,10 @@ function XPEnginePanel() {
           iconSize="hero"
         >
           <dl className="formula-rule-list">
-            <div><dt>Catch</dt><dd>{formatSignedXP(XP_V2_RULES.catch)}</dd></div>
-            <div><dt>Run-out</dt><dd>{formatSignedXP(XP_V2_RULES.runOut)}</dd></div>
-            <div><dt>Stumping</dt><dd>{formatSignedXP(XP_V2_RULES.stumping)}</dd></div>
-            <div><dt>Career fielding safeguard</dt><dd>{XP_V2_RULES.fieldingCareerCap} XP</dd></div>
+            <div><dt>Catch</dt><dd className="data-number">{formatSignedXP(XP_V2_RULES.catch)}</dd></div>
+            <div><dt>Run-out</dt><dd className="data-number">{formatSignedXP(XP_V2_RULES.runOut)}</dd></div>
+            <div><dt>Stumping</dt><dd className="data-number">{formatSignedXP(XP_V2_RULES.stumping)}</dd></div>
+            <div><dt>Career fielding safeguard</dt><dd className="data-number">{XP_V2_RULES.fieldingCareerCap} XP</dd></div>
           </dl>
           <p>
             Career fielding XP is capped at 40 in one match. Raw Fielding Beast
@@ -517,9 +519,9 @@ function XPEnginePanel() {
             is kept inside the match range.
           </p>
           <div className="formula-range-compact">
-            <strong>{XP_V2_RULES.minimumMatchXP}</strong>
+            <strong className="data-number-strong">{XP_V2_RULES.minimumMatchXP}</strong>
             <span>to</span>
-            <strong>+{XP_V2_RULES.maximumMatchXP}</strong>
+            <strong className="data-number-strong">+{XP_V2_RULES.maximumMatchXP}</strong>
           </div>
           <p>
             Negative over quality and a dismissed duck can pull a tough match down,
@@ -540,11 +542,11 @@ function XPEnginePanel() {
         <div className="formula-grid two">
           <div>
             <dl className="formula-rule-list">
-              <div><dt>Bowler-credited wicket</dt><dd>{formatSignedXP(XP_V2_RULES.wicket)}</dd></div>
-              <div><dt>Hat-trick</dt><dd>Additional {formatSignedXP(XP_V2_RULES.hatTrick)}</dd></div>
+              <div><dt>Bowler-credited wicket</dt><dd className="data-number">{formatSignedXP(XP_V2_RULES.wicket)}</dd></div>
+              <div><dt>Hat-trick</dt><dd>Additional <span className="data-number">{formatSignedXP(XP_V2_RULES.hatTrick)}</span></dd></div>
               <div><dt>Run-out</dt><dd>No wicket XP for the bowler</dd></div>
-              <div><dt>Positive over-quality career cap</dt><dd>+{XP_V2_RULES.positiveOverQualityCareerCap}</dd></div>
-              <div><dt>Negative over-quality career floor</dt><dd>{XP_V2_RULES.negativeOverQualityCareerFloor}</dd></div>
+              <div><dt>Positive over-quality career cap</dt><dd className="data-number">+{XP_V2_RULES.positiveOverQualityCareerCap}</dd></div>
+              <div><dt>Negative over-quality career floor</dt><dd className="data-number">{XP_V2_RULES.negativeOverQualityCareerFloor}</dd></div>
             </dl>
             <p>
               Wickets and hat-tricks stack with over quality. Only a completed
@@ -734,7 +736,9 @@ function LevelLadderPanel() {
         {earlyLevels.map((level) => (
           <div key={level} className="level-milestone-card">
             <span>Level {level}</span>
-            <strong>{cumulativeXPForLevel(level).toLocaleString()} total XP</strong>
+            <strong className="data-number">
+              {cumulativeXPForLevel(level).toLocaleString()} total XP
+            </strong>
           </div>
         ))}
       </div>
@@ -745,7 +749,9 @@ function LevelLadderPanel() {
             {advancedLevels.map((level) => (
               <div key={level}>
                 <span>Level {level}</span>
-                <strong>{cumulativeXPForLevel(level).toLocaleString()} XP</strong>
+                <strong className="data-number">
+                  {cumulativeXPForLevel(level).toLocaleString()} XP
+                </strong>
               </div>
             ))}
           </div>

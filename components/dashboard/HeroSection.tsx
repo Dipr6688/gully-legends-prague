@@ -18,11 +18,13 @@ import type { Player } from "@/lib/types/player";
 function HeroStat({
   label,
   value,
-  icon
+  icon,
+  valueIsData = true
 }: {
   label: string;
   value: React.ReactNode;
   icon?: React.ReactNode;
+  valueIsData?: boolean;
 }) {
   return (
     <div className="min-h-[72px] rounded-lg border border-stone-600/35 bg-[rgba(8,10,14,0.94)] px-4 py-3 shadow-[0_12px_26px_rgba(0,0,0,0.42),0_0_14px_rgba(247,199,52,0.08)]">
@@ -30,7 +32,13 @@ function HeroStat({
         {icon}
         {label}
       </div>
-      <div className="mt-1 font-ui text-2xl font-black leading-6 text-stone-50">{value}</div>
+      <div
+        className={`mt-1 font-ui text-2xl font-black leading-6 text-stone-50${
+          valueIsData ? " data-number-strong" : ""
+        }`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
@@ -62,6 +70,7 @@ function ActionStats({ summary }: { summary: DashboardSummary }) {
         />
         <HeroStat
           label="Venue"
+          valueIsData={false}
           value={
             <span className="text-base leading-5">
               ČZU Gully Arena

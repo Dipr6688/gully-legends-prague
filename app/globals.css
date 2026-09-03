@@ -31,6 +31,55 @@ body {
   font-family: var(--font-barlow-condensed), "Segoe UI", Arial, sans-serif;
 }
 
+.data-number,
+.data-number-strong {
+  font-family: var(--font-barlow-condensed), "Arial Narrow", "Segoe UI", Arial, sans-serif;
+  font-style: normal;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: 0;
+  transform: none;
+}
+
+.data-number {
+  font-weight: 700;
+}
+
+.data-number-strong {
+  font-weight: 800;
+}
+
+.hero-stat-tile .data-number-strong,
+.career-mini-stat-value.data-number-strong,
+.career-detail-grid dd.data-number-strong,
+.hero-rating-heading .data-number-strong,
+.performance-trend-detail-card .data-number,
+.performance-trend-detail-card .data-number-strong,
+.trophy-progress-card .data-number-strong,
+.bat-ball-stat-card .data-number-strong,
+.post-match-pom-content .data-number-strong,
+.post-match-xp-row strong.data-number-strong,
+.pom-suggestion .data-number,
+.player-match-xp .data-number,
+.xp-receipt-lines strong.data-number,
+.xp-receipt-total strong.data-number-strong,
+.formula-reward strong.data-number-strong,
+.formula-rule-list dd.data-number,
+.formula-compact-table strong.data-number,
+.formula-range-compact strong.data-number-strong,
+.rank-badge.data-number-strong {
+  font-family: var(--font-barlow-condensed), "Arial Narrow", "Segoe UI", Arial, sans-serif;
+  font-style: normal;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: 0;
+}
+
+.performance-trend-gridline text,
+.performance-trend-point text {
+  font-family: var(--font-barlow-condensed), "Arial Narrow", "Segoe UI", Arial, sans-serif;
+  font-style: normal;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
 .post-match-celebration-backdrop {
   position: fixed;
   inset: 0;
@@ -553,8 +602,7 @@ body {
   gap: 2px;
 }
 
-.post-match-xp-row b,
-.post-match-xp-row strong {
+.post-match-xp-row > div > b {
   color: #f8f1d6;
   font-family: var(--font-bangers), Impact, sans-serif;
   font-style: italic;
@@ -10064,6 +10112,7 @@ textarea {
 .performance-trend-plot-shell {
   min-width: 0;
   overflow: hidden;
+  overscroll-behavior-x: contain;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   background:
@@ -11406,9 +11455,11 @@ textarea {
 
 .bat-ball-stat-card strong {
   color: #fff5d8;
-  font-family: var(--font-bangers), Impact, sans-serif;
+  font-family: var(--font-barlow-condensed), "Arial Narrow", sans-serif;
   font-size: clamp(1.7rem, 4vw, 3.45rem);
-  font-style: italic;
+  font-style: normal;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-weight: 800;
   letter-spacing: 0;
   line-height: 0.88;
   text-shadow: 3px 3px 0 #05080d;
@@ -11579,12 +11630,15 @@ textarea {
 
 .face-off-metric-value strong {
   color: #fff5d8;
-  font-family: var(--font-bangers), Impact, sans-serif;
+  font-family: var(--font-barlow-condensed), "Arial Narrow", "Segoe UI", Arial, sans-serif;
   font-size: clamp(1.5rem, 3.1vw, 2.35rem);
-  font-style: italic;
+  font-style: normal;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-weight: 800;
   letter-spacing: 0;
   line-height: 0.9;
   text-shadow: 2px 2px 0 #05080d;
+  transform: none;
 }
 
 .face-off-metric-value[data-leads="true"] strong {
@@ -12137,6 +12191,28 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .performance-trend-plot-shell {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 8px 0;
+    scrollbar-color: rgba(181, 255, 0, 0.44) rgba(255, 255, 255, 0.08);
+    scrollbar-width: thin;
+  }
+
+  .performance-trend-plot-shell::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .performance-trend-plot-shell::-webkit-scrollbar-track {
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .performance-trend-plot-shell::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(181, 255, 0, 0.5);
+  }
+
   .performance-trend-tabs {
     justify-content: flex-start;
   }
@@ -12147,15 +12223,37 @@ textarea {
   }
 
   .performance-trend-svg {
-    height: 240px;
+    width: 100%;
+    min-width: 720px;
+    height: 390px;
+  }
+
+  .performance-trend-axis-title {
+    font-size: 18px;
+  }
+
+  .performance-trend-chart-title {
+    font-size: 18px;
+  }
+
+  .performance-trend-gridline text {
+    font-size: 17px;
+  }
+
+  .performance-trend-line {
+    stroke-width: 4.6;
+  }
+
+  .performance-trend-point circle:first-child {
+    stroke-width: 3;
   }
 
   .performance-trend-point text {
-    font-size: 13px;
+    font-size: 18px;
   }
 
   .performance-trend-point .performance-trend-date-label {
-    font-size: 10px;
+    font-size: 14px;
   }
 
   .performance-trend-detail-card {

@@ -328,7 +328,7 @@ function CategoryPanel({
           {hasLeaders ? (
             <>
               <strong>{names}</strong>
-              <b>
+              <b className="data-number-strong">
                 {xpValue} {meta.xpLabel}
                 {activeLeaders.length > 1 ? " EACH" : ""}
               </b>
@@ -353,10 +353,12 @@ function CategoryPanel({
                   href={`/players/${player?.slug ?? standing.playerId}`}
                   className="monthly-beast-standing-row"
                 >
-                  <span>{standing.rank}</span>
+                  <span className="data-number-strong">{standing.rank}</span>
                   <strong>{player?.name ?? standing.playerId}</strong>
-                  <b>{standing.categoryXp} XP</b>
-                  <small>{behind > 0 ? `${behind} behind` : "Leader"}</small>
+                  <b className="data-number">{standing.categoryXp} XP</b>
+                  <small className={behind > 0 ? "data-number" : undefined}>
+                    {behind > 0 ? `${behind} behind` : "Leader"}
+                  </small>
                 </Link>
               );
             })}
@@ -430,7 +432,7 @@ function CrownDialog({
 
                       return (
                         <strong key={winner.playerId}>
-                          {playerName} - {winner.categoryXp} XP
+                          {playerName} - <span className="data-number">{winner.categoryXp} XP</span>
                         </strong>
                       );
                     })}
@@ -679,7 +681,7 @@ function PastBeastsArchive({ crownedAwards }: { crownedAwards: CrownedMonthlyBea
                         {winners.length > 0 ? (
                           <>
                             <strong>{joinPlayerNames(winners)}</strong>
-                            <small>
+                            <small className="data-number-strong">
                               {winners[0].categoryXp} {meta.xpLabel}
                               {winners.length > 1 ? " EACH" : ""}
                             </small>

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -57,7 +58,7 @@ function StatTile({
         {icon}
       </div>
       <span>{label}</span>
-      <strong>{value}</strong>
+      <strong className="data-number-strong">{value}</strong>
     </div>
   );
 }
@@ -82,7 +83,7 @@ function CareerMiniStat({
           onClick={() => onSelectTrend(metric)}
         >
           <span className="career-mini-stat-label">{label}</span>
-          <span className="career-mini-stat-value">{value}</span>
+          <span className="career-mini-stat-value data-number-strong">{value}</span>
           <span className="career-mini-stat-cue">Trend</span>
         </button>
       </div>
@@ -92,7 +93,7 @@ function CareerMiniStat({
   return (
     <div className="career-mini-stat-row">
       <dt>{label}</dt>
-      <dd>{value}</dd>
+      <dd className="data-number-strong">{value}</dd>
     </div>
   );
 }
@@ -146,7 +147,7 @@ function HeroRatingRow({
       <div className="hero-rating-content">
         <div className="hero-rating-heading">
           <span>{label}</span>
-          <strong>{value}/100</strong>
+          <strong className="data-number-strong">{value}/100</strong>
         </div>
         <div className="hero-rating-track">
           <div className="hero-rating-fill" style={{ width }} />
@@ -275,12 +276,37 @@ const TREND_METRIC_ORDER: PlayerTrendMetric[] = [
   "bowlingStrikeRate"
 ];
 
-const TREND_PLOT = {
+type TrendChartLayout = {
+  bottom: number;
+  height: number;
+  left: number;
+  pointInnerRadius: number;
+  pointRadius: number;
+  top: number;
+  viewBox: string;
+  width: number;
+};
+
+const TREND_DESKTOP_CHART: TrendChartLayout = {
   left: 64,
   top: 34,
   width: 820,
   height: 145,
-  bottom: 218
+  bottom: 218,
+  pointRadius: 7,
+  pointInnerRadius: 3.2,
+  viewBox: "0 0 960 260"
+};
+
+const TREND_MOBILE_CHART: TrendChartLayout = {
+  left: 58,
+  top: 38,
+  width: 612,
+  height: 300,
+  bottom: 362,
+  pointRadius: 7,
+  pointInnerRadius: 3.2,
+  viewBox: "0 0 720 390"
 };
 
 function getNiceAxisStep(maximum: number) {
@@ -324,24 +350,52 @@ function getTrendPointPosition({
   index,
   maximum,
   point,
+  plot,
   total
 }: {
   index: number;
   point: PlayerTrendPoint;
+  plot: TrendChartLayout;
   total: number;
   maximum: number;
 }) {
   const range = maximum || 1;
   const x =
     total <= 1
-      ? TREND_PLOT.left + TREND_PLOT.width / 2
-      : TREND_PLOT.left + (index / (total - 1)) * TREND_PLOT.width;
+      ? plot.left + plot.width / 2
+      : plot.left + (index / (total - 1)) * plot.width;
   const y =
-    TREND_PLOT.top +
-    TREND_PLOT.height -
-    (point.value / range) * TREND_PLOT.height;
+    plot.top +
+    plot.height -
+    (point.value / range) * plot.height;
 
   return { x, y };
+}
+
+function useTrendChartLayout() {
+  const [isMobileChart, setIsMobileChart] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 560px)");
+    const updateMobileState = () => setIsMobileChart(query.matches);
+
+    updateMobileState();
+
+    if (query.addEventListener) {
+      query.addEventListener("change", updateMobileState);
+
+      return () => query.removeEventListener("change", updateMobileState);
+    }
+
+    query.addListener(updateMobileState);
+
+    return () => query.removeListener(updateMobileState);
+  }, []);
+
+  return {
+    isMobileChart,
+    plot: isMobileChart ? TREND_MOBILE_CHART : TREND_DESKTOP_CHART
+  };
 }
 
 function getTrendPrimaryValue(series: PlayerPerformanceTrends["series"][PlayerTrendMetric], point: PlayerTrendPoint) {
@@ -358,6 +412,8 @@ function PerformanceTrendGraph({
 }: {
   series: PlayerPerformanceTrends["series"][PlayerTrendMetric];
 }) {
+  const plotShellRef = useRef<HTMLDivElement | null>(null);
+  const { isMobileChart, plot } = useTrendChartLayout();
   const [activePoint, setActivePoint] = useState<{
     metric: PlayerTrendMetric;
     index: number;
@@ -377,6 +433,7 @@ function PerformanceTrendGraph({
     getTrendPointPosition({
       index,
       point,
+      plot,
       total: points.length,
       maximum
     })
@@ -395,6 +452,18 @@ function PerformanceTrendGraph({
     setActivePoint({ metric: series.metric, index });
   }
 
+  useEffect(() => {
+    const shell = plotShellRef.current;
+
+    if (!shell || !isMobileChart) return;
+
+    const hiddenWidth = shell.scrollWidth - shell.clientWidth;
+
+    if (hiddenWidth > 0) {
+      shell.scrollLeft = hiddenWidth;
+    }
+  }, [isMobileChart, points.length, series.metric]);
+
   if (points.length === 0) {
     return (
       <div className="performance-trend-empty" role="status">
@@ -407,48 +476,55 @@ function PerformanceTrendGraph({
   return (
     <div className="performance-trend-chart">
       <div className="performance-trend-body">
-        <div className="performance-trend-plot-shell">
+        <div
+          className={`performance-trend-plot-shell${isMobileChart ? " is-mobile-scrollable" : ""}`}
+          ref={plotShellRef}
+        >
           <svg
             role="img"
             aria-label={`${series.label} performance trend with ${series.axisLabel} axis`}
-            viewBox="0 0 960 260"
+            viewBox={plot.viewBox}
             className="performance-trend-svg"
           >
             <text className="performance-trend-axis-title" x="4" y="22">
               {series.axisLabel}
             </text>
-            <text className="performance-trend-chart-title" x="474" y="22">
+            <text
+              className="performance-trend-chart-title"
+              x={plot.left + plot.width / 2}
+              y="22"
+            >
               {series.label}
             </text>
             <line
               className="performance-trend-axis-line"
-              x1={TREND_PLOT.left}
-              x2={TREND_PLOT.left}
-              y1={TREND_PLOT.top}
-              y2={TREND_PLOT.top + TREND_PLOT.height}
+              x1={plot.left}
+              x2={plot.left}
+              y1={plot.top}
+              y2={plot.top + plot.height}
             />
             <line
               className="performance-trend-axis-line"
-              x1={TREND_PLOT.left}
-              x2={TREND_PLOT.left + TREND_PLOT.width}
-              y1={TREND_PLOT.top + TREND_PLOT.height}
-              y2={TREND_PLOT.top + TREND_PLOT.height}
+              x1={plot.left}
+              x2={plot.left + plot.width}
+              y1={plot.top + plot.height}
+              y2={plot.top + plot.height}
             />
             {ticks.map((tick) => {
               const y =
-                TREND_PLOT.top +
-                TREND_PLOT.height -
-                (tick / maximum) * TREND_PLOT.height;
+                plot.top +
+                plot.height -
+                (tick / maximum) * plot.height;
 
               return (
                 <g key={tick} className="performance-trend-gridline">
                   <line
-                    x1={TREND_PLOT.left}
-                    x2={TREND_PLOT.left + TREND_PLOT.width}
+                    x1={plot.left}
+                    x2={plot.left + plot.width}
                     y1={y}
                     y2={y}
                   />
-                  <text x={TREND_PLOT.left - 12} y={y + 4}>
+                  <text x={plot.left - 12} y={y + 4}>
                     {formatTrendAxisTick(tick)}
                   </text>
                 </g>
@@ -476,15 +552,15 @@ function PerformanceTrendGraph({
                   <title>
                     {datum.gameLabel}: {datum.displayValue}. {datum.detail}
                   </title>
-                  <circle cx={point.x} cy={point.y} r={7} />
-                  <circle cx={point.x} cy={point.y} r={3.2} />
-                  <text x={point.x} y={TREND_PLOT.bottom}>
+                  <circle cx={point.x} cy={point.y} r={plot.pointRadius} />
+                  <circle cx={point.x} cy={point.y} r={plot.pointInnerRadius} />
+                  <text x={point.x} y={plot.bottom}>
                     {datum.label}
                   </text>
                   <text
                     className="performance-trend-date-label"
                     x={point.x}
-                    y={TREND_PLOT.bottom + 18}
+                    y={plot.bottom + 18}
                   >
                     {datum.shortDateLabel}
                   </text>
@@ -504,12 +580,14 @@ function PerformanceTrendGraph({
                 {selectedPoint.inningsLabel}
               </strong>
             ) : null}
-            <strong>{getTrendPrimaryValue(series, selectedPoint)}</strong>
+            <strong className="data-number-strong">
+              {getTrendPrimaryValue(series, selectedPoint)}
+            </strong>
             <dl>
               {selectedPoint.detailRows.map((row) => (
                 <div key={`${row.label}-${row.value}`}>
                   <dt>{row.label}</dt>
-                  <dd>{row.value}</dd>
+                  <dd className="data-number">{row.value}</dd>
                 </div>
               ))}
             </dl>
@@ -701,7 +779,7 @@ export function PlayerProfile({
             <div className="career-level-progress mt-4 rounded-md border border-white/12 bg-black/30 p-3">
               <div className="career-level-progress-heading flex items-center justify-between gap-3 text-xs font-black uppercase text-stone-300">
                 <span>Next Level Progress</span>
-                <strong className="text-neon-yellow">
+                <strong className="data-number-strong text-neon-yellow">
                   {levelProgress.xpWithinLevel}/{levelProgress.xpRequiredWithinLevel} XP
                   {" "}
                   ({formatPercentage(levelProgress.progressPercentage)})

@@ -1272,6 +1272,12 @@ test("Bat vs Ball UI uses selected players with Batter Bowler labels and swap", 
 
 test("Bat vs Ball UI renders rivalry stats and reliable-data empty state", () => {
   const source = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+  const statValueStyleStart = css.indexOf(".bat-ball-stat-card strong {");
+  const statValueStyleBlock = css.slice(
+    statValueStyleStart,
+    css.indexOf("}", statValueStyleStart) + 1
+  );
 
   assert.match(source, /No Recorded Duel Yet/);
   assert.match(source, /ball-by-ball recorded official match/);
@@ -1282,6 +1288,59 @@ test("Bat vs Ball UI renders rivalry stats and reliable-data empty state", () =>
   assert.match(source, /Dot Balls/);
   assert.match(source, /Matches Encountered/);
   assert.match(source, /Run-outs are not credited as bowler dismissals/);
+  assert.ok(statValueStyleStart > -1);
+  assert.match(statValueStyleBlock, /font-family:\s*var\(--font-barlow-condensed\)/);
+  assert.match(statValueStyleBlock, /font-weight:\s*800/);
+  assert.match(statValueStyleBlock, /font-style:\s*normal/);
+  assert.match(statValueStyleBlock, /font-variant-numeric:\s*tabular-nums lining-nums/);
+  assert.doesNotMatch(statValueStyleBlock, /font-family:\s*var\(--font-bangers\)/);
+});
+
+test("site-wide numeric values use the shared Barlow data typography standard", () => {
+  const css = readFileSync("app/globals.css", "utf8");
+  const dataNumberStart = css.indexOf(".data-number,");
+  const dataNumberBlock = css.slice(dataNumberStart, css.indexOf("}", dataNumberStart) + 1);
+  const representativeFiles = [
+    "components/dashboard/HeroSection.tsx",
+    "components/dashboard/TopPerformersPanel.tsx",
+    "components/dashboard/RecentMatchesPanel.tsx",
+    "components/players/PlayerCard.tsx",
+    "components/players/PlayerProfile.tsx",
+    "components/players/RatingBar.tsx",
+    "components/players/TrophyCabinet.tsx",
+    "components/matches/MatchArchive.tsx",
+    "components/matches/MatchScorecard.tsx",
+    "components/matches/MockMatchEntryForm.tsx",
+    "components/matches/PostMatchCelebration.tsx",
+    "components/leaderboard/CareerLeaderboard.tsx",
+    "components/monthly-beasts/MonthlyBeastsFeature.tsx",
+    "components/face-off/GullyFaceOffArena.tsx",
+    "components/stats/FormulaRoom.tsx"
+  ];
+  const shareCardSource = readFileSync("components/matches/MatchShareCard.tsx", "utf8");
+
+  assert.ok(dataNumberStart > -1);
+  assert.match(dataNumberBlock, /font-family:\s*var\(--font-barlow-condensed\)/);
+  assert.match(dataNumberBlock, /font-style:\s*normal/);
+  assert.match(dataNumberBlock, /font-variant-numeric:\s*tabular-nums lining-nums/);
+  assert.match(dataNumberBlock, /transform:\s*none/);
+  assert.match(css, /\.performance-trend-gridline text/);
+  assert.match(css, /\.performance-trend-point text/);
+
+  representativeFiles.forEach((file) => {
+    const source = readFileSync(file, "utf8");
+
+    assert.match(
+      source,
+      /data-number(?:-strong)?/,
+      `${file} should opt visible data values into the numeric typography token`
+    );
+  });
+  assert.doesNotMatch(
+    shareCardSource,
+    /data-number(?:-strong)?/,
+    "Shareable Match Result Card is a poster/export surface and should keep its designed typography"
+  );
 });
 
 test("Gully Face-Off UI prevents same-player display and supports URL state", () => {
@@ -1320,8 +1379,17 @@ test("Gully Face-Off UI renders the four authoritative battle sections", () => {
 test("Gully Face-Off UI treats metric leaders ties and unavailable data distinctly", () => {
   const source = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
   const css = readFileSync("app/globals.css", "utf8");
+  const metricValueStyleStart = css.indexOf(".face-off-metric-value strong {");
+  const metricValueStyleBlock = css.slice(
+    metricValueStyleStart,
+    css.indexOf("}", metricValueStyleStart) + 1
+  );
 
   assert.match(source, /data-leader=\{metric\.leader\}/);
+  assert.match(
+    source,
+    /<strong className="data-number-strong">\s*\{formatMetricDisplayValue\(metric, side\)\}\s*<\/strong>/
+  );
   assert.match(source, /← \$\{leftName\} leads/);
   assert.match(source, /\$\{rightName\} leads →/);
   assert.match(source, /⚡ \$\{leftName\} edge/);
@@ -1336,6 +1404,13 @@ test("Gully Face-Off UI treats metric leaders ties and unavailable data distinct
   assert.match(css, /data-availability="unavailable"/);
   assert.match(css, /face-off-metric-row\[data-leader="left"\] \.face-off-metric-center span/);
   assert.match(css, /face-off-battle-section\[data-edge="tie"\] \.face-off-section-heading strong/);
+  assert.ok(metricValueStyleStart > -1);
+  assert.match(metricValueStyleBlock, /font-family:\s*var\(--font-barlow-condensed\)/);
+  assert.match(metricValueStyleBlock, /font-style:\s*normal/);
+  assert.match(metricValueStyleBlock, /font-variant-numeric:\s*tabular-nums lining-nums/);
+  assert.match(metricValueStyleBlock, /font-weight:\s*800/);
+  assert.match(metricValueStyleBlock, /transform:\s*none/);
+  assert.doesNotMatch(metricValueStyleBlock, /font-family:\s*var\(--font-bangers\)/);
 });
 
 test("Gully Face-Off UI explains advanced data reliability without fabricating zeros", () => {

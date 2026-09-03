@@ -36,7 +36,7 @@ function TrophyBadge({
         <p>{unlock.definition.tier ?? "badge"}</p>
         <h4>{unlock.definition.title}</h4>
         <span>{unlock.definition.description}</span>
-        <em>{formatAchievementUnlockMeta(unlock)}</em>
+        <em className="data-number">{formatAchievementUnlockMeta(unlock)}</em>
       </div>
     </article>
   );
@@ -64,7 +64,9 @@ function MilestoneProgressCard({ progress }: { progress: CareerMilestoneProgress
       <div className="trophy-progress-meter" aria-hidden="true">
         <span style={{ width }} />
       </div>
-      <strong>{formatMilestoneProgressLabel(progress)}</strong>
+      <strong className="data-number-strong">
+        {formatMilestoneProgressLabel(progress)}
+      </strong>
       <span>{progress.definition.description}</span>
     </article>
   );
@@ -88,7 +90,7 @@ export function TrophyCabinet({
               <p>Career Milestones</p>
               <h2 id="trophy-cabinet-title">Trophy Cabinet</h2>
             </div>
-            <strong>{unlockedCount} unlocked</strong>
+            <strong className="data-number-strong">{unlockedCount} unlocked</strong>
           </div>
 
           {viewModel.featuredUnlocks.length > 0 ? (

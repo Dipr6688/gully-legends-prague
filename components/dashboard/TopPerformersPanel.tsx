@@ -100,7 +100,7 @@ function TopPerformerPortraits({
       {isJointLeader ? (
         <span className="performer-joint-badge" aria-label="Joint all-time leaders">
           <Crown className="h-4 w-4" aria-hidden="true" />
-          <b>JOINT #1</b>
+          <b className="data-number-strong">JOINT #1</b>
         </span>
       ) : null}
       {visibleLeaders.map((entry) => (
@@ -120,7 +120,7 @@ function TopPerformerPortraits({
       {!isJointLeader ? (
         <span className="performer-leader-badge" aria-label="All-time leader">
           <Crown className="h-4 w-4" aria-hidden="true" />
-          <b>#1</b>
+          <b className="data-number-strong">#1</b>
         </span>
       ) : null}
     </div>
@@ -174,7 +174,9 @@ function TopPerformerCard({
           <div className="performer-copy">
             <h3>{title}</h3>
             {status === "joint-leaders" ? <p>{names}</p> : null}
-            <strong>{getDisplayValue({ category, leaderCount: leaders.length, value })}</strong>
+            <strong className="data-number-strong">
+              {getDisplayValue({ category, leaderCount: leaders.length, value })}
+            </strong>
           </div>
         </>
       ) : (

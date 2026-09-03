@@ -108,16 +108,16 @@ function MatchArchiveCard({
 
       <div className="match-archive-length" aria-label="Scheduled match length">
         <span>Match Length</span>
-        <strong>{getMatchScheduledOversLabel(match)}</strong>
+        <strong className="data-number-strong">{getMatchScheduledOversLabel(match)}</strong>
       </div>
 
       <div className="match-archive-scores" aria-label={`${match.matchName} score`}>
         {scoreRows.map((row) => (
           <div key={row.teamId}>
             <span>{row.teamName}</span>
-            <b>
+            <b className="data-number-strong">
               {row.score}
-              <small>({row.overs})</small>
+              <small className="data-number">({row.overs})</small>
             </b>
           </div>
         ))}

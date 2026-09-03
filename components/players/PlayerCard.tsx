@@ -37,7 +37,7 @@ export function PlayerCard({
         />
         <div className="player-level">
           <span>Level</span>
-          <strong>{player.level}</strong>
+          <strong className="data-number-strong">{player.level}</strong>
         </div>
       </div>
 

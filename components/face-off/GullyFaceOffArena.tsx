@@ -293,7 +293,7 @@ function RivalryStatCard({
 }) {
   return (
     <div className="bat-ball-stat-card" data-tone={tone}>
-      <strong>{value}</strong>
+      <strong className="data-number-strong">{value}</strong>
       <span>{label}</span>
     </div>
   );
@@ -401,7 +401,9 @@ function MetricValue({
       data-availability={value.availability}
     >
       <span>{playerName}</span>
-      <strong>{formatMetricDisplayValue(metric, side)}</strong>
+      <strong className="data-number-strong">
+        {formatMetricDisplayValue(metric, side)}
+      </strong>
       <div className="face-off-meter" aria-hidden="true">
         <i style={{ width: getBarWidth(metric, side) }} />
       </div>
