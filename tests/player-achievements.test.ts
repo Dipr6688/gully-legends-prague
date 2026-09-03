@@ -13,6 +13,12 @@ import {
   getAchievementIconPath,
   getMilestoneProgressPercent
 } from "../lib/trophy-cabinet";
+import { activePlayers } from "../lib/data/players";
+import {
+  DEFAULT_PLAYER_BROWSER_OPTIONS,
+  getVisiblePlayers
+} from "../lib/player-browser";
+import { getPlayerProfileNavigation } from "../lib/player-profile-navigation";
 import { createQuickScoringEvent } from "../lib/quick-scoring";
 import type {
   FinalisedPlayerMatchRecord,
@@ -764,13 +770,153 @@ test("player profile renders identity sections before Trophy Cabinet", () => {
   const playerFileIndex = profile.indexOf("player-file-section");
   const specialMoveIndex = profile.indexOf("fun-trait-callout");
   const playerPowerIndex = profile.indexOf("player-power-section");
+  const careerStatisticsIndex = profile.indexOf("career-statistics-section");
+  const trendIndex = profile.indexOf("performance-trend-panel");
   const trophyIndex = profile.indexOf("<TrophyCabinet achievements={achievements}");
 
   assert.ok(scoreboardIndex > -1);
-  assert.ok(playerFileIndex > scoreboardIndex);
-  assert.ok(specialMoveIndex > playerFileIndex);
+  assert.ok(specialMoveIndex > scoreboardIndex);
   assert.ok(playerPowerIndex > specialMoveIndex);
-  assert.ok(trophyIndex > playerPowerIndex);
+  assert.ok(playerFileIndex > playerPowerIndex);
+  assert.ok(careerStatisticsIndex > playerFileIndex);
+  assert.ok(trendIndex > careerStatisticsIndex);
+  assert.ok(trophyIndex > trendIndex);
+  assert.match(profile, /label:\s*"Blade Power"/);
+  assert.match(profile, /label:\s*"Delivery Threat"/);
+  assert.match(profile, /label:\s*"Field Reflex"/);
+  assert.match(profile, /label:\s*"Batting DNA"/);
+  assert.match(profile, /label:\s*"Bowling Arsenal"/);
+  assert.match(profile, /label:\s*"Fielding Instinct"/);
+  assert.match(profile, /Performance Trend/);
+});
+
+test("player profile navigator reuses public Players-grid ordering", () => {
+  const publicPlayerOrder = getVisiblePlayers({
+    players: activePlayers,
+    options: DEFAULT_PLAYER_BROWSER_OPTIONS
+  });
+  const middlePlayer = publicPlayerOrder[1];
+  const navigation = getPlayerProfileNavigation({
+    players: activePlayers,
+    currentPlayerId: middlePlayer.id
+  });
+
+  assert.deepEqual(
+    publicPlayerOrder.map((player) => player.id),
+    activePlayers.map((player) => player.id)
+  );
+  assert.equal(navigation.allPlayersHref, "/players");
+  assert.equal(navigation.previous?.id, publicPlayerOrder[0].id);
+  assert.equal(navigation.previous?.slug, publicPlayerOrder[0].slug);
+  assert.equal(navigation.next?.id, publicPlayerOrder[2].id);
+  assert.equal(navigation.next?.slug, publicPlayerOrder[2].slug);
+});
+
+test("player profile navigator handles first last and inactive players", () => {
+  const firstPlayer = activePlayers[0];
+  const secondPlayer = { ...activePlayers[1], isActive: false };
+  const thirdPlayer = activePlayers[2];
+  const lastPlayer = activePlayers.at(-1);
+
+  assert.ok(lastPlayer);
+
+  const firstNavigation = getPlayerProfileNavigation({
+    players: activePlayers,
+    currentPlayerId: firstPlayer.id
+  });
+  const lastNavigation = getPlayerProfileNavigation({
+    players: activePlayers,
+    currentPlayerId: lastPlayer.id
+  });
+  const inactiveSkippedNavigation = getPlayerProfileNavigation({
+    players: [firstPlayer, secondPlayer, thirdPlayer],
+    currentPlayerId: thirdPlayer.id
+  });
+
+  assert.equal(firstNavigation.previous, null);
+  assert.equal(firstNavigation.next?.id, activePlayers[1].id);
+  assert.equal(lastNavigation.previous?.id, activePlayers.at(-2)?.id);
+  assert.equal(lastNavigation.next, null);
+  assert.equal(inactiveSkippedNavigation.previous?.id, firstPlayer.id);
+  assert.equal(inactiveSkippedNavigation.next, null);
+});
+
+test("player profile navigator renders real links and preserves profile sections", () => {
+  const profile = readFileSync("components/players/PlayerProfile.tsx", "utf8");
+  const careerProfile = readFileSync("components/players/CareerPlayerProfile.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+  const heroStart = profile.indexOf('<section className="player-hero">');
+  const navigatorIndex = profile.indexOf("<PlayerProfileBrowser navigation={profileNavigation} />");
+  const artworkIndex = profile.indexOf('<div className="player-hero-artwork">');
+  const identityIndex = profile.indexOf('<div className="profile-identity">');
+  const heroInformationStart = profile.indexOf('<div className="player-hero-information">');
+  const heroInformationBlock = profile.slice(
+    heroInformationStart,
+    profile.indexOf("</section>", heroInformationStart)
+  );
+  const browserNameStyleStart = css.indexOf(".player-profile-browser-link strong {");
+  const browserNameStyleBlock = css.slice(
+    browserNameStyleStart,
+    css.indexOf("}", browserNameStyleStart) + 1
+  );
+
+  assert.match(careerProfile, /getPlayerProfileNavigation/);
+  assert.match(careerProfile, /players:\s*careerPlayers/);
+  assert.match(profile, /PlayerProfileBrowser/);
+  assert.ok(heroStart > -1);
+  assert.ok(navigatorIndex > heroStart);
+  assert.ok(artworkIndex > navigatorIndex);
+  assert.ok(identityIndex > artworkIndex);
+  assert.doesNotMatch(heroInformationBlock, /PlayerProfileBrowser/);
+  assert.match(profile, /aria-label="Player profile browsing"/);
+  assert.match(profile, /Previous player:/);
+  assert.match(profile, /Next player:/);
+  assert.match(profile, /Back to all players/);
+  assert.match(profile, /href=\{`\/players\/\$\{navigation\.previous\.slug\}`\}/);
+  assert.match(profile, /href=\{`\/players\/\$\{navigation\.next\.slug\}`\}/);
+  assert.match(profile, /href=\{navigation\.allPlayersHref\}/);
+  assert.match(profile, /aria-disabled="true"/);
+  assert.doesNotMatch(profile, /window\.location|history\.pushState/);
+  assert.match(profile, /Player Power/);
+  assert.match(profile, /Performance Trend/);
+  assert.match(profile, /<TrophyCabinet achievements=\{achievements\}/);
+  assert.match(css, /\.player-profile-browser\s*{[\s\S]*?grid-column:\s*1 \/ -1/);
+  assert.match(css, /\.player-profile-browser\s*{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\)/);
+  assert.match(css, /\.player-profile-browser-link,[\s\S]*?\.player-profile-browser-all\s*{[\s\S]*?min-height:\s*48px/);
+  assert.ok(browserNameStyleStart > -1);
+  assert.match(browserNameStyleBlock, /overflow-wrap:\s*anywhere/);
+  assert.doesNotMatch(browserNameStyleBlock, /text-overflow:\s*ellipsis/);
+  assert.doesNotMatch(browserNameStyleBlock, /white-space:\s*nowrap/);
+  assert.match(css, /@media \(max-width:\s*560px\)[\s\S]*?\.player-profile-browser/);
+});
+
+test("Player performance trend renders compact axes and selected match details", () => {
+  const profile = readFileSync("components/players/PlayerProfile.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.match(profile, /viewBox="0 0 960 260"/);
+  assert.match(profile, /series\.axisLabel/);
+  assert.match(profile, /performance-trend-chart-title/);
+  assert.match(profile, /series\.label/);
+  assert.match(profile, /performance-trend-axis-title/);
+  assert.match(profile, /performance-trend-axis-line/);
+  assert.match(profile, /formatTrendAxisTick\(tick\)/);
+  assert.match(profile, /datum\.gameLabel/);
+  assert.match(profile, /datum\.shortDateLabel/);
+  assert.match(profile, /Selected match/);
+  assert.match(profile, /selectedPoint\.fullDateLabel/);
+  assert.match(profile, /selectedPoint\.inningsLabel/);
+  assert.match(profile, /selectedPoint\.detailRows\.map/);
+  assert.match(profile, /metric:\s*series\.metric/);
+  assert.match(profile, /Math\.max\(0, points\.length - 1\)/);
+  assert.match(profile, /onClick=\{\(\) => setActivePoint\(\{ metric:\s*series\.metric, index \}\)\}/);
+  assert.match(css, /\.performance-trend-body\s*{[\s\S]*?grid-template-columns:\s*minmax\(0, 4fr\) minmax\(180px, 1fr\)/);
+  assert.match(css, /\.performance-trend-svg\s*{[\s\S]*?height:\s*230px/);
+  assert.match(css, /\.performance-trend-chart-title/);
+  assert.match(css, /\.performance-trend-detail-card/);
+  assert.match(css, /\.performance-trend-point circle:first-child\s*{[\s\S]*?stroke-width:\s*2\.5/);
+  assert.match(css, /@media \(max-width:\s*560px\)[\s\S]*?\.performance-trend-body\s*{[\s\S]*?grid-template-columns:\s*1fr/);
+  assert.doesNotMatch(css, /\.performance-trend-svg\s*{[\s\S]*?min-height:\s*220px/);
 });
 
 test("Trophy Cabinet component uses custom badge artwork and no persistence calls", () => {
@@ -785,18 +931,23 @@ test("Trophy Cabinet component uses custom badge artwork and no persistence call
   assert.match(component, /getAchievementIconPath/);
   assert.match(component, /variant="featured"/);
   assert.match(component, /variant = "compact"/);
+  assert.match(component, /className="trophy-cabinet-layout"/);
+  assert.match(component, /className="trophy-cabinet-main"/);
   assert.match(css, /\.trophy-badge-card-featured/);
   assert.match(featuredBlock, /grid-template-columns:\s*76px minmax\(0, 1fr\)/);
   assert.match(featuredBlock, /min-height:\s*118px/);
   assert.match(css, /\.trophy-badge-card-compact/);
   assert.match(css, /\.trophy-badge-grid,[\s\S]*?grid-template-columns:\s*repeat\(auto-fit, minmax\(164px, 1fr\)\)/);
   assert.match(css, /\.trophy-badge-grid-unlocked\s*{[\s\S]*?grid-template-columns:\s*repeat\(auto-fit, minmax\(158px, 1fr\)\)/);
+  assert.match(css, /\.trophy-cabinet-layout\s*{[\s\S]*?grid-template-columns:\s*minmax\(0, 1\.1fr\) minmax\(320px, 0\.9fr\)/);
+  assert.match(css, /\.trophy-next-section\s*{[\s\S]*?border-left:\s*1px solid rgba\(247, 199, 52, 0\.16\)/);
+  assert.match(css, /@media \(max-width:\s*900px\)[\s\S]*?\.trophy-cabinet-layout\s*{[\s\S]*?grid-template-columns:\s*1fr/);
   assert.match(component, /standardUnlocks = viewModel\.sections\.flatMap/);
   assert.doesNotMatch(component, /className="trophy-category-group"/);
-  assert.match(css, /\.trophy-next-section\s*{[\s\S]*?margin-top:\s*18px/);
-  assert.match(css, /\.trophy-next-section\s*{[\s\S]*?border-top:\s*1px solid rgba\(247, 199, 52, 0\.16\)/);
+  assert.match(css, /@media \(max-width:\s*900px\)[\s\S]*?\.trophy-next-section\s*{[\s\S]*?border-top:\s*1px solid rgba\(247, 199, 52, 0\.16\)/);
   assert.match(css, /\.trophy-category-stack > h3::after,[\s\S]*?\.trophy-next-section > h3::after/);
   assert.match(component, /Unlocked Achievements/);
+  assert.match(component, /Next Targets/);
   assert.match(component, /First trophy still loading/);
   assert.match(component, /Official matches will fill this cabinet/);
   assert.doesNotMatch(component, /supabase/i);

@@ -81,58 +81,62 @@ export function TrophyCabinet({
 
   return (
     <section className="trophy-cabinet-section" aria-labelledby="trophy-cabinet-title">
-      <div className="trophy-cabinet-header">
-        <div>
-          <p>Career Milestones</p>
-          <h2 id="trophy-cabinet-title">Trophy Cabinet</h2>
+      <div className="trophy-cabinet-layout">
+        <div className="trophy-cabinet-main">
+          <div className="trophy-cabinet-header">
+            <div>
+              <p>Career Milestones</p>
+              <h2 id="trophy-cabinet-title">Trophy Cabinet</h2>
+            </div>
+            <strong>{unlockedCount} unlocked</strong>
+          </div>
+
+          {viewModel.featuredUnlocks.length > 0 ? (
+            <div className="trophy-featured-grid" aria-label="Featured trophies">
+              {viewModel.featuredUnlocks.map((unlock) => (
+                <TrophyBadge
+                  key={`${unlock.playerId}-${unlock.definition.id}`}
+                  unlock={unlock}
+                  variant="featured"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="trophy-empty-state">
+              <p>First trophy still loading.</p>
+              <span>Official matches will fill this cabinet when milestones are unlocked.</span>
+            </div>
+          )}
+
+          {standardUnlocks.length > 0 ? (
+            <div className="trophy-category-stack">
+              <h3>Unlocked Achievements</h3>
+              <div className="trophy-badge-grid trophy-badge-grid-unlocked">
+                {standardUnlocks.map((unlock) => (
+                  <TrophyBadge
+                    key={`unlocked-${unlock.playerId}-${unlock.definition.id}`}
+                    unlock={unlock}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
-        <strong>{unlockedCount} unlocked</strong>
+
+        {viewModel.visibleNextMilestones.length > 0 ? (
+          <section className="trophy-next-section" aria-label="Current milestone progress">
+            <h3>Next Targets</h3>
+            <div className="trophy-progress-grid">
+              {viewModel.visibleNextMilestones.map((progress) => (
+                <MilestoneProgressCard
+                  key={`${progress.playerId}-${progress.definition.id}`}
+                  progress={progress}
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
-
-      {viewModel.featuredUnlocks.length > 0 ? (
-        <div className="trophy-featured-grid" aria-label="Featured trophies">
-          {viewModel.featuredUnlocks.map((unlock) => (
-            <TrophyBadge
-              key={`${unlock.playerId}-${unlock.definition.id}`}
-              unlock={unlock}
-              variant="featured"
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="trophy-empty-state">
-          <p>First trophy still loading.</p>
-          <span>Official matches will fill this cabinet when milestones are unlocked.</span>
-        </div>
-      )}
-
-      {standardUnlocks.length > 0 ? (
-        <div className="trophy-category-stack">
-          <h3>Unlocked Achievements</h3>
-          <div className="trophy-badge-grid trophy-badge-grid-unlocked">
-            {standardUnlocks.map((unlock) => (
-              <TrophyBadge
-                key={`unlocked-${unlock.playerId}-${unlock.definition.id}`}
-                unlock={unlock}
-              />
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {viewModel.visibleNextMilestones.length > 0 ? (
-        <section className="trophy-next-section" aria-label="Current milestone progress">
-          <h3>Next Targets</h3>
-          <div className="trophy-progress-grid">
-            {viewModel.visibleNextMilestones.map((progress) => (
-              <MilestoneProgressCard
-                key={`${progress.playerId}-${progress.definition.id}`}
-                progress={progress}
-              />
-            ))}
-          </div>
-        </section>
-      ) : null}
 
       {viewModel.hasUnknownProgress ? (
         <p className="trophy-legacy-note">

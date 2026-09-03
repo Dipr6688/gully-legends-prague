@@ -1,10 +1,13 @@
 "use client";
 
+import { useMemo } from "react";
 import { PlayerProfile } from "@/components/players/PlayerProfile";
 import { useMatchRepository } from "@/components/matches/useMatchRepository";
 import { useCareerPlayers } from "@/components/players/useCareerPlayers";
+import { buildPlayerPerformanceTrends } from "@/lib/analytics/player-performance-trends";
 import { getAdvancedCareerStatsForPlayer } from "@/lib/advanced-cricket-stats";
 import { getPlayerAchievements } from "@/lib/player-achievements";
+import { getPlayerProfileNavigation } from "@/lib/player-profile-navigation";
 import type { MatchRecord } from "@/lib/types/match";
 import type { Player } from "@/lib/types/player";
 
@@ -25,7 +28,19 @@ export function CareerPlayerProfile({
   const matches = suppliedMatches ?? localRepository.matches;
   const careerPlayer =
     careerPlayers.find((candidate) => candidate.id === player.id) ?? player;
+  const profileNavigation = useMemo(
+    () =>
+      getPlayerProfileNavigation({
+        players: careerPlayers,
+        currentPlayerId: careerPlayer.id
+      }),
+    [careerPlayers, careerPlayer.id]
+  );
   const advancedStats = getAdvancedCareerStatsForPlayer({
+    matches,
+    playerId: careerPlayer.id
+  });
+  const performanceTrends = buildPlayerPerformanceTrends({
     matches,
     playerId: careerPlayer.id
   });
@@ -39,6 +54,8 @@ export function CareerPlayerProfile({
       player={careerPlayer}
       advancedStats={advancedStats}
       achievements={achievements}
+      performanceTrends={performanceTrends}
+      profileNavigation={profileNavigation}
     />
   );
 }

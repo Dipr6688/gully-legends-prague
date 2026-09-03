@@ -412,9 +412,9 @@ test("Player Profile uses separate polished icon families for power and file tra
   assert.match(iconConfig, /PLAYER_FILE_ICONS/);
   assert.match(playerProfile, /label:\s*"Blade Power"[\s\S]*?PLAYER_PROFILE_POWER_ICONS\.batting/);
   assert.match(playerProfile, /label:\s*"Batting DNA"[\s\S]*?PLAYER_FILE_ICONS\.batting/);
-  assert.match(css, /\.career-detail-grid h3\s*{[\s\S]*?font-size:\s*clamp\(0\.95rem,\s*1\.4vw,\s*1\.08rem\)/);
-  assert.match(css, /\.career-detail-grid dt\s*{[\s\S]*?font-size:\s*0\.8rem/);
-  assert.match(css, /\.career-detail-grid dd\s*{[\s\S]*?font-size:\s*0\.95rem/);
+  assert.match(css, /\.career-detail-grid h3\s*{[\s\S]*?font-size:\s*clamp\(1\.05rem,\s*1\.5vw,\s*1\.18rem\)/);
+  assert.match(css, /\.career-detail-grid dt\s*{[\s\S]*?font-size:\s*0\.86rem/);
+  assert.match(css, /\.career-detail-grid dd\s*{[\s\S]*?font-size:\s*1\.02rem/);
 });
 
 test("Formula Room large heading icons use requested responsive holder sizes", () => {

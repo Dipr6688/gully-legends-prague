@@ -15,6 +15,11 @@ import {
   getLeaderboardEntries,
   getLeaderboardSummary
 } from "../lib/leaderboard";
+import {
+  buildPlayerPerformanceTrends,
+  calculateTrackedBowlingStrikeRate,
+  formatBowlingStrikeRate
+} from "../lib/analytics/player-performance-trends";
 import { buildScorecardInnings } from "../lib/match-scorecard";
 import { createQuickScoringEvent, undoLastQuickScoringEvent } from "../lib/quick-scoring";
 import type {
@@ -305,6 +310,596 @@ test("Strike rate and economy formatting use shared exact formulas", () => {
   assert.equal(formatEconomy(90 / 11), "8.18");
   assert.notEqual(formatEconomy(90 / 11), "10.00");
   assert.equal(formatEconomy(calculateBowlingEconomy({ runsConceded: 0, legalBalls: 0 })), "-");
+});
+
+test("Tracked bowling strike rate uses legal balls per credited wicket", () => {
+  assert.equal(calculateTrackedBowlingStrikeRate({ legalBalls: 18, wickets: 3 }), 6);
+  assert.equal(calculateTrackedBowlingStrikeRate({ legalBalls: 18, wickets: 0 }), null);
+  assert.equal(formatBowlingStrikeRate(6), "6.00");
+  assert.equal(formatBowlingStrikeRate(null), "-");
+});
+
+test("Player performance trends derive official score, average, tracked rate, economy and bowling strike rate", () => {
+  const matchA = matchRecord({
+    id: "trend-a",
+    events: [
+      ...eventsFor({
+        batterId: "aninda",
+        bowlerId: "arunabha",
+        count: 5,
+        runsPerBall: 2
+      }),
+      ...Array.from({ length: 6 }, (_, index) =>
+        event(6 + index, {
+          battingTeamId: "teamB",
+          strikerId: "arunabha",
+          nonStrikerId: "biplab",
+          bowlerId: "aninda",
+          wicket:
+            index === 5
+              ? {
+                  type: "bowled",
+                  dismissedPlayerId: "arunabha",
+                  fielderId: null,
+                  newBatterId: "biplab",
+                  completedRuns: 0
+                }
+              : null
+        })
+      )
+    ],
+    performances: [
+      performance({ playerId: "aninda", runs: 10, wasOut: true }),
+      performance({ playerId: "arunabha", teamId: "teamB", didBat: true, runs: 0, wasOut: true })
+    ]
+  });
+  const matchB = matchRecord({
+    id: "trend-b",
+    events: [
+      ...eventsFor({
+        batterId: "aninda",
+        bowlerId: "arunabha",
+        count: 4,
+        runsPerBall: 3
+      }),
+      ...Array.from({ length: 6 }, (_, index) =>
+        event(20 + index, {
+          battingTeamId: "teamB",
+          strikerId: "arunabha",
+          nonStrikerId: "biplab",
+          bowlerId: "aninda"
+        })
+      )
+    ],
+    performances: [
+      performance({ playerId: "aninda", runs: 12, wasOut: false }),
+      performance({ playerId: "arunabha", teamId: "teamB", didBat: true, runs: 0 })
+    ]
+  });
+  const runOutOnly = matchRecord({
+    id: "trend-run-out",
+    events: [
+      event(1, {
+        battingTeamId: "teamB",
+        strikerId: "arunabha",
+        nonStrikerId: "biplab",
+        bowlerId: "aninda",
+        wicket: {
+          type: "run_out",
+          dismissedPlayerId: "biplab",
+          fielderId: "aninda",
+          newBatterId: "atripan",
+          completedRuns: 1
+        }
+      })
+    ],
+    performances: [
+      performance({ playerId: "aninda", didBat: false }),
+      performance({ playerId: "arunabha", teamId: "teamB", didBat: true, runs: 1 })
+    ]
+  });
+  matchA.matchNumber = 1;
+  matchB.matchNumber = 2;
+  runOutOnly.matchNumber = 3;
+
+  const trends = buildPlayerPerformanceTrends({
+    matches: [matchB, runOutOnly, matchA],
+    playerId: "aninda"
+  });
+
+  assert.deepEqual(
+    trends.series.score.points.map((point) => point.displayValue),
+    ["10", "12*"]
+  );
+  assert.deepEqual(
+    trends.series.score.points.map((point) => point.label),
+    ["G1", "G2"]
+  );
+  assert.equal(trends.series.score.axisLabel, "Runs");
+  assert.equal(trends.series.battingAverage.axisLabel, "Batting Average");
+  assert.equal(trends.series.battingStrikeRate.axisLabel, "Strike Rate");
+  assert.equal(trends.series.economy.axisLabel, "Economy");
+  assert.equal(trends.series.bowlingStrikeRate.axisLabel, "Bowling Strike Rate");
+  assert.equal(trends.series.score.points[0].gameLabel, "G1");
+  assert.equal(trends.series.score.points[0].shortDateLabel, "16 Aug");
+  assert.equal(trends.series.score.points[0].fullDateLabel, "16 Aug 2026");
+  assert.equal(
+    trends.series.score.points[0].detailRows.some((row) => row.label === "Balls"),
+    true
+  );
+  assert.equal(trends.battingAverageDisplay, "22.00");
+  assert.deepEqual(
+    trends.series.battingStrikeRate.points.map((point) => point.displayValue),
+    ["200.0", "244.4"]
+  );
+  assert.equal(
+    trends.series.battingStrikeRate.points.at(-1)?.detailRows.find(
+      (row) => row.label === "Innings SR"
+    )?.value,
+    "300.0"
+  );
+  assert.equal(
+    trends.series.battingStrikeRate.points.at(-1)?.detailRows.find(
+      (row) => row.label === "Tracked career SR after match"
+    )?.value,
+    "244.4"
+  );
+  assert.equal(trends.series.economy.points.at(-1)?.displayValue, "0.00");
+  assert.equal(trends.trackedBowlingStrikeRateDisplay, "13.00");
+  assert.equal(
+    trends.series.bowlingStrikeRate.points.at(-1)?.detail,
+    "Tracked career bowling SR after match: 13.00"
+  );
+});
+
+test("Player performance trends use official game labels without ordinary suffixes", () => {
+  const first = matchRecord({
+    id: "same-number-first",
+    performances: [
+      performance({ playerId: "aninda", runs: 8, wasOut: true }),
+      performance({ playerId: "arunabha", teamId: "teamB", didBat: false })
+    ]
+  });
+  const second = matchRecord({
+    id: "same-number-second",
+    performances: [
+      performance({ playerId: "aninda", runs: 18, wasOut: true }),
+      performance({ playerId: "arunabha", teamId: "teamB", didBat: false })
+    ]
+  });
+
+  first.matchDate = "2026-08-17";
+  first.matchNumber = 3;
+  second.matchDate = "2026-08-24";
+  second.matchNumber = 3;
+
+  const trends = buildPlayerPerformanceTrends({
+    matches: [second, first],
+    playerId: "aninda"
+  });
+
+  assert.deepEqual(
+    trends.series.score.points.map((point) => point.label),
+    ["G3", "G3"]
+  );
+  assert.deepEqual(
+    trends.series.score.points.map((point) => point.shortDateLabel),
+    ["17 Aug", "24 Aug"]
+  );
+  assert.equal(
+    trends.series.score.points.some((point) => /-[A-Z]$/.test(point.label)),
+    false
+  );
+});
+
+test("Player performance trends exclude demos, legacy tracked gaps and keep last ten points", () => {
+  const matches = Array.from({ length: 12 }, (_, index) => {
+    const match = matchRecord({
+      id: `trend-many-${index + 1}`,
+      events: eventsFor({
+        batterId: "aninda",
+        bowlerId: "arunabha",
+        count: 1,
+        runsPerBall: index + 1
+      }),
+      performances: [
+        performance({
+          playerId: "aninda",
+          runs: index + 1,
+          wasOut: index % 2 === 0
+        }),
+        performance({ playerId: "arunabha", teamId: "teamB", didBat: false })
+      ]
+    });
+
+    match.matchNumber = index + 1;
+
+    return match;
+  });
+  const demo = matchRecord({
+    id: "trend-demo",
+    events: eventsFor({
+      batterId: "aninda",
+      bowlerId: "arunabha",
+      count: 1,
+      runsPerBall: 99
+    }),
+    performances: [performance({ playerId: "aninda", runs: 99 })]
+  });
+  const legacy = matchRecord({
+    id: "trend-legacy",
+    events: [],
+    performances: [performance({ playerId: "aninda", runs: 40 })]
+  });
+  demo.isDemo = true;
+  legacy.quickScoring = undefined;
+
+  const trends = buildPlayerPerformanceTrends({
+    matches: [...matches, demo, legacy],
+    playerId: "aninda"
+  });
+
+  assert.equal(trends.series.score.points.length, 10);
+  assert.equal(trends.series.score.points[0].label, "G3");
+  assert.equal(trends.series.score.points.at(-1)?.label, "G12");
+  assert.equal(
+    trends.series.battingStrikeRate.points.some((point) => point.displayValue === "9900.0"),
+    false
+  );
+  assert.equal(
+    trends.series.battingStrikeRate.points.some((point) => point.displayValue === "4000.0"),
+    false
+  );
+});
+
+test("Player performance trends preserve shared-player innings separately", () => {
+  const sharedMatch = matchRecord({
+    id: "shared-trend",
+    events: [],
+    performances: [
+      performance({ playerId: "aninda", teamId: "teamA", runs: 8, wasOut: true }),
+      performance({ playerId: "aninda", teamId: "teamB", runs: 6, wasOut: true })
+    ]
+  });
+  sharedMatch.matchNumber = 12;
+
+  const trends = buildPlayerPerformanceTrends({
+    matches: [sharedMatch],
+    playerId: "aninda"
+  });
+
+  assert.deepEqual(
+    trends.series.score.points.map((point) => point.label),
+    ["G12-A", "G12-B"]
+  );
+  assert.deepEqual(
+    trends.series.score.points.map((point) => point.gameLabel),
+    ["G12", "G12"]
+  );
+  assert.deepEqual(
+    trends.series.score.points.map((point) => point.inningsLabel),
+    ["First batting innings", "Second batting innings"]
+  );
+  assert.deepEqual(
+    trends.series.score.points.map((point) => point.displayValue),
+    ["8", "6"]
+  );
+});
+
+test("Player performance trends keep DNB separate from a genuine duck", () => {
+  const dnb = matchRecord({
+    id: "trend-dnb",
+    performances: [
+      performance({ playerId: "aninda", didBat: false, runs: 0 }),
+      performance({ playerId: "arunabha", teamId: "teamB", didBat: false })
+    ]
+  });
+  const duck = matchRecord({
+    id: "trend-duck",
+    performances: [
+      performance({ playerId: "aninda", didBat: true, runs: 0, wasOut: true }),
+      performance({ playerId: "arunabha", teamId: "teamB", didBat: false })
+    ]
+  });
+
+  dnb.matchNumber = 4;
+  duck.matchNumber = 5;
+
+  const trends = buildPlayerPerformanceTrends({
+    matches: [duck, dnb],
+    playerId: "aninda"
+  });
+
+  assert.deepEqual(
+    trends.series.score.points.map((point) => point.label),
+    ["G5"]
+  );
+  assert.equal(trends.series.score.points[0].value, 0);
+  assert.equal(trends.series.score.points[0].displayValue, "0");
+  assert.equal(trends.series.score.points[0].detail, "Out");
+});
+
+test("Player performance Bat SR is cumulative tracked career progression", () => {
+  const matches = Array.from({ length: 12 }, (_, index) => {
+    const runs = index < 2 ? 6 : 0;
+    const match = matchRecord({
+      id: `cumulative-bat-sr-${index + 1}`,
+      events: eventsFor({
+        batterId: "aninda",
+        bowlerId: "arunabha",
+        count: 1,
+        runsPerBall: runs
+      }),
+      performances: [
+        performance({ playerId: "aninda", runs, wasOut: index >= 2 }),
+        performance({ playerId: "arunabha", teamId: "teamB", didBat: false })
+      ]
+    });
+
+    match.matchDate = `2026-08-${String(index + 1).padStart(2, "0")}`;
+    match.matchNumber = index + 1;
+
+    return match;
+  });
+  const dnb = matchRecord({
+    id: "cumulative-bat-sr-dnb",
+    performances: [
+      performance({ playerId: "aninda", didBat: false, runs: 0 }),
+      performance({ playerId: "arunabha", teamId: "teamB", didBat: false })
+    ]
+  });
+  dnb.matchDate = "2026-08-13";
+  dnb.matchNumber = 13;
+
+  const trends = buildPlayerPerformanceTrends({
+    matches: [...matches, dnb],
+    playerId: "aninda"
+  });
+  const strikeRatePoints = trends.series.battingStrikeRate.points;
+
+  assert.equal(strikeRatePoints.length, 10);
+  assert.equal(strikeRatePoints[0].label, "G3");
+  assert.equal(strikeRatePoints[0].displayValue, "400.0");
+  assert.equal(strikeRatePoints[0].detailRows.find((row) => row.label === "Innings SR")?.value, "0.0");
+  assert.equal(
+    strikeRatePoints[0].detailRows.find((row) => row.label === "Tracked career SR after match")?.value,
+    "400.0"
+  );
+  assert.equal(strikeRatePoints.at(-1)?.label, "G12");
+  assert.equal(strikeRatePoints.at(-1)?.displayValue, "100.0");
+  assert.equal(strikeRatePoints.some((point) => point.label === "G13"), false);
+  assert.equal(
+    strikeRatePoints.some((point) =>
+      [point.value, Number(point.displayValue)].some((value) => Number.isNaN(value) || !Number.isFinite(value))
+    ),
+    false
+  );
+});
+
+test("Player performance batting average progression is cumulative with not-outs", () => {
+  const notOut = matchRecord({
+    id: "cumulative-average-not-out",
+    performances: [
+      performance({ playerId: "aninda", runs: 20, wasOut: false }),
+      performance({ playerId: "arunabha", teamId: "teamB", didBat: false })
+    ]
+  });
+  const dismissed = matchRecord({
+    id: "cumulative-average-out",
+    performances: [
+      performance({ playerId: "aninda", runs: 10, wasOut: true }),
+      performance({ playerId: "arunabha", teamId: "teamB", didBat: false })
+    ]
+  });
+  notOut.matchDate = "2026-08-01";
+  notOut.matchNumber = 1;
+  dismissed.matchDate = "2026-08-02";
+  dismissed.matchNumber = 2;
+
+  const trends = buildPlayerPerformanceTrends({
+    matches: [dismissed, notOut],
+    playerId: "aninda"
+  });
+
+  assert.deepEqual(
+    trends.series.battingAverage.points.map((point) => point.label),
+    ["G2"]
+  );
+  assert.equal(trends.series.battingAverage.points[0].displayValue, "30.00");
+  assert.equal(
+    trends.series.battingAverage.points[0].detailRows.find(
+      (row) => row.label === "Career average after innings"
+    )?.value,
+    "30.00"
+  );
+});
+
+test("Player performance economy is cumulative tracked career progression", () => {
+  const matches = Array.from({ length: 12 }, (_, index) => {
+    const runsPerBall = index < 2 ? 1 : index === 2 ? 5 : 0;
+    const match = matchRecord({
+      id: `cumulative-economy-${index + 1}`,
+      events: eventsFor({
+        batterId: "arunabha",
+        bowlerId: "aninda",
+        count: 6,
+        runsPerBall
+      }),
+      performances: [
+        performance({ playerId: "aninda", didBat: false }),
+        performance({ playerId: "arunabha", teamId: "teamB", didBat: true, runs: runsPerBall * 6 })
+      ]
+    });
+
+    match.matchDate = `2026-08-${String(index + 1).padStart(2, "0")}`;
+    match.matchNumber = index + 1;
+
+    return match;
+  });
+  const didNotBowl = matchRecord({
+    id: "cumulative-economy-dnbowl",
+    events: [],
+    performances: [
+      performance({ playerId: "aninda", didBat: false }),
+      performance({ playerId: "arunabha", teamId: "teamB", didBat: false })
+    ]
+  });
+  didNotBowl.matchDate = "2026-08-13";
+  didNotBowl.matchNumber = 13;
+
+  const trends = buildPlayerPerformanceTrends({
+    matches: [...matches, didNotBowl],
+    playerId: "aninda"
+  });
+  const economyPoints = trends.series.economy.points;
+
+  assert.equal(economyPoints.length, 10);
+  assert.equal(economyPoints[0].label, "G3");
+  assert.equal(economyPoints[0].displayValue, "14.00");
+  assert.equal(economyPoints[0].detailRows.find((row) => row.label === "Match economy")?.value, "30.00");
+  assert.equal(
+    economyPoints[0].detailRows.find((row) => row.label === "Tracked career economy after match")?.value,
+    "14.00"
+  );
+  assert.equal(economyPoints.at(-1)?.label, "G12");
+  assert.equal(economyPoints.some((point) => point.label === "G13"), false);
+  assert.equal(economyPoints[0].detailRows.some((row) => row.label === "Context"), false);
+});
+
+test("Player performance bowling SR is cumulative and excludes run-outs", () => {
+  const runOutOnly = matchRecord({
+    id: "cumulative-bowl-sr-run-out",
+    events: eventsFor({
+      batterId: "arunabha",
+      bowlerId: "aninda",
+      count: 6,
+      runsPerBall: 0
+    }).map((item, index) =>
+      index === 5
+        ? {
+            ...item,
+            wicket: {
+              type: "run_out" as const,
+              dismissedPlayerId: "arunabha",
+              fielderId: "aninda",
+              newBatterId: "biplab",
+              completedRuns: 0
+            }
+          }
+        : item
+    ),
+    performances: [
+      performance({ playerId: "aninda", didBat: false }),
+      performance({ playerId: "arunabha", teamId: "teamB", didBat: true, runs: 0, wasOut: true })
+    ]
+  });
+  const bowledWicket = matchRecord({
+    id: "cumulative-bowl-sr-wicket",
+    events: eventsFor({
+      batterId: "arunabha",
+      bowlerId: "aninda",
+      count: 6,
+      runsPerBall: 1
+    }).map((item, index) =>
+      index === 5
+        ? {
+            ...item,
+            wicket: {
+              type: "bowled" as const,
+              dismissedPlayerId: "arunabha",
+              fielderId: null,
+              newBatterId: "biplab",
+              completedRuns: 0
+            }
+          }
+        : item
+    ),
+    performances: [
+      performance({ playerId: "aninda", didBat: false }),
+      performance({ playerId: "arunabha", teamId: "teamB", didBat: true, runs: 6, wasOut: true })
+    ]
+  });
+  runOutOnly.matchDate = "2026-08-01";
+  runOutOnly.matchNumber = 1;
+  bowledWicket.matchDate = "2026-08-02";
+  bowledWicket.matchNumber = 2;
+
+  const trends = buildPlayerPerformanceTrends({
+    matches: [bowledWicket, runOutOnly],
+    playerId: "aninda"
+  });
+  const bowlingStrikeRatePoints = trends.series.bowlingStrikeRate.points;
+
+  assert.equal(trends.series.bowlingStrikeRate.points.length, 1);
+  assert.equal(bowlingStrikeRatePoints[0].label, "G2");
+  assert.equal(bowlingStrikeRatePoints[0].displayValue, "12.00");
+  assert.equal(
+    bowlingStrikeRatePoints[0].detailRows.find(
+      (row) => row.label === "Tracked career bowling SR after match"
+    )?.value,
+    "12.00"
+  );
+  assert.equal(
+    bowlingStrikeRatePoints[0].detailRows.some((row) => row.label === "Context"),
+    false
+  );
+});
+
+test("Player performance tracked Shared Player innings accumulate sequentially", () => {
+  const sharedMatch = matchRecord({
+    id: "cumulative-shared-tracked",
+    events: [],
+    performances: [
+      performance({ playerId: "aninda", teamId: "teamA", runs: 6, wasOut: true }),
+      performance({ playerId: "aninda", teamId: "teamB", runs: 0, wasOut: true })
+    ]
+  });
+  sharedMatch.matchNumber = 24;
+  sharedMatch.quickScoring = {
+    ...quickScoringMetadata([]),
+    inningsAEvents: [
+      event(1, {
+        battingTeamId: "teamA",
+        strikerId: "aninda",
+        bowlerId: "arunabha",
+        batterRuns: 6
+      })
+    ],
+    inningsBEvents: [
+      event(2, {
+        battingTeamId: "teamB",
+        strikerId: "aninda",
+        bowlerId: "arunabha",
+        batterRuns: 0
+      }),
+      event(3, {
+        battingTeamId: "teamB",
+        strikerId: "aninda",
+        bowlerId: "arunabha",
+        batterRuns: 0
+      })
+    ]
+  };
+
+  const trends = buildPlayerPerformanceTrends({
+    matches: [sharedMatch],
+    playerId: "aninda"
+  });
+
+  assert.deepEqual(
+    trends.series.battingStrikeRate.points.map((point) => point.label),
+    ["G24-A", "G24-B"]
+  );
+  assert.deepEqual(
+    trends.series.battingStrikeRate.points.map((point) => point.displayValue),
+    ["600.0", "200.0"]
+  );
+  assert.equal(
+    trends.series.battingStrikeRate.points[1].detailRows.find(
+      (row) => row.label === "Innings SR"
+    )?.value,
+    "0.0"
+  );
 });
 
 test("Career advanced stats use weighted event totals rather than average economies", () => {
@@ -696,6 +1291,10 @@ test("Profile and Formula Room surfaces reference the shared advanced-stat engin
   assert.match(profile, /Career Bowling Totals/);
   assert.match(profile, /Tracked Bowling Matches/);
   assert.match(profile, /Tracked Economy/);
+  assert.match(profile, /Batting Average/);
+  assert.match(profile, /Tracked Bowling Strike Rate/);
+  assert.match(profile, /Performance Trend/);
+  assert.match(profile, /role="tablist"/);
   assert.match(profile, /Ball-by-ball coverage/);
   assert.match(formulaRoom, /ADVANCED_CRICKET_STAT_RULES/);
   assert.match(formulaRoom, /calculateBattingStrikeRate/);
