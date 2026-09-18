@@ -29,6 +29,7 @@ const privateBalanceRatings: Record<string, Omit<BalanceCandidate, "playerId">> 
   madhab: { batting: 3, bowling: 4, fielding: 3 },
   naim: { batting: 5, bowling: 4, fielding: 4 },
   pritvi: { batting: 3, bowling: 3, fielding: 3 },
+  dileep: { batting: 3, bowling: 4, fielding: 4 },
   rohit: { batting: 4, bowling: 5, fielding: 4 },
   saurav: { batting: 3, bowling: 3, fielding: 4 },
   soman: { batting: 4, bowling: 3, fielding: 4 },

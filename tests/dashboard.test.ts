@@ -671,7 +671,7 @@ test("Dashboard summary counts finalised matches and active roster players", () 
 
   assert.equal(summary.totalFinalisedMatches, 2);
   assert.equal(summary.activePlayerCount, activePlayers.length);
-  assert.equal(summary.activePlayerCount, 21);
+  assert.equal(summary.activePlayerCount, 22);
   assert.deepEqual(
     summary.recentFinalisedMatches.map((match) => match.id),
     ["newer"]
@@ -2728,7 +2728,7 @@ test("Dashboard roster summaries grow when four active players are added", () =>
 test("canonical active roster contains the five new approved players", () => {
   const playerData = readFileSync("lib/data/players.ts", "utf8");
 
-  assert.equal(activePlayers.length, 21);
+  assert.equal(activePlayers.length, 22);
   assert.equal(new Set(activePlayers.map((player) => player.id)).size, activePlayers.length);
   for (const playerId of newPlayerIds) {
     const player = activePlayers.find((candidate) => candidate.id === playerId);
@@ -2789,6 +2789,7 @@ test("canonical roster includes explicit neutral Play Style tags", () => {
     ["chaitanya", ["batting", "utility"]],
     ["amrit", ["spin", "utility"]],
     ["pritvi", ["batting", "pace", "utility"]],
+    ["dileep", ["pace", "utility"]],
     ["suprateem", ["batting", "utility"]]
   ]);
 
@@ -2865,7 +2866,7 @@ test("Player browser combines style search and sort without mutating roster orde
 
   assert.deepEqual(
     visiblePlayers.map((player) => player.id),
-    ["dipanjan", "pritvi"]
+    ["dileep", "dipanjan", "pritvi"]
   );
   assert.deepEqual(
     getVisiblePlayers({
@@ -2950,6 +2951,10 @@ test("Player browser formats dynamic warrior counts and empty state controls", (
   assert.equal(
     formatVisibleWarriorCount({ count: 21, style: "all", search: "" }),
     "21 WARRIORS"
+  );
+  assert.equal(
+    formatVisibleWarriorCount({ count: 22, style: "all", search: "" }),
+    "22 WARRIORS"
   );
   assert.equal(
     formatVisibleWarriorCount({ count: 1, style: "spin", search: "" }),
@@ -3043,6 +3048,49 @@ test("Soman keeps his player identity and approved Apex Crusher card artwork", (
   });
 });
 
+test("Dileep joins as a permanent zero-history Seam Maestro", () => {
+  const player = getPlayerById("dileep");
+  const playerData = readFileSync("lib/data/players.ts", "utf8");
+  const migration = readFileSync(
+    "supabase/migrations/20260918120000_add_dileep_player.sql",
+    "utf8"
+  );
+
+  assert.ok(player);
+  assert.equal(player.id, "dileep");
+  assert.equal(player.slug, "dileep");
+  assert.equal(player.name, "Dileep");
+  assert.equal(player.cardTitle, "SEAM MAESTRO");
+  assert.equal(player.role, "SEAM ALL-ROUNDER");
+  assert.equal(player.cardImage, "/player-cards/seam-maestro.png");
+  assert.equal(player.avatar, "/player-cards/seam-maestro.png");
+  assert.equal(player.specialMoveName, "QUIET PRESSURE");
+  assert.equal(
+    player.specialMoveDescription,
+    "Keeps coming at the batter with calm, disciplined bowling until a mistake appears."
+  );
+  assert.equal(player.level, 0);
+  assert.equal(player.xp, 0);
+  assert.deepEqual(player.ratings, { batting: 0, bowling: 0, fielding: 0 });
+  assert.deepEqual(player.stats, {
+    matches: 0,
+    runs: 0,
+    wickets: 0,
+    catches: 0,
+    runOuts: 0,
+    hatTricks: 0
+  });
+  assert.equal(existsSync(path.join(process.cwd(), "public", "player-cards", "seam-maestro.png")), true);
+  assert.doesNotMatch(playerData + migration, /\/images\/player-cards\//);
+  assert.doesNotMatch(
+    migration,
+    /public\.(?:match_stat_applications|monthly_beast_crowns|matches)\b/i
+  );
+  assert.match(migration, /insert into public\.players/);
+  assert.match(migration, /insert into public\.player_career_stats \(player_id\)/);
+  assert.match(migration, /on conflict \(id\) do update/);
+});
+
 test("the original sixteen player identities and approved card assets are canonical", () => {
   assert.deepEqual(
     activePlayers.slice(0, 16).map((player) => [
@@ -3112,7 +3160,7 @@ test("approved player avatar title changes preserve stable roster identities", (
     });
   }
 
-  assert.equal(activePlayers.length, 21);
+  assert.equal(activePlayers.length, 22);
   assert.equal(new Set(activePlayers.map((player) => player.id)).size, activePlayers.length);
   assert.equal(getPlayerById("gaurav")?.cardTitle, "Slow Poison");
   assert.notEqual(getPlayerById("gaurav")?.cardTitle, "Spin Wizard");

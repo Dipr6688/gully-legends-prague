@@ -1227,6 +1227,16 @@ test("/face-off page exists and loads public read-only data", () => {
   assert.match(pageSource, /dynamic = "force-dynamic"/);
 });
 
+test("Gully Face-Off player selectors include Dileep from the active roster", () => {
+  const player = activePlayers.find((candidate) => candidate.id === "dileep");
+  const componentSource = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+
+  assert.ok(player);
+  assert.equal(player.name, "Dileep");
+  assert.match(componentSource, /players\.map\(\(player\) =>/);
+  assert.match(componentSource, /<option key=\{player\.id\} value=\{player\.id\}>/);
+});
+
 test("Gully Face-Off is added to shared navigation without renaming route state", () => {
   const navigationSource = readFileSync("lib/data/navigation.ts", "utf8");
 

@@ -514,9 +514,9 @@ test("local demo import preview rebuilds clean IDs totals demo flags and local s
   const plan = buildLocalDemoImportPlan(storage.reader);
 
   assert.deepEqual(plan.errors, []);
-  assert.equal(plan.preview.players, 21);
+  assert.equal(plan.preview.players, activePlayers.length);
   assert.equal(plan.preview.demoMatches, 6);
-  assert.equal(plan.preview.careerRecords, 21);
+  assert.equal(plan.preview.careerRecords, activePlayers.length);
   assert.equal(plan.preview.progressionRecords, 12);
   assert.equal(plan.preview.monthlyBeastCrowns, 1);
   assert.equal(plan.statuses.careerRecords, "REBUILT / VALID");
@@ -547,7 +547,7 @@ test("local demo import preview rebuilds clean IDs totals demo flags and local s
   assert.ok(
     plan.payload.monthlyBeastCrowns.every((crown) => crown.is_demo === true)
   );
-  assert.equal(new Set(plan.payload.players.map((row) => row.id)).size, 21);
+  assert.equal(new Set(plan.payload.players.map((row) => row.id)).size, activePlayers.length);
   assert.equal(new Set(plan.payload.matches.map((row) => row.id)).size, 6);
   assert.equal(
     new Set(
@@ -604,7 +604,7 @@ test("local demo importer rebuilds missing careers and ignores eight stale progr
 
   assert.deepEqual(plan.errors, []);
   assert.ok(plan.payload);
-  assert.equal(plan.preview.careerRecords, 21);
+  assert.equal(plan.preview.careerRecords, activePlayers.length);
   assert.equal(plan.preview.progressionRecords, 12);
   assert.deepEqual(
     plan.audit.missingCanonicalCareerPlayerIds.sort(),
@@ -811,7 +811,7 @@ test("Supabase player and MatchRecord diagnostics parse canonical read responses
   const playerValidation = validateSupabasePlayers(players);
   const matchValidation = validateSupabaseMatchPayload(row);
 
-  assert.equal(players.length, 21);
+  assert.equal(players.length, activePlayers.length);
   assert.deepEqual(playerValidation.issues, []);
   assert.equal(playerValidation.ok, true);
   assert.deepEqual(matchValidation.issues, []);

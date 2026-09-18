@@ -425,6 +425,31 @@ export const players: Player[] = [
     accentColor: "#b24cff"
   }),
   makePlayer({
+    id: "dileep",
+    slug: "dileep",
+    name: "Dileep",
+    cardTitle: "SEAM MAESTRO",
+    cardImage: "/player-cards/seam-maestro.png",
+    role: "SEAM ALL-ROUNDER",
+    playStyles: ["pace", "utility"],
+    battingProfile:
+      "Keeps the batting uncomplicated and looks to support the innings rather than force the game.",
+    bowlingProfile:
+      "A reliable seam bowler who attacks with control, consistency and wicket-taking intent.",
+    fieldingProfile:
+      "Alert and dependable in the field, with safe hands and a competitive attitude.",
+    heroSummary:
+      "A cheerful seam-bowling all-rounder who keeps things simple with the bat, stays dependable in the field, and does his best work with the ball.",
+    specialMoveName: "QUIET PRESSURE",
+    specialMoveDescription:
+      "Keeps coming at the batter with calm, disciplined bowling until a mistake appears.",
+    funTrait: "Simple batting support, disciplined seam bowling and dependable fielding.",
+    avatar: "/player-cards/seam-maestro.png",
+    tags: [...allRounderTags, "pace", "fielding"],
+    accent: "green",
+    accentColor: "#9cff24"
+  }),
+  makePlayer({
     id: "suprateem",
     slug: "suprateem",
     name: "Suprateem",
