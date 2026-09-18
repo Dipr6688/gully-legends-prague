@@ -468,6 +468,79 @@ export const players: Player[] = [
     tags: [...allRounderTags, "spin", "batting", "fielding"],
     accent: "green",
     accentColor: "#9cff24"
+  }),
+  makePlayer({
+    id: "player-slot-1",
+    slug: "player-slot-1",
+    name: "ACE",
+    cardTitle: "THE WILDCARD",
+    cardImage: "/player-cards/ace.png",
+    role: "UTILITY ALL-ROUNDER",
+    playStyles: ["utility"],
+    battingProfile:
+      "Keeps things adaptable at the crease, looking to play the role the innings requires.",
+    bowlingProfile:
+      "A flexible bowling option whose real strengths will emerge with match experience.",
+    fieldingProfile: "Ready to contribute wherever needed and stay involved in the game.",
+    heroSummary:
+      "A wildcard entrant with a clean slate, ready to contribute wherever the game needs him.",
+    specialMoveName: "PLAY THE MOMENT",
+    specialMoveDescription:
+      "Reads the situation and adapts to whatever role the match demands.",
+    funTrait: "Clean-slate versatility with a play-the-moment mindset.",
+    avatar: "/player-cards/ace.png",
+    tags: [...allRounderTags],
+    accent: "green",
+    accentColor: "#9cff24"
+  }),
+  makePlayer({
+    id: "player-slot-2",
+    slug: "player-slot-2",
+    name: "BLAZE",
+    cardTitle: "THE SPARK",
+    cardImage: "/player-cards/blaze.png",
+    role: "UTILITY ALL-ROUNDER",
+    playStyles: ["utility"],
+    battingProfile:
+      "Positive and uncomplicated, with the freedom to develop a natural batting identity.",
+    bowlingProfile:
+      "Starts with a clean slate and the opportunity to build a bowling style through match experience.",
+    fieldingProfile:
+      "Energetic around the field and ready to make an impact wherever required.",
+    heroSummary:
+      "A fresh spark in the squad, bringing energy and intent from the moment the game begins.",
+    specialMoveName: "IGNITE THE GAME",
+    specialMoveDescription:
+      "Looks for the moment when a burst of energy can change the tempo of the contest.",
+    funTrait: "Fresh energy, clean-slate intent and tempo-changing enthusiasm.",
+    avatar: "/player-cards/blaze.png",
+    tags: [...allRounderTags],
+    accent: "orange",
+    accentColor: "#ff7a18"
+  }),
+  makePlayer({
+    id: "player-slot-3",
+    slug: "player-slot-3",
+    name: "MAVERICK",
+    cardTitle: "THE CHALLENGER",
+    cardImage: "/player-cards/maverick.png",
+    role: "UTILITY ALL-ROUNDER",
+    playStyles: ["utility"],
+    battingProfile: "Plays with freedom while gradually building a clear role at the crease.",
+    bowlingProfile:
+      "A flexible option whose bowling identity will be shaped by real match performances.",
+    fieldingProfile:
+      "Competitive and involved, looking to influence the game from anywhere on the field.",
+    heroSummary:
+      "An unpredictable challenger with a clean slate and the freedom to build his own Gully Legends identity.",
+    specialMoveName: "BREAK THE PATTERN",
+    specialMoveDescription:
+      "Looks for an unexpected way to tilt the contest when the game becomes predictable.",
+    funTrait: "Unpredictable challenge energy with a clean-slate Gully identity.",
+    avatar: "/player-cards/maverick.png",
+    tags: [...allRounderTags],
+    accent: "violet",
+    accentColor: "#b24cff"
   })
 ];
 

@@ -122,6 +122,38 @@ const newPlayerImagePaths = [
   "/player-cards/precision-pacer.png",
   "/player-cards/style-striker.png"
 ];
+const reservedPlayerSlots = [
+  {
+    id: "player-slot-1",
+    name: "ACE",
+    cardTitle: "THE WILDCARD",
+    role: "UTILITY ALL-ROUNDER",
+    cardImage: "/player-cards/ace.png",
+    specialMoveName: "PLAY THE MOMENT",
+    specialMoveDescription:
+      "Reads the situation and adapts to whatever role the match demands."
+  },
+  {
+    id: "player-slot-2",
+    name: "BLAZE",
+    cardTitle: "THE SPARK",
+    role: "UTILITY ALL-ROUNDER",
+    cardImage: "/player-cards/blaze.png",
+    specialMoveName: "IGNITE THE GAME",
+    specialMoveDescription:
+      "Looks for the moment when a burst of energy can change the tempo of the contest."
+  },
+  {
+    id: "player-slot-3",
+    name: "MAVERICK",
+    cardTitle: "THE CHALLENGER",
+    role: "UTILITY ALL-ROUNDER",
+    cardImage: "/player-cards/maverick.png",
+    specialMoveName: "BREAK THE PATTERN",
+    specialMoveDescription:
+      "Looks for an unexpected way to tilt the contest when the game becomes predictable."
+  }
+] as const;
 
 function getPublicPngDimensions(publicPath: string) {
   const image = readFileSync(path.join(process.cwd(), "public", publicPath.replace(/^\//, "")));
@@ -671,7 +703,7 @@ test("Dashboard summary counts finalised matches and active roster players", () 
 
   assert.equal(summary.totalFinalisedMatches, 2);
   assert.equal(summary.activePlayerCount, activePlayers.length);
-  assert.equal(summary.activePlayerCount, 22);
+  assert.equal(summary.activePlayerCount, 25);
   assert.deepEqual(
     summary.recentFinalisedMatches.map((match) => match.id),
     ["newer"]
@@ -2725,10 +2757,10 @@ test("Dashboard roster summaries grow when four active players are added", () =>
   assert.equal(expandedRoster.at(-1)?.stats.matches, 0);
 });
 
-test("canonical active roster contains the five new approved players", () => {
+test("canonical active roster contains the approved newcomer players", () => {
   const playerData = readFileSync("lib/data/players.ts", "utf8");
 
-  assert.equal(activePlayers.length, 22);
+  assert.equal(activePlayers.length, 25);
   assert.equal(new Set(activePlayers.map((player) => player.id)).size, activePlayers.length);
   for (const playerId of newPlayerIds) {
     const player = activePlayers.find((candidate) => candidate.id === playerId);
@@ -2790,7 +2822,10 @@ test("canonical roster includes explicit neutral Play Style tags", () => {
     ["amrit", ["spin", "utility"]],
     ["pritvi", ["batting", "pace", "utility"]],
     ["dileep", ["pace", "utility"]],
-    ["suprateem", ["batting", "utility"]]
+    ["suprateem", ["batting", "utility"]],
+    ["player-slot-1", ["utility"]],
+    ["player-slot-2", ["utility"]],
+    ["player-slot-3", ["utility"]]
   ]);
 
   for (const [playerId, playStyles] of expectedStyles) {
@@ -3091,6 +3126,77 @@ test("Dileep joins as a permanent zero-history Seam Maestro", () => {
   assert.match(migration, /on conflict \(id\) do update/);
 });
 
+test("reserved player slots join as full zero-history Gully Legends players", () => {
+  const playerData = readFileSync("lib/data/players.ts", "utf8");
+  const migration = readFileSync(
+    "supabase/migrations/20260918123000_add_reserved_player_slots.sql",
+    "utf8"
+  );
+  const matchForm = matchFormSource();
+  const faceOffArena = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+
+  assert.equal(activePlayers.length, 25);
+  assert.equal(new Set(activePlayers.map((player) => player.id)).size, activePlayers.length);
+  assert.match(matchForm, /activePlayers\.map\(\(player\) =>/);
+  assert.match(faceOffArena, /\{players\.map\(\(player\) =>/);
+  assert.match(faceOffArena, /Bat vs Ball/);
+
+  for (const slot of reservedPlayerSlots) {
+    const player = getPlayerById(slot.id);
+
+    assert.ok(player);
+    assert.equal(player.id, slot.id);
+    assert.equal(player.slug, slot.id);
+    assert.equal(player.name, slot.name);
+    assert.equal(player.cardTitle, slot.cardTitle);
+    assert.equal(player.role, slot.role);
+    assert.equal(player.cardImage, slot.cardImage);
+    assert.equal(player.avatar, slot.cardImage);
+    assert.equal(player.specialMoveName, slot.specialMoveName);
+    assert.equal(player.specialMoveDescription, slot.specialMoveDescription);
+    assert.deepEqual(player.playStyles, ["utility"]);
+    assert.deepEqual(player.tags, ["all-rounder"]);
+    assert.equal(player.isActive, undefined);
+    assert.equal(player.level, 0);
+    assert.equal(player.xp, 0);
+    assert.deepEqual(player.ratings, { batting: 0, bowling: 0, fielding: 0 });
+    assert.deepEqual(player.stats, {
+      matches: 0,
+      runs: 0,
+      wickets: 0,
+      catches: 0,
+      runOuts: 0,
+      hatTricks: 0
+    });
+    assert.equal(getPlayerBySlug(slot.id)?.id, slot.id);
+    assert.equal(
+      activePlayers.filter((candidate) => candidate.id === slot.id).length,
+      1
+    );
+    assert.equal(existsSync(path.join(process.cwd(), "public", slot.cardImage.slice(1))), true);
+  }
+
+  assert.deepEqual(
+    reservedPlayerSlots.map((slot) => getPublicPngDimensions(slot.cardImage)),
+    [
+      { width: 1024, height: 1536 },
+      { width: 1024, height: 1536 },
+      { width: 1024, height: 1536 }
+    ]
+  );
+  assert.doesNotMatch(playerData + migration, /\/images\/player-cards\//);
+  assert.match(migration, /insert into public\.players/);
+  assert.match(migration, /insert into public\.player_career_stats \(player_id\)/);
+  assert.match(migration, /player-slot-1/);
+  assert.match(migration, /player-slot-2/);
+  assert.match(migration, /player-slot-3/);
+  assert.doesNotMatch(
+    migration,
+    /public\.(?:match_stat_applications|monthly_beast_crowns|matches|apk_match_imports)\b/i
+  );
+  assert.doesNotMatch(migration, /\b(?:delete|truncate|drop)\b/i);
+});
+
 test("the original sixteen player identities and approved card assets are canonical", () => {
   assert.deepEqual(
     activePlayers.slice(0, 16).map((player) => [
@@ -3160,7 +3266,7 @@ test("approved player avatar title changes preserve stable roster identities", (
     });
   }
 
-  assert.equal(activePlayers.length, 22);
+  assert.equal(activePlayers.length, 25);
   assert.equal(new Set(activePlayers.map((player) => player.id)).size, activePlayers.length);
   assert.equal(getPlayerById("gaurav")?.cardTitle, "Slow Poison");
   assert.notEqual(getPlayerById("gaurav")?.cardTitle, "Spin Wizard");

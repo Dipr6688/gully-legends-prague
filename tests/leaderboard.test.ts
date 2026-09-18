@@ -30,7 +30,17 @@ const leaderboardPageSource = () => readFileSync("app/leaderboard/page.tsx", "ut
 const matchFormSource = () =>
   readFileSync("components/matches/MockMatchEntryForm.tsx", "utf8");
 const leaderboardCssSource = () => readFileSync("app/globals.css", "utf8");
-const newPlayerIds = ["naim", "chaitanya", "amrit", "pritvi", "suprateem", "dileep"];
+const newPlayerIds = [
+  "naim",
+  "chaitanya",
+  "amrit",
+  "pritvi",
+  "suprateem",
+  "dileep",
+  "player-slot-1",
+  "player-slot-2",
+  "player-slot-3"
+];
 
 function withCareerStats(
   overrides: Record<

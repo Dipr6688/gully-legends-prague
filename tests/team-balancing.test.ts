@@ -25,7 +25,7 @@ test("server-only private balance ratings resolve by stable player ID", () => {
   const activePlayerIds = activePlayers.map((player) => player.id).sort();
 
   for (const playerId of activePlayerIds) {
-    assert.match(serverSource, new RegExp(`${playerId}: \\{ batting:`));
+    assert.match(serverSource, new RegExp(`["']?${playerId}["']?: \\{ batting:`));
   }
 
   assert.match(serverSource, /privateBalanceRatings/);
