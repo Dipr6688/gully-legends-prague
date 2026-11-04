@@ -4,6 +4,8 @@ import {
   isDemoTestMatchPayload
 } from "@/lib/demo-test-match";
 import type { MatchRecord } from "@/lib/types/match";
+import { getMatchVenueDefinition, getMatchVenueId } from "@/lib/venues";
+import type { VenueId } from "@/lib/venues";
 
 type SupabaseErrorLike = {
   message: string;
@@ -31,6 +33,7 @@ type MatchMutationRow = {
   match_sequence: number | null;
   name: string;
   venue: string;
+  venue_id: string;
   status: MatchRecord["status"];
   is_demo: boolean;
   payload: MatchRecord;
@@ -72,7 +75,13 @@ function toDatabaseRow({
   existing: SupabaseMatchWriteRow | null;
   forceDemo?: boolean;
 }): MatchMutationRow {
-  const payload = { ...match };
+  const venueId = getMatchVenueId(match);
+  const venue = getMatchVenueDefinition(match);
+  const payload = {
+    ...match,
+    venueId,
+    venue: venue.locationHeading
+  };
 
   delete payload.supabaseUpdatedAt;
   delete payload.isDemo;
@@ -87,7 +96,8 @@ function toDatabaseRow({
     start_time: match.startTime ?? null,
     match_sequence: match.matchNumber ?? null,
     name: match.matchName,
-    venue: match.venue,
+    venue: venue.locationHeading,
+    venue_id: venueId,
     status: match.status,
     is_demo: forceDemo || (existing?.is_demo ?? false),
     payload,
@@ -249,8 +259,10 @@ export class SupabaseAdminMatchWriteRepository {
     return toWriteResult(data);
   }
 
-  async createDemoTestMatch(): Promise<SupabaseMatchWriteResult> {
-    const match = buildDemoTestDraftMatch();
+  async createDemoTestMatch(
+    venueId: VenueId = "open-field"
+  ): Promise<SupabaseMatchWriteResult> {
+    const match = buildDemoTestDraftMatch(undefined, venueId);
     const row = toDatabaseRow({
       match,
       userId: this.userId,

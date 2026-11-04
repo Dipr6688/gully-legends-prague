@@ -8,6 +8,7 @@ import {
   SupabaseMatchWriteError
 } from "@/lib/supabase/match-write-repository";
 import type { MatchRecord } from "@/lib/types/match";
+import { isVenueId } from "@/lib/venues";
 import type { MatchValidationInput, MatchValidationStage } from "@/lib/match-records";
 
 type SaveMatchRequest = {
@@ -35,6 +36,7 @@ function isMatchRecord(value: unknown): value is MatchRecord {
     typeof value.matchDate === "string" &&
     typeof value.matchName === "string" &&
     typeof value.venue === "string" &&
+    (value.venueId === undefined || isVenueId(value.venueId)) &&
     typeof value.status === "string" &&
     isRecord(value.teams) &&
     isRecord(value.innings) &&

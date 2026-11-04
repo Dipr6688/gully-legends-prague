@@ -3336,14 +3336,17 @@ test("Dashboard Top Performer spotlight CSS is scoped and responsive", () => {
   assert.match(css, /@media \(max-width:\s*760px\)[\s\S]*?\.top-performer-grid\s*{[\s\S]*?grid-template-columns:\s*1fr/);
 });
 
-test("lower dashboard background reuses the existing arena image without dead 404 assets", () => {
+test("lower dashboard background uses the venue registry without dead 404 assets", () => {
   const dashboardPage = readFileSync("app/page.tsx", "utf8");
   const hero = heroSectionSource();
   const css = cssSource();
+  const venues = readFileSync("lib/venues.ts", "utf8");
 
-  assert.match(dashboardPage, /<section className="lower-dashboard-bg">/);
-  assert.match(hero, /src="\/backgrounds\/prague-gully-arena\.png"/);
-  assert.match(css, /\.lower-dashboard-bg\s*{[\s\S]*?url\("\/backgrounds\/prague-gully-arena\.png"\)/);
+  assert.match(dashboardPage, /className="lower-dashboard-bg"/);
+  assert.match(dashboardPage, /--dashboard-venue-background/);
+  assert.match(hero, /src=\{venue\.backgroundAsset\}/);
+  assert.match(venues, /backgroundAsset: "\/backgrounds\/prague-gully-arena\.png"/);
+  assert.match(css, /\.lower-dashboard-bg\s*{[\s\S]*?var\(--dashboard-venue-background/);
   assert.doesNotMatch(css, /prague-gully-bottom\.png/);
   assert.match(css, /\.lower-dashboard-bg\s*{[\s\S]*?background-position:[\s\S]*?50% 72%/);
   assert.match(css, /\.lower-dashboard-bg\s*{[\s\S]*?background-size:[\s\S]*?max\(1500px,\s*125vw\) auto/);
@@ -3718,7 +3721,7 @@ test("Weekend Weather homepage integration stays server-side compact and non-per
   const css = cssSource();
 
   assert.match(dashboardPage, /getWeekendWeatherViewModel/);
-  assert.match(dashboardPage, /<HeroSection players=\{players\} matches=\{matches\} weather=\{weekendWeather\}/);
+  assert.match(dashboardPage, /<HeroSection[\s\S]*?players=\{players\}[\s\S]*?matches=\{matches\}[\s\S]*?weather=\{weekendWeather\}[\s\S]*?currentVenueId=\{currentVenueId\}/);
   assert.match(hero, /<WeekendWeather weather=\{markedWeather\} \/>/);
   assert.doesNotMatch(hero, /<NextMatchTicket/);
   assert.match(hero, /applyWeekendMatchDayMarkers/);

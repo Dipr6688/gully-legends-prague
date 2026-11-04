@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { MatchStatus } from "@/lib/types/match";
+import type { VenueId } from "@/lib/venues";
 import { requireSupabasePublicEnv } from "@/lib/supabase/env";
 
 type SupabaseErrorLike = {
@@ -28,6 +29,7 @@ export type SupabaseMatchRow = {
   match_sequence: number | null;
   name: string;
   venue: string;
+  venue_id?: VenueId | null;
   status: MatchStatus;
   is_demo: boolean;
   payload: unknown;
@@ -156,6 +158,7 @@ export class SupabaseMatchRepository {
         "match_sequence",
         "name",
         "venue",
+        "venue_id",
         "status",
         "is_demo",
         "payload",

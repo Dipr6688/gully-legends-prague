@@ -20,6 +20,7 @@ import {
 import { SupabaseMatchStoryRepository } from "@/lib/supabase/match-story-repository";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { validateSupabaseMatchPayload } from "@/lib/admin/supabase-data-check";
+import { getVenueDefinition, resolveVenueId } from "@/lib/venues";
 
 export const PUBLIC_SUPABASE_REVALIDATE_SECONDS = 30;
 
@@ -184,8 +185,13 @@ export async function loadSupabaseReadData(
       throw new Error("Supabase match payload validation failed.");
     }
 
+    const venueId = resolveVenueId(row.venue_id ?? result.match.venueId);
+    const venue = getVenueDefinition(venueId);
+
     return {
       ...result.match,
+      venueId,
+      venue: venue.locationHeading,
       isDemo: row.is_demo,
       isDemoTestMatch: row.is_demo && result.match.isDemoTestMatch === true,
       supabaseUpdatedAt: row.updated_at,

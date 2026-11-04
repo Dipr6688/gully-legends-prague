@@ -1,8 +1,10 @@
 import { MatchScorecard } from "@/components/matches/MatchScorecard";
 import { Card } from "@/components/ui/Card";
+import { VenuePageBackground } from "@/components/venues/VenuePageBackground";
 import { isCurrentUserAdmin } from "@/lib/admin/auth";
 import { isSupabaseDataSource } from "@/lib/data-source";
 import { loadPublicSupabaseReadData } from "@/lib/supabase/public-read-data";
+import { getMatchVenueId } from "@/lib/venues";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 30;
@@ -38,12 +40,14 @@ export default async function MatchScorecardPage({
   const match = data?.matches.find((candidate) => candidate.id === matchId) ?? null;
 
   return (
-    <MatchScorecard
-      matchId={matchId}
-      initialMatch={supabaseMode ? match : undefined}
-      players={data?.careerPlayers}
-      matches={data?.matches}
-      isAdmin={isAdmin}
-    />
+    <VenuePageBackground venueId={getMatchVenueId(match)}>
+      <MatchScorecard
+        matchId={matchId}
+        initialMatch={supabaseMode ? match : undefined}
+        players={data?.careerPlayers}
+        matches={data?.matches}
+        isAdmin={isAdmin}
+      />
+    </VenuePageBackground>
   );
 }

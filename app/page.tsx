@@ -9,6 +9,9 @@ import { isSupabaseDataSource } from "@/lib/data-source";
 import { loadPublicSupabaseReadData } from "@/lib/supabase/public-read-data";
 import { getWeekendWeatherViewModel } from "@/lib/weekend-weather-server";
 import Image from "next/image";
+import type { CSSProperties } from "react";
+import { DEFAULT_VENUE_ID, getVenueDefinition } from "@/lib/venues";
+import { loadPublicCurrentVenueId } from "@/lib/supabase/venue-settings-repository";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 30;
@@ -29,7 +32,12 @@ function PublicReadError() {
 
 export default async function DashboardPage() {
   const supabaseMode = isSupabaseDataSource();
-  const data = supabaseMode ? await loadPublicSupabaseReadData().catch(() => null) : null;
+  const [data, currentVenueId] = supabaseMode
+    ? await Promise.all([
+        loadPublicSupabaseReadData().catch(() => null),
+        loadPublicCurrentVenueId()
+      ])
+    : [null, DEFAULT_VENUE_ID];
 
   if (supabaseMode && !data) return <PublicReadError />;
 
@@ -37,11 +45,25 @@ export default async function DashboardPage() {
   const matches = data?.matches;
   const crownedAwards = data?.crownedAwards;
   const weekendWeather = await getWeekendWeatherViewModel();
+  const currentVenue = getVenueDefinition(currentVenueId);
 
   return (
     <>
-      <HeroSection players={players} matches={matches} weather={weekendWeather} />
-      <section className="lower-dashboard-bg">
+      <HeroSection
+        players={players}
+        matches={matches}
+        weather={weekendWeather}
+        currentVenueId={currentVenueId}
+      />
+      <section
+        className="lower-dashboard-bg"
+        data-venue-theme={currentVenue.theme}
+        style={
+          {
+            "--dashboard-venue-background": `url("${currentVenue.backgroundAsset}")`
+          } as CSSProperties
+        }
+      >
         <div className="relative mx-auto max-w-[1680px] px-4 py-7 lg:px-6">
           <div className="dashboard-layout">
             <aside className="dashboard-sidebar">

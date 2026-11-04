@@ -19,6 +19,7 @@ import {
 import { validateSupabaseMatchPayload } from "@/lib/admin/supabase-data-check";
 import { validateMatchOnServer } from "@/server/match-validation";
 import type { MatchRecord } from "@/lib/types/match";
+import { isVenueId } from "@/lib/venues";
 import type { MatchValidationInput } from "@/lib/match-records";
 import type { SupabaseMatchRow } from "@/lib/supabase/read-repositories";
 
@@ -38,6 +39,7 @@ function isMatchRecord(value: unknown): value is MatchRecord {
     typeof value.matchDate === "string" &&
     typeof value.matchName === "string" &&
     typeof value.venue === "string" &&
+    (value.venueId === undefined || isVenueId(value.venueId)) &&
     value.status === "finalised" &&
     isRecord(value.teams) &&
     isRecord(value.innings) &&

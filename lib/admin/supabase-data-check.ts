@@ -23,6 +23,7 @@ import type {
   TeamMatchData
 } from "../types/match";
 import type { Player, PlayerPlayStyle, PlayerTag } from "../types/player";
+import { isVenueId } from "../venues";
 import type {
   PublicReadCheckResult,
   SupabaseCareerStatsRow,
@@ -260,6 +261,7 @@ function isMatchRecordPayload(value: unknown): value is MatchRecord {
   if (typeof value.matchDate !== "string") return false;
   if (typeof value.matchName !== "string") return false;
   if (typeof value.venue !== "string") return false;
+  if (value.venueId !== undefined && !isVenueId(value.venueId)) return false;
   if (typeof value.status !== "string") return false;
   if (!isRecord(value.teams)) return false;
   if (!isRecord(value.teams.teamA) || !isRecord(value.teams.teamB)) return false;

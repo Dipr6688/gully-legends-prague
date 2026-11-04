@@ -6,6 +6,7 @@ import {
   SupabaseAdminMatchWriteRepository,
   SupabaseMatchWriteError
 } from "@/lib/supabase/match-write-repository";
+import { DEFAULT_VENUE_ID, isVenueId } from "@/lib/venues";
 
 function errorResponse(error: unknown) {
   if (error instanceof SupabaseMatchWriteError) {
@@ -66,13 +67,18 @@ async function getAdminRepository() {
   };
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const auth = await getAdminRepository();
 
   if ("response" in auth) return auth.response;
 
+  const body = (await request.json().catch(() => null)) as
+    | { venueId?: unknown }
+    | null;
+  const venueId = isVenueId(body?.venueId) ? body.venueId : DEFAULT_VENUE_ID;
+
   try {
-    const result = await auth.repository.createDemoTestMatch();
+    const result = await auth.repository.createDemoTestMatch(venueId);
 
     revalidatePath("/");
     revalidatePath("/matches");

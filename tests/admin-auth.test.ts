@@ -1118,7 +1118,8 @@ test("admin-only demo test match helper keeps normal match creation real", () =>
   assert.match(demoRoute, /ADMIN LOGIN REQUIRED/);
   assert.match(demoRoute, /ADMIN ACCESS REQUIRED/);
   assert.match(demoRoute, /isAdminWithClient/);
-  assert.match(demoRoute, /createDemoTestMatch\(\)/);
+  assert.match(demoRoute, /createDemoTestMatch\(venueId\)/);
+  assert.match(demoRoute, /isVenueId\(body\?\.venueId\)/);
   assert.match(demoHelper, /isDemo:\s*true/);
   assert.match(demoHelper, /isDemoTestMatch:\s*true/);
   assert.match(matchWriteRepository, /forceDemo = false/);

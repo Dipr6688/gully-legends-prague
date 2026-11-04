@@ -3102,6 +3102,61 @@ textarea {
   text-transform: uppercase;
 }
 
+.admin-venue-options {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-venue-option {
+  display: grid;
+  gap: 2px;
+  min-height: 74px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: rgba(4, 8, 14, 0.72);
+  color: #f5f5f4;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.admin-venue-option strong {
+  font-family: var(--font-ui), sans-serif;
+  font-size: 1rem;
+  text-transform: uppercase;
+}
+
+.admin-venue-option span,
+.admin-venue-option small {
+  color: #d6d3d1;
+  font-size: 0.75rem;
+}
+
+.admin-venue-option.is-selected {
+  border-color: rgba(156, 255, 36, 0.75);
+  background: rgba(80, 130, 20, 0.16);
+  box-shadow: 0 0 18px rgba(156, 255, 36, 0.12);
+}
+
+.admin-venue-save {
+  min-height: 44px;
+  padding: 10px 14px;
+  font-weight: 900;
+}
+
+.admin-venue-save:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.admin-venue-message {
+  margin: 0;
+  color: #9cff24;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 .admin-control-links {
   display: flex;
   flex-wrap: wrap;
@@ -5480,7 +5535,7 @@ textarea {
     radial-gradient(ellipse at 16% 8%, rgba(247, 199, 52, 0.15), transparent 28rem),
     radial-gradient(ellipse at 86% 14%, rgba(70, 223, 255, 0.12), transparent 26rem),
     linear-gradient(135deg, rgba(21, 38, 34, 0.72), rgba(5, 8, 13, 0.91)),
-    url("/backgrounds/prague-gully-arena.png");
+    var(--dashboard-venue-background, url("/backgrounds/prague-gully-arena.png"));
   background-position:
     center top,
     16% 8%,
@@ -5494,6 +5549,64 @@ textarea {
     auto,
     auto,
     max(1500px, 125vw) auto;
+}
+
+.lower-dashboard-bg[data-venue-theme="indoor"] {
+  background-position:
+    center top,
+    16% 8%,
+    86% 14%,
+    center,
+    50% 50%;
+}
+
+.dashboard-hero-venue-overlay {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.dashboard-hero-venue-overlay--indoor {
+  background:
+    linear-gradient(180deg, rgba(5, 8, 13, 0.18), rgba(5, 8, 13, 0.42)),
+    linear-gradient(90deg, rgba(5, 8, 13, 0.28), transparent 45%, rgba(5, 8, 13, 0.22));
+}
+
+.dashboard-hero-background--indoor {
+  object-fit: cover;
+  object-position: center center;
+}
+
+.venue-page-background {
+  position: relative;
+  min-height: calc(100vh - 72px);
+  isolation: isolate;
+}
+
+.venue-page-background::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-image: var(--venue-page-background);
+  background-position: center top;
+  background-repeat: no-repeat;
+  background-size: cover;
+  opacity: 0.2;
+}
+
+.venue-page-background::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(5, 8, 13, 0.82), rgba(5, 8, 13, 0.97));
+}
+
+.venue-page-background[data-venue-theme="indoor"]::before {
+  background-position: center center;
+  opacity: 0.24;
 }
 
 .lower-dashboard-bg > * {

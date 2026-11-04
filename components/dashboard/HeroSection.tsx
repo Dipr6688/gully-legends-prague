@@ -14,6 +14,7 @@ import {
 } from "@/lib/weekend-weather";
 import type { MatchRecord } from "@/lib/types/match";
 import type { Player } from "@/lib/types/player";
+import { getVenueDefinition, type VenueId } from "@/lib/venues";
 
 function HeroStat({
   label,
@@ -43,7 +44,15 @@ function HeroStat({
   );
 }
 
-function ActionStats({ summary }: { summary: DashboardSummary }) {
+function ActionStats({
+  summary,
+  currentVenueId
+}: {
+  summary: DashboardSummary;
+  currentVenueId: VenueId;
+}) {
+  const venue = getVenueDefinition(currentVenueId);
+
   return (
     <div className="flex flex-col items-start gap-2 lg:items-end">
       <Link
@@ -73,9 +82,9 @@ function ActionStats({ summary }: { summary: DashboardSummary }) {
           valueIsData={false}
           value={
             <span className="text-base leading-5">
-              ČZU Gully Arena
+              {venue.locationHeading}
               <span className="block text-xs font-bold text-stone-300">
-                Open Field, Prague
+                {venue.subtitle}
               </span>
             </span>
           }
@@ -89,11 +98,13 @@ function ActionStats({ summary }: { summary: DashboardSummary }) {
 function HeroControls({
   players,
   matches,
-  weather
+  weather,
+  currentVenueId
 }: {
   players?: Player[];
   matches?: MatchRecord[];
   weather: WeekendWeatherViewModel;
+  currentVenueId: VenueId;
 }) {
   const localDashboard = useDashboardSummary(activePlayers);
   const resolvedPlayers = players ?? activePlayers;
@@ -109,7 +120,7 @@ function HeroControls({
   return (
     <div className="hero-controls-grid grid gap-4 lg:items-end">
       <WeekendWeather weather={markedWeather} />
-      <ActionStats summary={summary} />
+      <ActionStats summary={summary} currentVenueId={currentVenueId} />
     </div>
   );
 }
@@ -117,12 +128,16 @@ function HeroControls({
 export function HeroSection({
   players,
   matches,
-  weather
+  weather,
+  currentVenueId
 }: {
   players?: Player[];
   matches?: MatchRecord[];
   weather: WeekendWeatherViewModel;
+  currentVenueId: VenueId;
 }) {
+  const venue = getVenueDefinition(currentVenueId);
+
   return (
     <section
       className="relative w-full border-b border-white/10 bg-pitch-950"
@@ -130,27 +145,42 @@ export function HeroSection({
     >
       <div className="relative overflow-hidden">
         <Image
-          src="/backgrounds/prague-gully-arena.png"
-          alt="ČZU Gully Arena in Prague"
-          width={1672}
-          height={941}
+          src={venue.backgroundAsset}
+          alt={`${venue.locationHeading}, ${venue.subtitle}`}
+          width={1920}
+          height={1080}
           priority
-          className="block h-auto w-full"
+          className={`dashboard-hero-background dashboard-hero-background--${venue.theme} block h-auto w-full`}
           style={{
             marginBottom: "calc(var(--hero-top-crop) * -1)",
             transform: "translateY(calc(var(--hero-top-crop) * -1))"
           }}
         />
 
-        <div className="absolute inset-0 hidden lg:block">
+        <div
+          className={`dashboard-hero-venue-overlay dashboard-hero-venue-overlay--${venue.theme}`}
+          aria-hidden="true"
+        />
+
+        <div className="absolute inset-0 z-10 hidden lg:block">
           <div className="absolute inset-x-0 bottom-[clamp(20px,4vw,64px)] mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-8">
-            <HeroControls players={players} matches={matches} weather={weather} />
+            <HeroControls
+              players={players}
+              matches={matches}
+              weather={weather}
+              currentVenueId={currentVenueId}
+            />
           </div>
         </div>
       </div>
 
       <div className="relative z-10 grid gap-4 bg-[#05080d] px-4 py-4 sm:px-6 lg:hidden">
-        <HeroControls players={players} matches={matches} weather={weather} />
+        <HeroControls
+          players={players}
+          matches={matches}
+          weather={weather}
+          currentVenueId={currentVenueId}
+        />
       </div>
     </section>
   );

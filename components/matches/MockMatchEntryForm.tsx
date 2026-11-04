@@ -128,6 +128,14 @@ import type {
   TeamId
 } from "@/lib/types/match";
 import type { Player } from "@/lib/types/player";
+import {
+  DEFAULT_VENUE_ID,
+  VENUE_IDS,
+  VENUES,
+  getMatchVenueId,
+  getVenueDefinition,
+  type VenueId
+} from "@/lib/venues";
 import type { PostMatchCelebrationSummary } from "@/lib/post-match-celebration";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -192,6 +200,7 @@ const initialValues: MockMatchFormValues = {
   matchNumber: "",
   startTime: "",
   matchName: "Gully Premier League",
+  venueId: DEFAULT_VENUE_ID,
   teamAName: FIXED_TEAM_A_NAME,
   teamBName: FIXED_TEAM_B_NAME,
   teamATotal: 0,
@@ -203,11 +212,15 @@ const initialValues: MockMatchFormValues = {
 
 const allPlayerIds = activePlayers.map((player) => player.id);
 
-function createInitialFormValues(matches: MatchRecord[] = []): MockMatchFormValues {
+function createInitialFormValues(
+  matches: MatchRecord[] = [],
+  currentVenueId: VenueId = DEFAULT_VENUE_ID
+): MockMatchFormValues {
   const matchDate = getPragueMatchDate();
 
   return {
     ...initialValues,
+    venueId: currentVenueId,
     matchDate,
     matchNumber: getNextAvailableMatchNumber(matches, matchDate),
     startTime: ""
@@ -276,6 +289,7 @@ function getFormValuesFromMatch(match: MatchRecord): MockMatchFormValues {
     matchNumber: match.matchNumber ?? "",
     startTime: match.startTime ?? "",
     matchName: match.matchName,
+    venueId: getMatchVenueId(match),
     teamAName: FIXED_TEAM_A_NAME,
     teamBName: FIXED_TEAM_B_NAME,
     teamATotal: match.teams.teamA.totalRuns,
@@ -470,11 +484,13 @@ function FieldingHelperControls({
 export function MockMatchEntryForm({
   initialMatch = null,
   matches: suppliedMatches,
-  isAdmin = true
+  isAdmin = true,
+  currentVenueId = DEFAULT_VENUE_ID
 }: {
   initialMatch?: MatchRecord | null;
   matches?: MatchRecord[];
   isAdmin?: boolean;
+  currentVenueId?: VenueId;
 } = {}) {
   const router = useRouter();
   const supabaseWriteMode = isSupabaseDataSource();
@@ -486,7 +502,9 @@ export function MockMatchEntryForm({
     () => initialMatch?.supabaseUpdatedAt ?? null
   );
   const [values, setValues] = useState<MockMatchFormValues>(() =>
-    initialMatch ? getFormValuesFromMatch(initialMatch) : createInitialFormValues(savedMatches)
+    initialMatch
+      ? getFormValuesFromMatch(initialMatch)
+      : createInitialFormValues(savedMatches, currentVenueId)
   );
   const [availablePlayerIds, setAvailablePlayerIds] = useState<string[]>(() =>
     initialMatch ? getAvailablePlayerIdsFromMatch(initialMatch) : []
@@ -612,6 +630,7 @@ export function MockMatchEntryForm({
     bowlingOvers.teamA.length === 0 &&
     bowlingOvers.teamB.length === 0 &&
     Object.keys(performances).length === 0;
+  const selectedVenue = getVenueDefinition(values.venueId);
   const matchPageTitle = isNewMatch
     ? "CREATE MATCH"
     : status === "draft"
@@ -2915,6 +2934,7 @@ export function MockMatchEntryForm({
       version: 2 as const,
       battingMode: persistedBattingMode
     };
+    const recordVenue = getVenueDefinition(recordValues.venueId);
     const allBowlingOvers = [
       ...recordBowlingOvers.teamA,
       ...recordBowlingOvers.teamB
@@ -2970,7 +2990,8 @@ export function MockMatchEntryForm({
       matchNumber: getMatchNumberValue(recordValues.matchNumber),
       startTime: recordValues.startTime || undefined,
       matchName: recordValues.matchName,
-      venue: "CZU Gully Arena",
+      venue: recordVenue.locationHeading,
+      venueId: recordVenue.id,
       status: finalStatus,
       scheduledOversPerInnings: getScheduledOversValue(
         recordValues.scheduledOversPerInnings
@@ -3068,7 +3089,9 @@ export function MockMatchEntryForm({
 
     try {
       const response = await fetch("/api/admin/matches/demo-test", {
-        method: "POST"
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ venueId: values.venueId })
       });
       const result = (await response.json().catch(() => null)) as
         | { ok?: boolean; matchId?: string; message?: string }
@@ -3574,7 +3597,7 @@ export function MockMatchEntryForm({
 
     setMatchId(createLocalMatchId());
     setSupabaseUpdatedAt(null);
-    setValues(createInitialFormValues(savedMatches));
+    setValues(createInitialFormValues(savedMatches, currentVenueId));
     setAvailablePlayerIds([]);
     setTeamA([]);
     setTeamB([]);
@@ -3604,7 +3627,7 @@ export function MockMatchEntryForm({
       <div className="flex flex-col justify-between gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-center">
         <div>
           <p className="text-xs font-black uppercase text-neon-cyan">
-            Fixed venue: CZU Gully Arena - Open Field, Prague
+            Venue: {selectedVenue.locationHeading} - {selectedVenue.subtitle}
           </p>
           <h1 className="mt-1 text-3xl font-black uppercase">{matchPageTitle}</h1>
         </div>
@@ -4165,7 +4188,7 @@ export function MockMatchEntryForm({
             </div>
             <div>
               <span>Venue</span>
-              <strong>CZU Gully Arena</strong>
+              <strong>{selectedVenue.locationHeading}</strong>
             </div>
           </div>
           <details className="match-more-options">
@@ -4235,7 +4258,29 @@ export function MockMatchEntryForm({
               ) : null}
             </div>
           </details>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
+          <label className="grid gap-2 text-sm font-bold text-stone-200">
+            Venue
+            <select
+              name="venueId"
+              value={values.venueId}
+              disabled={isRosterLocked}
+              required
+              onChange={(event) =>
+                setValues((current) => ({
+                  ...current,
+                  venueId: event.target.value as VenueId
+                }))
+              }
+              className={getInputClass()}
+            >
+              {VENUE_IDS.map((venueId) => (
+                <option key={venueId} value={venueId}>
+                  {VENUES[venueId].name.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="grid gap-2 text-sm font-bold text-stone-200">
             Overs
             <input

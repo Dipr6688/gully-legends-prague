@@ -29,6 +29,7 @@ import {
 } from "./roster-transitions";
 import { validateMatchInput } from "../match-validation-core";
 import { activePlayers } from "../data/players";
+import { getVenueDefinition, isVenueId, resolveVenueId } from "../venues";
 import {
   getPragueMatchDateFromTimestamp,
   isValidIsoCalendarDate
@@ -145,6 +146,7 @@ export function isAppSyncMatchPayload(value: unknown): value is AppSyncMatchPayl
       value.completedAt === null ||
       typeof value.completedAt === "string") &&
     typeof value.matchName === "string" &&
+    (value.venueId === undefined || isVenueId(value.venueId)) &&
     typeof value.scheduledOversPerInnings === "number" &&
     isBattingMode(value.battingMode) &&
     isTeamId(value.battingFirstTeamId) &&
@@ -376,6 +378,8 @@ export function assemblePendingImportMatch({
   appliedAt?: string;
 }): AppSyncAssemblyResult {
   const errors: string[] = [];
+  const venueId = resolveVenueId(payload.venueId);
+  const venue = getVenueDefinition(venueId);
   let derivedMatchDate: string | null =
     matchDate ?? payload.matchDate ?? null;
 
@@ -824,7 +828,8 @@ export function assemblePendingImportMatch({
     matchNumber,
     startTime: formatPragueStartTime(payload.startedAt),
     matchName: payload.matchName,
-    venue: payload.venue || "CZU Gully Arena",
+    venue: venue.locationHeading,
+    venueId,
     status: "finalised",
     scheduledOversPerInnings: payload.scheduledOversPerInnings,
     battingMode,

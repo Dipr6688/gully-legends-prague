@@ -22,6 +22,7 @@ export type AppSyncMatchPayload = {
   completedAt?: string | null;
   matchName: string;
   venue?: string;
+  venueId?: string;
   scheduledOversPerInnings: number;
   battingMode: BattingMode;
   battingFirstTeamId: TeamId;

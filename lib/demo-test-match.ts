@@ -4,6 +4,7 @@ import {
   calculateMatchResult
 } from "@/lib/match-records";
 import type { MatchRecord } from "@/lib/types/match";
+import { getVenueDefinition, type VenueId } from "@/lib/venues";
 
 const DEMO_TEST_MATCH_PREFIX = "demo-test-match";
 
@@ -24,7 +25,11 @@ export function isDemoTestMatchPayload(value: unknown): value is MatchRecord {
   );
 }
 
-export function buildDemoTestDraftMatch(matchId = createDemoTestMatchId()): MatchRecord {
+export function buildDemoTestDraftMatch(
+  matchId = createDemoTestMatchId(),
+  venueId: VenueId = "open-field"
+): MatchRecord {
+  const venue = getVenueDefinition(venueId);
   const teamAData = buildTeamMatchData({
     teamId: "teamA",
     teamName: "Team A",
@@ -59,7 +64,8 @@ export function buildDemoTestDraftMatch(matchId = createDemoTestMatchId()): Matc
     matchDate: todayIsoDate(),
     matchNumber: null,
     matchName: "Demo Test Match",
-    venue: "CZU Gully Arena",
+    venue: venue.locationHeading,
+    venueId,
     status: "draft",
     scheduledOversPerInnings: null,
     battingFirstTeamId: null,

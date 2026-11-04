@@ -1,3 +1,5 @@
+import type { VenueId } from "@/lib/venues";
+
 export type MatchStatus =
   | "draft"
   | "in_progress"
@@ -252,6 +254,7 @@ export type MatchRecord = {
   deletedAt?: string | null;
   matchName: string;
   venue: string;
+  venueId?: VenueId;
   status: MatchStatus;
   scheduledOversPerInnings: number | null;
   battingMode?: BattingMode | null;
@@ -282,6 +285,7 @@ export type MockMatchFormValues = {
   matchNumber: number | "";
   startTime: string;
   matchName: string;
+  venueId: VenueId;
   teamAName: string;
   teamBName: string;
   teamATotal: number;

@@ -2,10 +2,13 @@ import { Camera, Crown, DownloadCloud, LogOut, Swords, Trophy, Users } from "luc
 import { logoutAdmin } from "@/app/admin/actions";
 import { DemoDataResetControl } from "@/components/admin/DemoDataResetControl";
 import { MatchStoryBackfillControl } from "@/components/admin/MatchStoryBackfillControl";
+import { CurrentVenueControl } from "@/components/admin/CurrentVenueControl";
 import { LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { requireAdmin } from "@/lib/admin/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { SupabaseVenueSettingsRepository } from "@/lib/supabase/venue-settings-repository";
+import { DEFAULT_VENUE_ID } from "@/lib/venues";
 
 const controlSections = [
   {
@@ -50,10 +53,14 @@ const controlSections = [
 export default async function AdminPage() {
   await requireAdmin();
   const supabase = await createSupabaseServerClient();
-  const { count } = await supabase
-    .from("matches")
-    .select("id", { count: "exact", head: true })
-    .eq("is_demo", true);
+  const venueRepository = new SupabaseVenueSettingsRepository(supabase);
+  const [{ count }, currentVenueId] = await Promise.all([
+    supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .eq("is_demo", true),
+    venueRepository.getCurrentVenueId().catch(() => DEFAULT_VENUE_ID)
+  ]);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 lg:px-6">
@@ -88,6 +95,7 @@ export default async function AdminPage() {
               </section>
             );
           })}
+          <CurrentVenueControl currentVenueId={currentVenueId} />
           <MatchStoryBackfillControl />
           <DemoDataResetControl demoMatchCount={count ?? 0} />
         </div>
