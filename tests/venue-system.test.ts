@@ -94,6 +94,15 @@ test("dashboard card and general background use Global Current Venue", () => {
   assert.match(hero, /src=\{venue\.backgroundAsset\}/);
   assert.match(css, /var\(--dashboard-venue-background/);
   assert.match(css, /dashboard-hero-venue-overlay--indoor/);
+  assert.match(
+    css,
+    /dashboard-hero-venue-overlay--indoor[\s\S]*?rgba\(5, 8, 13, 0\.07\)[\s\S]*?rgba\(5, 8, 13, 0\.19\)/
+  );
+  assert.match(
+    css,
+    /lower-dashboard-bg\[data-venue-theme="indoor"\][\s\S]*?rgba\(5, 8, 13, 0\.52\)/
+  );
+  assert.doesNotMatch(css, /dashboard-hero-venue-overlay--outdoor/);
 });
 
 test("Create Match defaults from Global Current Venue and stores an explicit selection", () => {
