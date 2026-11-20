@@ -22,6 +22,7 @@ const privateBalanceRatings: Record<string, Omit<BalanceCandidate, "playerId">> 
   badhan: { batting: 4, bowling: 3, fielding: 4 },
   biplab: { batting: 3, bowling: 3, fielding: 3 },
   chaitanya: { batting: 4, bowling: 3, fielding: 4 },
+  "chaitanya-2": { batting: 4, bowling: 4, fielding: 4 },
   debraj: { batting: 2, bowling: 2, fielding: 2 },
   dheeraj: { batting: 5, bowling: 4, fielding: 4 },
   gaurav: { batting: 2, bowling: 3, fielding: 2 },

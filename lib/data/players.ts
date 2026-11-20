@@ -386,6 +386,31 @@ export const players: Player[] = [
     accentColor: "#ff7a18"
   }),
   makePlayer({
+    id: "chaitanya-2",
+    slug: "chaitanya-2",
+    name: "Chaitanya",
+    cardTitle: "TRIPLE THREAT",
+    cardImage: "/player-cards/triple-threat.png",
+    role: "COMPLETE ALL-ROUNDER",
+    playStyles: ["batting", "utility"],
+    battingProfile:
+      "A capable batter who can contribute meaningfully and adapt to the needs of the innings.",
+    bowlingProfile:
+      "A dependable bowling option who gives the team another genuine way to create pressure and wickets.",
+    fieldingProfile:
+      "An involved and reliable fielder who can influence the game away from bat and ball as well.",
+    heroSummary:
+      "A complete cricketer who can influence the game with the bat, the ball and in the field.",
+    specialMoveName: "THREE-WAY IMPACT",
+    specialMoveDescription:
+      "Can change the direction of a match through batting, bowling or a decisive piece of fielding.",
+    funTrait: "Batting, bowling and fielding impact in one complete package.",
+    avatar: "/player-cards/triple-threat.png",
+    tags: [...allRounderTags, "batting", "fielding"],
+    accent: "yellow",
+    accentColor: "#ffd21c"
+  }),
+  makePlayer({
     id: "amrit",
     slug: "amrit",
     name: "Amrit",

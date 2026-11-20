@@ -33,6 +33,7 @@ const leaderboardCssSource = () => readFileSync("app/globals.css", "utf8");
 const newPlayerIds = [
   "naim",
   "chaitanya",
+  "chaitanya-2",
   "amrit",
   "pritvi",
   "suprateem",

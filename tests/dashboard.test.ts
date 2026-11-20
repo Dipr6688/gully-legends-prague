@@ -703,7 +703,7 @@ test("Dashboard summary counts finalised matches and active roster players", () 
 
   assert.equal(summary.totalFinalisedMatches, 2);
   assert.equal(summary.activePlayerCount, activePlayers.length);
-  assert.equal(summary.activePlayerCount, 25);
+  assert.equal(summary.activePlayerCount, 26);
   assert.deepEqual(
     summary.recentFinalisedMatches.map((match) => match.id),
     ["newer"]
@@ -2760,7 +2760,7 @@ test("Dashboard roster summaries grow when four active players are added", () =>
 test("canonical active roster contains the approved newcomer players", () => {
   const playerData = readFileSync("lib/data/players.ts", "utf8");
 
-  assert.equal(activePlayers.length, 25);
+  assert.equal(activePlayers.length, 26);
   assert.equal(new Set(activePlayers.map((player) => player.id)).size, activePlayers.length);
   for (const playerId of newPlayerIds) {
     const player = activePlayers.find((candidate) => candidate.id === playerId);
@@ -2819,6 +2819,7 @@ test("canonical roster includes explicit neutral Play Style tags", () => {
     ["saurav", ["batting", "spin"]],
     ["naim", ["batting", "pace", "utility"]],
     ["chaitanya", ["batting", "utility"]],
+    ["chaitanya-2", ["batting", "utility"]],
     ["amrit", ["spin", "utility"]],
     ["pritvi", ["batting", "pace", "utility"]],
     ["dileep", ["pace", "utility"]],
@@ -3126,6 +3127,165 @@ test("Dileep joins as a permanent zero-history Seam Maestro", () => {
   assert.match(migration, /on conflict \(id\) do update/);
 });
 
+test("new Chaitanya joins as Triple Threat without changing existing Chaitanya or MAVERICK", () => {
+  const existingChaitanya = getPlayerById("chaitanya");
+  const newChaitanya = getPlayerById("chaitanya-2");
+  const maverick = getPlayerById("player-slot-3");
+  const migration = readFileSync(
+    "supabase/migrations/20261120120000_add_chaitanya_triple_threat.sql",
+    "utf8"
+  );
+  const diagnostic = readFileSync(
+    "supabase/diagnostics/identify_player_slot_3_official_matches.sql",
+    "utf8"
+  );
+  const matchForm = matchFormSource();
+  const faceOffArena = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
+
+  assert.ok(existingChaitanya);
+  assert.equal(existingChaitanya.id, "chaitanya");
+  assert.equal(existingChaitanya.slug, "chaitanya");
+  assert.equal(existingChaitanya.name, "Chaitanya");
+  assert.equal(existingChaitanya.cardTitle, "Steady Storm");
+  assert.equal(existingChaitanya.cardImage, "/player-cards/steady-storm.png");
+
+  assert.ok(newChaitanya);
+  assert.equal(newChaitanya.id, "chaitanya-2");
+  assert.equal(newChaitanya.slug, "chaitanya-2");
+  assert.equal(newChaitanya.name, "Chaitanya");
+  assert.equal(newChaitanya.cardTitle, "TRIPLE THREAT");
+  assert.equal(newChaitanya.role, "COMPLETE ALL-ROUNDER");
+  assert.equal(newChaitanya.cardImage, "/player-cards/triple-threat.png");
+  assert.equal(newChaitanya.avatar, "/player-cards/triple-threat.png");
+  assert.equal(newChaitanya.specialMoveName, "THREE-WAY IMPACT");
+  assert.equal(newChaitanya.level, 0);
+  assert.equal(newChaitanya.xp, 0);
+  assert.deepEqual(newChaitanya.ratings, { batting: 0, bowling: 0, fielding: 0 });
+  assert.deepEqual(newChaitanya.stats, {
+    matches: 0,
+    runs: 0,
+    wickets: 0,
+    catches: 0,
+    runOuts: 0,
+    hatTricks: 0
+  });
+  assert.equal(getPlayerBySlug("chaitanya-2")?.id, "chaitanya-2");
+  assert.deepEqual(
+    activePlayers.filter((player) => player.name === "Chaitanya").map((player) => player.id),
+    ["chaitanya", "chaitanya-2"]
+  );
+  assert.deepEqual(getPublicPngDimensions("/player-cards/triple-threat.png"), {
+    width: 1024,
+    height: 1536
+  });
+
+  assert.ok(maverick);
+  assert.equal(maverick.id, "player-slot-3");
+  assert.equal(maverick.slug, "player-slot-3");
+  assert.equal(maverick.name, "MAVERICK");
+  assert.equal(maverick.cardTitle, "THE CHALLENGER");
+  assert.equal(maverick.cardImage, "/player-cards/maverick.png");
+
+  assert.match(matchForm, /value=\{player\.id\}/);
+  assert.match(faceOffArena, /key=\{player\.id\} value=\{player\.id\}/);
+  assert.match(faceOffArena, /player\.name} - \{player\.cardTitle/);
+  assert.match(migration, /insert into public\.players/);
+  assert.match(migration, /insert into public\.player_career_stats \(player_id\)/);
+  assert.doesNotMatch(migration, /player-slot-3/);
+  assert.doesNotMatch(
+    migration,
+    /public\.(?:matches|match_stat_applications|monthly_beast_crowns|match_stories)\b/i
+  );
+  assert.doesNotMatch(migration, /\b(?:delete|truncate|drop)\b/i);
+  assert.doesNotMatch(diagnostic, /\b(?:insert|update|delete|truncate|drop|alter|create)\b/i);
+  assert.match(diagnostic, /player-slot-3/);
+});
+
+test("guarded MAVERICK transfer targets only the approved APK imports and preserves provenance", () => {
+  const migration = readFileSync(
+    "supabase/migrations/20261120123000_transfer_maverick_20261114_to_chaitanya2.sql",
+    "utf8"
+  );
+  const verification = readFileSync(
+    "supabase/diagnostics/verify_chaitanya2_transfer.sql",
+    "utf8"
+  );
+  const approvedMatchIds = [
+    "apk-match-bb11ff68-faab-4fde-b41a-17f026642e71",
+    "apk-match-f6017372-c6a3-40ee-b389-250545188b17",
+    "apk-match-c085e45f-d735-45c2-af78-b91e3221419b",
+    "apk-match-0536c6ad-d9ab-450e-b0a1-6f820c64944a",
+    "apk-match-1d01a86f-cda4-42fa-9950-364981ed5d14",
+    "apk-match-a67f35b8-bf7b-4da3-b3d6-385de8b24c0d",
+    "apk-match-b9b53880-1ae7-472b-8624-4eb39a3a7bc9",
+    "apk-match-cf138376-f06a-4f20-b860-c2b70f85a7f9"
+  ];
+  const protectedMatchIds = [
+    "apk-match-56bf9697-2dd4-4f39-8710-47d7a47fcfff",
+    "apk-match-2e62a6c9-8269-43df-96ef-0d490feef676",
+    "apk-match-827d6036-eb7d-4c2b-9379-a78a20bcf20f"
+  ];
+
+  for (const matchId of [...approvedMatchIds, ...protectedMatchIds]) {
+    assert.match(migration, new RegExp(matchId));
+    assert.match(verification, new RegExp(matchId));
+  }
+
+  assert.match(migration, /approved_date constant date := date '2026-11-14'/);
+  assert.match(migration, /protected_date constant date := date '2026-10-28'/);
+  assert.match(migration, /finalised_match_id = any\(approved_match_ids\)/);
+  assert.match(migration, /identity_transfer_approved_apk_link_mismatch/);
+  assert.match(migration, /pg_advisory_xact_lock/);
+  assert.match(migration, /for update/);
+  assert.match(migration, /identity_transfer_protected_matches_changed/);
+  assert.match(migration, /identity_transfer_existing_chaitanya_changed/);
+
+  assert.match(migration, /'sharedPlayerId'/);
+  assert.match(migration, /'everSharedPlayerIds'/);
+  assert.match(migration, /'fieldingHelperIds'/);
+  assert.match(migration, /'teamAPlayerIds'/);
+  assert.match(migration, /'teamBPlayerIds'/);
+  assert.match(migration, /'strikerId'/);
+  assert.match(migration, /'nonStrikerId'/);
+  assert.match(migration, /'bowlerId'/);
+  assert.match(migration, /'dismissedPlayerId'/);
+  assert.match(migration, /'dismissedBatterId'/);
+  assert.match(migration, /'creditedBowlerId'/);
+  assert.match(migration, /'fielderId'/);
+  assert.match(migration, /'assistingFielderId'/);
+
+  assert.match(
+    migration,
+    /update public\.matches[\s\S]*where id = any\(approved_match_ids\)/
+  );
+  assert.match(
+    migration,
+    /update public\.match_stat_applications[\s\S]*player_id = new_player_id[\s\S]*idempotency_key = match_id \|\| ':' \|\| new_player_id/
+  );
+  assert.doesNotMatch(
+    migration.match(/update public\.match_stat_applications[\s\S]*?;/)?.[0] ?? "",
+    /xp_breakdown\s*=/
+  );
+  assert.doesNotMatch(migration, /finalize_match_atomic|finalize_apk_import_atomic/);
+  assert.doesNotMatch(migration, /update public\.apk_match_imports/);
+  assert.doesNotMatch(migration, /update public\.monthly_beast_crowns/);
+  assert.doesNotMatch(migration, /update public\.match_stories/);
+  assert.match(migration, /identity_transfer_apk_provenance_changed/);
+  assert.match(migration, /identity_transfer_match_totals_not_conserved/);
+  assert.match(migration, /foreach current_player_id in array array\[old_player_id, new_player_id\]/);
+
+  assert.match(verification, /official_still_has_maverick_id/);
+  assert.match(verification, /official_has_chaitanya2_id/);
+  assert.match(verification, /raw_source_preserves_maverick_id/);
+  assert.match(verification, /remaining_maverick_rows/);
+  assert.match(verification, /derived_matches/);
+  assert.match(verification, /november_official_matches_for_chaitanya2/);
+  assert.doesNotMatch(
+    verification,
+    /\b(?:insert|update|delete|truncate|drop|alter|create|grant|revoke)\b/i
+  );
+});
+
 test("reserved player slots join as full zero-history Gully Legends players", () => {
   const playerData = readFileSync("lib/data/players.ts", "utf8");
   const migration = readFileSync(
@@ -3135,7 +3295,7 @@ test("reserved player slots join as full zero-history Gully Legends players", ()
   const matchForm = matchFormSource();
   const faceOffArena = readFileSync("components/face-off/GullyFaceOffArena.tsx", "utf8");
 
-  assert.equal(activePlayers.length, 25);
+  assert.equal(activePlayers.length, 26);
   assert.equal(new Set(activePlayers.map((player) => player.id)).size, activePlayers.length);
   assert.match(matchForm, /activePlayers\.map\(\(player\) =>/);
   assert.match(faceOffArena, /\{players\.map\(\(player\) =>/);
@@ -3266,7 +3426,7 @@ test("approved player avatar title changes preserve stable roster identities", (
     });
   }
 
-  assert.equal(activePlayers.length, 25);
+  assert.equal(activePlayers.length, 26);
   assert.equal(new Set(activePlayers.map((player) => player.id)).size, activePlayers.length);
   assert.equal(getPlayerById("gaurav")?.cardTitle, "Slow Poison");
   assert.notEqual(getPlayerById("gaurav")?.cardTitle, "Spin Wizard");

@@ -35,10 +35,10 @@ import type {
 } from "../supabase/read-repositories";
 
 export const SUPABASE_DATA_CHECK_EXPECTED_COUNTS = {
-  players: 25,
+  players: 26,
   matches: 6,
   demoMatches: 6,
-  careerRecords: 25,
+  careerRecords: 26,
   progressionRecords: 52,
   monthlyBeastCrowns: 0,
   galleryMetadata: 0
